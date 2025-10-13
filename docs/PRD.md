@@ -509,9 +509,9 @@ const handleDragEnd = async (shape) => {
 2. **Initialize Vite project** with React + TypeScript template
 3. **Install dependencies:**
    ```bash
-   npm install @supabase/supabase-js konva react-konva
-   npm install -D @types/react-konva
-   npm install -D tailwindcss postcss autoprefixer
+   pnpm install @supabase/supabase-js konva react-konva
+   pnpm install -D @types/react-konva
+   pnpm install -D tailwindcss postcss autoprefixer
    ```
 4. **Create database schema** in Supabase SQL editor (including locking fields)
 5. **Build authentication flow** (login/signup with auto-generated display names)

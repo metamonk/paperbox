@@ -4,6 +4,10 @@
 
 ```
 collabcanvas/
+├── docs/                       # Planning documents
+│   ├── PRD.md
+│   ├── TASKS.md
+│   └── DIAGRAM.md
 ├── src/
 │   ├── components/
 │   │   ├── auth/
@@ -54,8 +58,12 @@ collabcanvas/
 │       └── 002_rls_policies.sql
 ├── public/
 ├── .env.local
+├── .env.example
 ├── .gitignore
+├── .npmrc
+├── .nvmrc
 ├── package.json
+├── pnpm-lock.yaml
 ├── tsconfig.json
 ├── vite.config.ts
 ├── tailwind.config.js
@@ -65,38 +73,41 @@ collabcanvas/
 
 ---
 
-## PR #1: Project Setup & Configuration
+## PR #1: Project Setup & Configuration ✅ COMPLETE
 **Branch:** `feat/project-setup`  
 **Goal:** Initialize project with all dependencies and configuration files  
-**Estimated Time:** 30-45 minutes
+**Estimated Time:** 30-45 minutes  
+**Actual Time:** ~1 hour  
+**Status:** ✅ 100% Complete (16/16 tasks) - All tests passing
 
 ### Tasks:
-- [ ] Initialize Vite + React + TypeScript project
-  - **Command:** `npm create vite@latest collabcanvas -- --template react-ts`
-  - **Files created:** `package.json`, `vite.config.ts`, `tsconfig.json`, `index.html`
+- [x] Initialize Vite + React + TypeScript project
+  - **Command:** `pnpm create vite@latest . -- --template react-ts`
+  - **Note:** Scaffolds in current directory. Move docs to `docs/` folder first if desired.
+  - **Files created:** `package.json`, `pnpm-lock.yaml`, `vite.config.ts`, `tsconfig.json`, `index.html`
 
-- [ ] Install core dependencies
+- [x] Install core dependencies
   ```bash
-  npm install @supabase/supabase-js konva react-konva react-router-dom
-  npm install -D @types/react-konva
+  pnpm install @supabase/supabase-js konva react-konva react-router-dom
+  pnpm install -D @types/react-konva
   ```
-  - **Files updated:** `package.json`
+  - **Files updated:** `package.json`, `pnpm-lock.yaml`
+  - **Note:** @types/react-konva not needed (react-konva has built-in types)
 
-- [ ] Install and configure Tailwind CSS
+- [x] Install and configure Tailwind CSS
   ```bash
-  npm install -D tailwindcss postcss autoprefixer
-  npx tailwindcss init -p
+  pnpm install -D tailwindcss postcss autoprefixer
   ```
-  - **Files created:** `tailwind.config.js`, `postcss.config.js`
-  - **Files updated:** `src/index.css`
+  - **Files updated:** `src/index.css` (Tailwind CSS v4 with `@import "tailwindcss"`)
+  - **Note:** ✅ Tailwind v4 does not require config file
 
-- [ ] Install testing dependencies
+- [x] Install testing dependencies
   ```bash
-  npm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom
+  pnpm install -D vitest @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom
   ```
-  - **Files updated:** `package.json`
+  - **Files updated:** `package.json`, `pnpm-lock.yaml`
 
-- [ ] Configure Vitest
+- [x] Configure Vitest
   - **Files updated:** `vite.config.ts`
   - **Content:**
     ```ts
@@ -109,26 +120,19 @@ collabcanvas/
         globals: true,
         environment: 'jsdom',
         setupFiles: './src/test/setup.ts',
+        css: true,
       },
     })
     ```
 
-- [ ] Create test setup file
+- [x] Create test setup file
   - **Files created:** `src/test/setup.ts`
   - **Content:**
     ```ts
-    import { expect, afterEach } from 'vitest'
-    import { cleanup } from '@testing-library/react'
-    import * as matchers from '@testing-library/jest-dom/matchers'
-    
-    expect.extend(matchers)
-    
-    afterEach(() => {
-      cleanup()
-    })
+    import '@testing-library/jest-dom';
     ```
 
-- [ ] Set up environment variables
+- [x] Set up environment variables
   - **Files created:** `.env.local`, `.env.example`, `.env.test`
   - **Content:**
     ```
@@ -136,32 +140,62 @@ collabcanvas/
     VITE_SUPABASE_ANON_KEY=your_anon_key
     ```
 
-- [ ] Create project structure (all folders)
-  - **Folders created:** `src/components/`, `src/hooks/`, `src/lib/`, `src/types/`, `src/utils/`, `src/pages/`, `src/test/`, `supabase/migrations/`
+- [x] Create project structure (all folders)
+  - **Folders created:** `src/components/{auth,canvas/shapes,collaboration,layout}`, `src/hooks/`, `src/lib/`, `src/types/`, `src/utils/`, `src/pages/`, `src/test/`, `supabase/migrations/`
 
-- [ ] Set up Supabase client
+- [x] Set up Supabase client
   - **Files created:** `src/lib/supabase.ts`
-  - **Content:** Initialize Supabase client with env vars
+  - **Content:** Initialize Supabase client with env vars and realtime config
 
-- [ ] Create TypeScript type definitions
+- [x] Create TypeScript type definitions
   - **Files created:** 
     - `src/types/canvas.ts` (CanvasObject, Shape types)
-    - `src/types/user.ts` (User, Profile types)
+    - `src/types/user.ts` (User, Profile, Cursor, Presence types)
     - `src/types/database.ts` (Supabase table types)
 
-- [ ] Create constants file
+- [x] Create constants file
   - **Files created:** `src/lib/constants.ts`
-  - **Content:** Canvas dimensions, default colors, zoom limits
+  - **Content:** Canvas dimensions, zoom limits, shape defaults, cursor colors, channels, timeouts
 
-- [ ] Update .gitignore
+- [x] Update .gitignore
   - **Files updated:** `.gitignore`
-  - **Add:** `.env.local`, `.env.test`, `node_modules/`, `dist/`, `coverage/`
+  - **Add:** `.env.local`, `.env.test`, `.env*.local`, `coverage/`, `.nyc_output`
+  - **Note:** Keep `pnpm-lock.yaml` tracked (do not ignore)
 
-- [ ] Create README with setup instructions
-  - **Files created:** `README.md`
+- [x] Add pnpm enforcement
+  - **Files created:** `.npmrc` ✅
+  - **Content:**
+    ```
+    engine-strict=true
+    ```
+  - **Files updated:** `package.json` ✅
+  - **Added to package.json:**
+    ```json
+    {
+      "engines": {
+        "node": ">=18.0.0",
+        "pnpm": ">=9.0.0"
+      },
+      "packageManager": "pnpm@9.0.0"
+    }
+    ```
+  - **Files created:** `.nvmrc` ✅
+  - **Content:** `18`
 
-- [ ] Add test scripts to package.json
-  - **Files updated:** `package.json`
+- [x] Create README with setup instructions
+  - **Files created:** `README.md` ✅
+  - **Content:** Comprehensive documentation including:
+    - Project description and features
+    - Tech stack
+    - Prerequisites
+    - Setup instructions
+    - Environment variables
+    - Project structure
+    - Key architecture decisions
+    - Development commands
+
+- [x] Add test scripts to package.json
+  - **Files updated:** `package.json` ✅
   - **Content:**
     ```json
     {
@@ -174,9 +208,10 @@ collabcanvas/
     ```
 
 ### Tests:
-- [ ] **Unit Test: Canvas Constants**
+- [x] **Unit Test: Canvas Constants** ✅ ALL TESTS PASSING
   - **Files created:** `src/lib/__tests__/constants.test.ts`
   - **Purpose:** Verify constants are correctly defined
+  - **Status:** ✅ 3/3 tests passing
   - **Content:**
     ```ts
     import { describe, it, expect } from 'vitest'
@@ -1620,7 +1655,7 @@ collabcanvas/
   - **Content:**
     ```json
     {
-      "buildCommand": "npm run build",
+      "buildCommand": "pnpm run build",
       "outputDirectory": "dist",
       "framework": "vite"
     }
