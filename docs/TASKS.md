@@ -66,8 +66,6 @@ collabcanvas/
 ├── pnpm-lock.yaml
 ├── tsconfig.json
 ├── vite.config.ts
-├── tailwind.config.js
-├── postcss.config.js
 └── README.md
 ```
 
@@ -111,11 +109,12 @@ collabcanvas/
   - **Files updated:** `vite.config.ts`
   - **Content:**
     ```ts
-    import { defineConfig } from 'vite'
-    import react from '@vitejs/plugin-react'
+    import { defineConfig } from 'vitest/config'
+    import react from '@vitejs/plugin-react-swc'
+    import tailwindcss from '@tailwindcss/vite'
     
     export default defineConfig({
-      plugins: [react()],
+      plugins: [react(), tailwindcss()],
       test: {
         globals: true,
         environment: 'jsdom',
@@ -136,8 +135,8 @@ collabcanvas/
   - **Files created:** `.env.local`, `.env.example`, `.env.test`
   - **Content:**
     ```
-    VITE_SUPABASE_URL=your_supabase_url
-    VITE_SUPABASE_ANON_KEY=your_anon_key
+    VITE_PUBLIC_SUPABASE_URL=your_supabase_url
+    VITE_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
     ```
 
 - [x] Create project structure (all folders)
@@ -1664,7 +1663,7 @@ collabcanvas/
 - [ ] Set up Vercel project
   - Connect GitHub repo to Vercel
   - Configure environment variables in Vercel dashboard
-  - Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+  - Add `VITE_PUBLIC_SUPABASE_URL` and `VITE_PUBLIC_SUPABASE_ANON_KEY`
 
 - [ ] Deploy to Vercel
   - Push to main → automatic deployment
