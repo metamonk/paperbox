@@ -251,17 +251,19 @@ collabcanvas/
 
 ---
 
-## PR #2: Supabase Database Schema & Setup
+## PR #2: Supabase Database Schema & Setup ✅ COMPLETE
 **Branch:** `feat/database-schema`  
 **Goal:** Set up Supabase project and create database schema  
 **Estimated Time:** 30 minutes
+**Actual Time:** ~30 minutes  
+**Status:** ✅ 100% Complete (6/6 tasks)
 
 ### Tasks:
-- [ ] Create Supabase project (via dashboard)
+- [x] Create Supabase project (via dashboard)
   - Get project URL and anon key
   - Update `.env.local` with credentials
 
-- [ ] Create initial schema migration
+- [x] Create initial schema migration
   - **Files created:** `supabase/migrations/001_initial_schema.sql`
   - **Content:**
     ```sql
@@ -321,7 +323,7 @@ collabcanvas/
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
     ```
 
-- [ ] Create RLS policies migration
+- [x] Create RLS policies migration
   - **Files created:** `supabase/migrations/002_rls_policies.sql`
   - **Content:**
     ```sql
@@ -356,16 +358,16 @@ collabcanvas/
       USING (auth.role() = 'authenticated');
     ```
 
-- [ ] Run migrations in Supabase dashboard
+- [x] Run migrations in Supabase dashboard
   - Execute SQL in Supabase SQL Editor
 
-- [ ] Enable Realtime for canvas_objects table
-  - In Supabase dashboard: Database → Replication
-  - Enable for `canvas_objects` table
+- [x] Enable Realtime for canvas_objects table
+  - In Supabase dashboard: Database → Tables → canvas_objects
+  - Enable Realtime checkbox ✅
 
-- [ ] Update database types
+- [x] Update database types
   - **Files updated:** `src/types/database.ts`
-  - Add generated types from Supabase
+  - Types already defined in PR #1
 
 **Commit Message:** `feat: add database schema with profiles and canvas_objects tables`
 
