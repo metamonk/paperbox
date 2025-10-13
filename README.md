@@ -33,8 +33,8 @@ cp .env.example .env.local
 Edit `.env.local` and add your Supabase project URL and anon key:
 
 ```env
-VITE_SUPABASE_URL=your-supabase-project-url
-VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_PUBLIC_SUPABASE_URL=your-supabase-project-url
+VITE_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
 ### 3. Set Up Supabase
