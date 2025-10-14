@@ -62,13 +62,20 @@ export function useCanvas() {
 
   /**
    * Handle stage drag end (pan)
+   * Only update position if the stage itself was dragged, not a shape
    */
   const handleDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
-    const stage = e.target as Konva.Stage;
-    setPosition({
-      x: stage.x(),
-      y: stage.y(),
-    });
+    // Check if the drag target is the stage itself (not a shape)
+    const target = e.target;
+    const stage = target.getStage();
+    
+    if (target === stage) {
+      // Only update position if we dragged the stage background
+      setPosition({
+        x: stage.x(),
+        y: stage.y(),
+      });
+    }
   }, []);
 
   /**
