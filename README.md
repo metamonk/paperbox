@@ -40,7 +40,10 @@ VITE_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ### 3. Set Up Supabase
 
 1. Create a new project at [supabase.com](https://supabase.com)
-2. Run the migrations in `supabase/migrations/` (to be created in PR #2)
+2. Run the migrations in `supabase/migrations/` in order:
+   - `001_initial_schema.sql` - Creates tables and triggers
+   - `002_rls_policies.sql` - Sets up Row Level Security
+   - `003_add_cascade_delete.sql` - Adds cascade delete constraints
 3. Enable Realtime for the `canvas_objects` table
 4. Configure RLS policies as specified in the migrations
 
@@ -100,23 +103,27 @@ collabcanvas/
 
 ## 🎨 Features
 
-- **Real-time Collaboration:** Multiple users can work on the same canvas simultaneously
-- **Live Cursors:** See other users' cursor positions in real-time with unique colors
-- **Shape Creation:** Create rectangles, circles, and text objects
-- **Object Manipulation:** Drag, resize, and edit shapes
-- **Object Locking:** First user to drag acquires exclusive lock
-- **Pan & Zoom:** Navigate large canvases (5000x5000px)
-- **User Presence:** See who's online and detect idle users
+### ✅ Currently Implemented (PRs #1-5)
 - **Authentication:** Secure user authentication via Supabase Auth
+- **Shape Creation:** Create rectangles, circles, and text objects
+- **Object Manipulation:** Drag shapes within canvas boundaries
+- **Text Editing:** Double-click text objects to edit content
+- **Pan & Zoom:** Navigate large canvases (5000x5000px) with smooth controls
+- **Canvas Boundaries:** Objects constrained to 0,0 - 5000,5000 pixels
+
+### 🚧 Coming Soon (PRs #6-10)
+- **Real-time Collaboration:** Multiple users working simultaneously (PR #6)
+- **Object Locking:** First user to drag acquires exclusive lock (PR #6)
+- **Live Cursors:** See other users' cursor positions with unique colors (PR #7)
+- **User Presence:** See who's online and detect idle users (PR #8)
 
 ## 📖 Documentation
 
 See the `docs/` folder for detailed documentation:
 
 - **PRD.md** - Product requirements and specifications
-- **TASKS.md** - Development task breakdown
-- **DIAGRAM.md** - Architecture diagrams
-- **SESSION_HANDOFF.md** - Development progress and handoff notes
+- **TASKS.md** - Development task breakdown and progress tracking
+- **DIAGRAM.md** - Architecture diagrams (Mermaid format)
 
 ## 🔒 Key Architecture Decisions
 
