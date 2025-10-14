@@ -7,6 +7,7 @@ import { useCanvas } from '../../hooks/useCanvas';
 import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
 import { usePresence } from '../../hooks/usePresence';
 import { useAuth } from '../../hooks/useAuth';
+import { useKeyboard } from '../../hooks/useKeyboard';
 import { CanvasStage } from './CanvasStage';
 import { Toolbar } from './Toolbar';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
@@ -17,15 +18,19 @@ import { screenToCanvas } from '../../utils/canvas-helpers';
 export function Canvas() {
   const {
     stageRef,
+    transformerRef,
     scale,
     position,
     shapes,
     loading,
     error,
+    selectedShapeId,
     handleWheel,
     handleDragEnd,
     addShape,
     updateShape,
+    selectShape,
+    deselectShape,
     acquireLock,
     releaseLock,
   } = useCanvas();
@@ -38,6 +43,13 @@ export function Canvas() {
 
   // Auth for logout
   const { signOut, user } = useAuth();
+
+  // Keyboard shortcuts for shape creation
+  useKeyboard({
+    'r': () => addShape('rectangle'),
+    'c': () => addShape('circle'),
+    't': () => addShape('text'),
+  });
 
   /**
    * Handle mouse movement to broadcast cursor position
@@ -67,14 +79,45 @@ export function Canvas() {
     // after 3 seconds of no updates (handled in useBroadcastCursors)
   };
 
-  // Loading state
+  // Loading state with skeleton UI
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto" />
-          <p className="text-gray-700 text-lg font-medium">Loading canvas...</p>
-          <p className="text-gray-500 text-sm mt-2">Fetching objects from database</p>
+      <div className="flex flex-col h-screen bg-gray-50">
+        {/* Header skeleton */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div className="h-6 w-48 bg-gray-200 rounded animate-pulse" />
+          <div className="h-6 w-32 bg-gray-200 rounded animate-pulse" />
+        </div>
+
+        {/* Main content skeleton */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Canvas area skeleton */}
+          <div className="relative flex-1 overflow-hidden bg-gray-100 flex items-center justify-center">
+            <div className="text-center">
+              <div className="mb-4 h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto" />
+              <p className="text-gray-700 text-lg font-medium">Loading canvas...</p>
+              <p className="text-gray-500 text-sm mt-2">Fetching objects from database</p>
+            </div>
+          </div>
+
+          {/* Sidebar skeleton */}
+          <aside className="w-80 bg-white border-l border-gray-200 flex flex-col">
+            <div className="px-4 py-3 border-b border-gray-200">
+              <div className="h-6 w-32 bg-gray-200 rounded animate-pulse mb-2" />
+              <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-3 animate-pulse">
+                  <div className="w-10 h-10 bg-gray-200 rounded-full" />
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+                    <div className="h-3 bg-gray-200 rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       </div>
     );
@@ -110,12 +153,16 @@ export function Canvas() {
           <Toolbar onAddShape={addShape} />
           <CanvasStage
             stageRef={stageRef}
+            transformerRef={transformerRef}
             scale={scale}
             position={position}
             shapes={shapes}
+            selectedShapeId={selectedShapeId}
             onWheel={handleWheel}
             onDragEnd={handleDragEnd}
             onUpdateShape={updateShape}
+            onSelectShape={selectShape}
+            onDeselectShape={deselectShape}
             onAcquireLock={acquireLock}
             onReleaseLock={releaseLock}
             onActivity={updateActivity}

@@ -10,6 +10,7 @@ export interface BaseCanvasObject {
   x: number;
   y: number;
   fill: string;
+  rotation?: number;
   created_by: string;
   created_at: string;
   updated_at: string;
