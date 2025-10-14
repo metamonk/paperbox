@@ -31,6 +31,30 @@ export function CanvasStage({
   onUpdateShape,
 }: CanvasStageProps) {
   /**
+   * Check if click is on stage background (not on a shape)
+   * Only allow stage dragging if clicking on background
+   */
+  const checkDeselect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+    // Check if we clicked on stage or background
+    const clickedOnEmpty = e.target === e.target.getStage();
+    if (!clickedOnEmpty) {
+      // Clicked on a shape, disable stage dragging
+      if (stageRef.current) {
+        stageRef.current.draggable(false);
+      }
+    }
+  };
+
+  /**
+   * Re-enable stage dragging on mouse up
+   */
+  const handleMouseUp = () => {
+    if (stageRef.current) {
+      stageRef.current.draggable(true);
+    }
+  };
+
+  /**
    * Render the appropriate shape component based on type
    */
   const renderShape = (shape: CanvasObject) => {
@@ -58,6 +82,10 @@ export function CanvasStage({
       y={position.y}
       onWheel={onWheel}
       onDragEnd={onDragEnd}
+      onMouseDown={checkDeselect}
+      onTouchStart={checkDeselect}
+      onMouseUp={handleMouseUp}
+      onTouchEnd={handleMouseUp}
     >
       {/* Background layer */}
       <Layer listening={false}>
