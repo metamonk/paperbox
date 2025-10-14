@@ -155,7 +155,7 @@ describe('useBroadcastCursors', () => {
 
     // Simulate receiving own cursor (should be ignored)
     const mockBroadcastHandler = mockOn.mock.calls.find(
-      (call) => call[0] === 'broadcast'
+      (call: any[]) => call[0] === 'broadcast'
     )?.[2];
 
     if (mockBroadcastHandler) {
