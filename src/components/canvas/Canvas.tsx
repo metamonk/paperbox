@@ -18,15 +18,19 @@ import { screenToCanvas } from '../../utils/canvas-helpers';
 export function Canvas() {
   const {
     stageRef,
+    transformerRef,
     scale,
     position,
     shapes,
     loading,
     error,
+    selectedShapeId,
     handleWheel,
     handleDragEnd,
     addShape,
     updateShape,
+    selectShape,
+    deselectShape,
     acquireLock,
     releaseLock,
   } = useCanvas();
@@ -149,12 +153,16 @@ export function Canvas() {
           <Toolbar onAddShape={addShape} />
           <CanvasStage
             stageRef={stageRef}
+            transformerRef={transformerRef}
             scale={scale}
             position={position}
             shapes={shapes}
+            selectedShapeId={selectedShapeId}
             onWheel={handleWheel}
             onDragEnd={handleDragEnd}
             onUpdateShape={updateShape}
+            onSelectShape={selectShape}
+            onDeselectShape={deselectShape}
             onAcquireLock={acquireLock}
             onReleaseLock={releaseLock}
             onActivity={updateActivity}

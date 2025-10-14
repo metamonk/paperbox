@@ -1,10 +1,10 @@
 /**
  * Konva-based canvas stage component
- * Handles rendering, pan, zoom, and shape rendering
+ * Handles rendering, pan, zoom, shape rendering, and transformation
  */
 
 import { useState, useEffect } from 'react';
-import { Stage, Layer, Rect } from 'react-konva';
+import { Stage, Layer, Rect, Transformer } from 'react-konva';
 import Konva from 'konva';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../lib/constants';
 import type { CanvasObject } from '../../types/canvas';
@@ -14,12 +14,16 @@ import { Text } from './shapes/Text';
 
 interface CanvasStageProps {
   stageRef: React.RefObject<Konva.Stage | null>;
+  transformerRef: React.RefObject<Konva.Transformer | null>;
   scale: number;
   position: { x: number; y: number };
   shapes: CanvasObject[];
+  selectedShapeId: string | null;
   onWheel: (e: Konva.KonvaEventObject<WheelEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onUpdateShape: (id: string, updates: Partial<CanvasObject>) => void;
+  onSelectShape: (id: string | null) => void;
+  onDeselectShape: () => void;
   onAcquireLock: (id: string) => Promise<boolean>;
   onReleaseLock: (id: string) => Promise<void>;
   onActivity?: () => void;
@@ -27,12 +31,16 @@ interface CanvasStageProps {
 
 export function CanvasStage({
   stageRef,
+  transformerRef,
   scale,
   position,
   shapes,
+  selectedShapeId,
   onWheel,
   onDragEnd,
   onUpdateShape,
+  onSelectShape,
+  onDeselectShape,
   onAcquireLock,
   onReleaseLock,
   onActivity,
@@ -54,14 +62,41 @@ export function CanvasStage({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  /**
+   * Update transformer when selection changes
+   */
+  useEffect(() => {
+    const transformer = transformerRef.current;
+    const stage = stageRef.current;
+    
+    if (!transformer || !stage) return;
+
+    if (selectedShapeId) {
+      // Find the selected node
+      const selectedNode = stage.findOne(`#${selectedShapeId}`);
+      if (selectedNode) {
+        transformer.nodes([selectedNode]);
+        transformer.getLayer()?.batchDraw();
+      }
+    } else {
+      // Clear selection
+      transformer.nodes([]);
+      transformer.getLayer()?.batchDraw();
+    }
+  }, [selectedShapeId, transformerRef, stageRef]);
+
   /**
    * Check if click is on stage background (not on a shape)
-   * Only allow stage dragging if clicking on background
+   * Deselect shapes and allow stage dragging
    */
   const checkDeselect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Check if we clicked on stage or background
     const clickedOnEmpty = e.target === e.target.getStage();
-    if (!clickedOnEmpty) {
+    if (clickedOnEmpty) {
+      // Clicked on empty area, deselect shape
+      onDeselectShape();
+    } else {
       // Clicked on a shape, disable stage dragging
       if (stageRef.current) {
         stageRef.current.draggable(false);
@@ -87,7 +122,9 @@ export function CanvasStage({
         return (
           <Rectangle 
             key={shape.id} 
-            shape={shape} 
+            shape={shape}
+            isSelected={shape.id === selectedShapeId}
+            onSelect={() => onSelectShape(shape.id)}
             onUpdate={onUpdateShape}
             onAcquireLock={onAcquireLock}
             onReleaseLock={onReleaseLock}
@@ -98,7 +135,9 @@ export function CanvasStage({
         return (
           <Circle 
             key={shape.id} 
-            shape={shape} 
+            shape={shape}
+            isSelected={shape.id === selectedShapeId}
+            onSelect={() => onSelectShape(shape.id)}
             onUpdate={onUpdateShape}
             onAcquireLock={onAcquireLock}
             onReleaseLock={onReleaseLock}
@@ -109,7 +148,9 @@ export function CanvasStage({
         return (
           <Text 
             key={shape.id} 
-            shape={shape} 
+            shape={shape}
+            isSelected={shape.id === selectedShapeId}
+            onSelect={() => onSelectShape(shape.id)}
             onUpdate={onUpdateShape}
             onAcquireLock={onAcquireLock}
             onReleaseLock={onReleaseLock}
@@ -156,6 +197,18 @@ export function CanvasStage({
       {/* Objects layer */}
       <Layer>
         {shapes.map((shape) => renderShape(shape))}
+        
+        {/* Transformer for resize/rotate */}
+        <Transformer
+          ref={transformerRef}
+          boundBoxFunc={(oldBox, newBox) => {
+            // Limit resize
+            if (newBox.width < 5 || newBox.height < 5) {
+              return oldBox;
+            }
+            return newBox;
+          }}
+        />
       </Layer>
     </Stage>
   );

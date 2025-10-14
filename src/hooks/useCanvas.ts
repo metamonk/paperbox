@@ -12,8 +12,10 @@ import type { CanvasObject, ShapeType } from '../types/canvas';
 
 export function useCanvas() {
   const stageRef = useRef<Konva.Stage>(null);
+  const transformerRef = useRef<Konva.Transformer>(null);
   const [scale, setScaleState] = useState(DEFAULT_ZOOM);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   
   // Use realtime objects instead of local state
   const { 
@@ -153,19 +155,37 @@ export function useCanvas() {
     updateObject(id, updates);
   }, [updateObject]);
 
+  /**
+   * Select a shape for transformation
+   */
+  const selectShape = useCallback((shapeId: string | null) => {
+    setSelectedShapeId(shapeId);
+  }, []);
+
+  /**
+   * Deselect current shape
+   */
+  const deselectShape = useCallback(() => {
+    setSelectedShapeId(null);
+  }, []);
+
   return {
     stageRef,
+    transformerRef,
     scale,
     position,
     shapes,
     loading,
     error,
+    selectedShapeId,
     setScale,
     setPosition,
     handleWheel,
     handleDragEnd,
     addShape,
     updateShape,
+    selectShape,
+    deselectShape,
     acquireLock,
     releaseLock,
   };

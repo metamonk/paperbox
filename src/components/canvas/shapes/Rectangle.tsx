@@ -12,14 +12,17 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
 interface RectangleProps {
   shape: RectangleObject;
+  isSelected: boolean;
+  onSelect: () => void;
   onUpdate: (id: string, updates: Partial<RectangleObject>) => void;
   onAcquireLock: (id: string) => Promise<boolean>;
   onReleaseLock: (id: string) => Promise<void>;
   onActivity?: () => void;
 }
 
-function RectangleComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivity }: RectangleProps) {
+function RectangleComponent({ shape, isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity }: RectangleProps) {
   const { user } = useAuth();
+  const shapeRef = useRef<Konva.Rect>(null);
   
   // Determine lock state
   const isLockedByOther = shape.locked_by && shape.locked_by !== user?.id;
@@ -70,17 +73,50 @@ function RectangleComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onA
     }
   }, [shape.id, shape.x, shape.y, onUpdate, onReleaseLock]);
 
+  /**
+   * Handle transform end (resize/rotate)
+   */
+  const handleTransformEnd = useCallback(async () => {
+    const node = shapeRef.current;
+    if (!node) return;
+
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+
+    // Reset scale and apply to width/height
+    node.scaleX(1);
+    node.scaleY(1);
+
+    try {
+      await onUpdate(shape.id, {
+        x: node.x(),
+        y: node.y(),
+        width: Math.max(5, node.width() * scaleX),
+        height: Math.max(5, node.height() * scaleY),
+        rotation: node.rotation(),
+      });
+    } catch (error) {
+      console.error('Failed to update shape transform:', error);
+    }
+  }, [shape.id, onUpdate]);
+
   return (
     <Rect
+      ref={shapeRef}
+      id={shape.id}
       x={shape.x}
       y={shape.y}
       width={shape.width}
       height={shape.height}
       fill={shape.fill}
+      rotation={shape.rotation || 0}
       draggable={!isLockedByOther}
       dragBoundFunc={handleDragBound}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onTransformEnd={handleTransformEnd}
+      onClick={onSelect}
+      onTap={onSelect}
       // Visual feedback for locked state
       stroke={isLockedByOther ? '#EF4444' : isLockedByMe ? '#10B981' : undefined}
       strokeWidth={isLockedByOther || isLockedByMe ? 3 : 0}
@@ -104,7 +140,9 @@ const areEqual = (prevProps: RectangleProps, nextProps: RectangleProps) => {
     prevProps.shape.width === nextProps.shape.width &&
     prevProps.shape.height === nextProps.shape.height &&
     prevProps.shape.fill === nextProps.shape.fill &&
-    prevProps.shape.locked_by === nextProps.shape.locked_by
+    prevProps.shape.rotation === nextProps.shape.rotation &&
+    prevProps.shape.locked_by === nextProps.shape.locked_by &&
+    prevProps.isSelected === nextProps.isSelected
   );
 };
 

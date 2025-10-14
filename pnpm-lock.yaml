@@ -23,6 +23,9 @@ importers:
       react-konva:
         specifier: ^19.0.10
         version: 19.0.10(@types/react@19.2.2)(konva@10.0.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      react-konva-utils:
+        specifier: ^2.0.0
+        version: 2.0.0(konva@10.0.2)(react-dom@19.2.0(react@19.2.0))(react-konva@19.0.10(@types/react@19.2.2)(konva@10.0.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0)
       react-router-dom:
         specifier: ^7.9.4
         version: 7.9.4(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -1503,6 +1506,14 @@ packages:
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
 
+  react-konva-utils@2.0.0:
+    resolution: {integrity: sha512-pOb+TF13gFAjfPmUqsE42J4GJ+xhUS97qS32p0NRTqSeqtamWyKJikGa1XeVvV5yItu9SWDo7onL79GGPG96HQ==}
+    peerDependencies:
+      konva: ^8.3.5 || ^9.0.0 || ^10.0.0
+      react: ^18.2.0 || ^19.0.0
+      react-dom: ^18.2.0 || ^19.0.0
+      react-konva: ^18.2.14 || ^19.0.10
+
   react-konva@19.0.10:
     resolution: {integrity: sha512-tJID7bungYs8ri5McjjlHWCniQMAasiNkTgATd8OJEnLrz3B7S5JN7nFkNfWETIHPx9rEN3gc+kQg32RhdZJcw==}
     peerDependencies:
@@ -1712,6 +1723,12 @@ packages:
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
+
+  use-image@1.1.4:
+    resolution: {integrity: sha512-P+swhszzHHgEb2X2yQ+vQNPCq/8Ks3hyfdXAVN133pvnvK7UK++bUaZUa5E+A3S02Mw8xOCBr9O6CLhk2fjrWA==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   vite-node@3.2.4:
     resolution: {integrity: sha512-EbKSKh+bh1E1IFxeO0pg1n4dvoOTt0UDiXMd/qn++r98+jPO1xtJilvXldeuQ8giIB5IkpjCgMleHMNEsGH6pg==}
@@ -3141,6 +3158,14 @@ snapshots:
 
   react-is@17.0.2: {}
 
+  react-konva-utils@2.0.0(konva@10.0.2)(react-dom@19.2.0(react@19.2.0))(react-konva@19.0.10(@types/react@19.2.2)(konva@10.0.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0):
+    dependencies:
+      konva: 10.0.2
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
+      react-konva: 19.0.10(@types/react@19.2.2)(konva@10.0.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      use-image: 1.1.4(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+
   react-konva@19.0.10(@types/react@19.2.2)(konva@10.0.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
     dependencies:
       '@types/react-reconciler': 0.32.1(@types/react@19.2.2)
@@ -3342,6 +3367,11 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
+
+  use-image@1.1.4(react-dom@19.2.0(react@19.2.0))(react@19.2.0):
+    dependencies:
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
 
   vite-node@3.2.4(@types/node@24.7.2)(jiti@2.6.1)(lightningcss@1.30.1):
     dependencies:
