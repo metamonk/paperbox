@@ -1261,260 +1261,64 @@ collabcanvas/
 
 ---
 
-## PR #7: Multiplayer Cursors with Broadcast
+## PR #7: Multiplayer Cursors with Broadcast ✅ COMPLETE
 **Branch:** `feat/multiplayer-cursors`  
 **Goal:** Show real-time cursor positions for all users via Supabase Broadcast with random colors  
 **Estimated Time:** 1.5-2 hours
+**Actual Time:** ~2 hours (including debugging and cursor design refinement)
+**Status:** ✅ 100% Complete - All tests passing (69/69), cursors working in production
 
 ### Tasks:
-- [ ] Create throttle utility
-  - **Files created:** `src/utils/throttle.ts`
-  - **Content:**
-    ```ts
-    export function throttle<T extends (...args: any[]) => any>(
-      func: T,
-      wait: number
-    ): (...args: Parameters<T>) => void {
-      let timeout: NodeJS.Timeout | null = null;
-      let previous = 0;
-      
-      return function(this: any, ...args: Parameters<T>) {
-        const now = Date.now();
-        const remaining = wait - (now - previous);
-        
-        if (remaining <= 0 || remaining > wait) {
-          if (timeout) {
-            clearTimeout(timeout);
-            timeout = null;
-          }
-          previous = now;
-          func.apply(this, args);
-        } else if (!timeout) {
-          timeout = setTimeout(() => {
-            previous = Date.now();
-            timeout = null;
-            func.apply(this, args);
-          }, remaining);
-        }
-      };
-    }
-    ```
+- [x] Create throttle utility
+  - **Files created:** `src/utils/throttle.ts` ✅
+  - **Content:** Throttle function to limit execution rate to 30 FPS (33ms)
 
-- [ ] Create broadcast cursors hook
-  - **Files created:** `src/hooks/useBroadcastCursors.ts`
-  - **Content:**
-    - Connect to Supabase Broadcast channel `canvas-cursors`
-    - `cursors` state (Map of userId → cursor position + name)
-    - `sendCursorUpdate(x, y)` - throttled to 30fps (33ms)
-    - Subscribe to cursor events from other users
-    - Handle user disconnect (remove cursor)
-    - Track local user ID
+- [x] Create broadcast cursors hook
+  - **Files created:** `src/hooks/useBroadcastCursors.ts` ✅
+  - **Content:** Shared `canvas-cursors` channel, throttled updates, color generation, auto-cleanup
 
-- [ ] Create cursor overlay component
-  - **Files created:** `src/components/collaboration/CursorOverlay.tsx`
-  - **Content:**
-    - Render SVG cursor for each remote user
-    - Position cursor using absolute positioning
-    - Show name label next to cursor
-    - Transform canvas coordinates to screen coordinates
-    - Random color assignment per user (consistent for same userId)
-    - Generate color from userId hash or use predefined color palette
-    - Cursor shape is consistent across all users (only color varies)
+- [x] Create cursor overlay component
+  - **Files created:** `src/components/collaboration/CursorOverlay.tsx` ✅
+  - **Content:** Classic pointer SVG cursor, coordinate transformation, name labels, smooth transitions
 
-- [ ] Integrate cursor broadcast into canvas
-  - **Files updated:** `src/components/canvas/Canvas.tsx`
-  - **Content:**
-    - Add `onMouseMove` to canvas container
-    - Call `sendCursorUpdate` with throttled mouse position
-    - Render CursorOverlay with cursors data
+- [x] Integrate cursor broadcast into canvas
+  - **Files updated:** `src/components/canvas/Canvas.tsx` ✅
+  - **Content:** Mouse tracking, coordinate conversion, cursor overlay rendering, logout button
 
-- [ ] Convert canvas coordinates to screen coordinates
-  - **Files updated:** `src/utils/canvas-helpers.ts`
-  - **Content:**
-    - `canvasToScreen(x, y, scale, stagePosition)` function
-    - Account for zoom and pan transformations
+- [x] Convert canvas coordinates to screen coordinates
+  - **Files verified:** `src/utils/canvas-helpers.ts` ✅
+  - **Content:** `canvasToScreen()` already existed, verified working correctly
 
-- [ ] Style cursors
-  - **Files updated:** `src/components/collaboration/CursorOverlay.tsx`
-  - **Content:**
-    - SVG cursor icon
-    - Name label with background
-    - Smooth transitions (CSS)
+- [x] Style cursors
+  - **Files updated:** `src/components/collaboration/CursorOverlay.tsx` ✅
+  - **Content:** Classic pointer SVG, colored fills, name labels, smooth CSS transitions
 
-- [ ] Test cursor sync with multiple windows
-  - Move mouse in window 1 → cursor appears in window 2
-  - Verify 30fps throttling (no excessive updates)
-  - Close window 1 → cursor disappears in window 2
+- [x] Test cursor sync with multiple windows
+  - Verified working with 2 users (regular + incognito windows) ✅
+  - 30fps throttling confirmed (no excessive updates)
+  - Cursor cleanup verified (disappears after 3 seconds)
 
 ### Tests:
-- [ ] **Unit Test: Throttle Utility**
+- [x] **Unit Test: Throttle Utility** ✅ 7/7 tests passing
   - **Files created:** `src/utils/__tests__/throttle.test.ts`
   - **Purpose:** Verify throttle enforces rate limiting correctly
-  - **Content:**
-    ```ts
-    import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-    import { throttle } from '../throttle'
-    
-    describe('throttle', () => {
-      beforeEach(() => {
-        vi.useFakeTimers()
-      })
-      
-      afterEach(() => {
-        vi.restoreAllMocks()
-      })
-      
-      it('should call function immediately on first invocation', () => {
-        const mockFn = vi.fn()
-        const throttledFn = throttle(mockFn, 100)
-        
-        throttledFn()
-        
-        expect(mockFn).toHaveBeenCalledTimes(1)
-      })
-      
-      it('should throttle subsequent calls', () => {
-        const mockFn = vi.fn()
-        const throttledFn = throttle(mockFn, 100)
-        
-        throttledFn()
-        throttledFn()
-        throttledFn()
-        
-        expect(mockFn).toHaveBeenCalledTimes(1)
-      })
-      
-      it('should call function after wait time has passed', () => {
-        const mockFn = vi.fn()
-        const throttledFn = throttle(mockFn, 100)
-        
-        throttledFn()
-        expect(mockFn).toHaveBeenCalledTimes(1)
-        
-        vi.advanceTimersByTime(50)
-        throttledFn()
-        expect(mockFn).toHaveBeenCalledTimes(1)
-        
-        vi.advanceTimersByTime(60)
-        expect(mockFn).toHaveBeenCalledTimes(2)
-      })
-      
-      it('should preserve function arguments', () => {
-        const mockFn = vi.fn()
-        const throttledFn = throttle(mockFn, 100)
-        
-        throttledFn('arg1', 'arg2')
-        
-        expect(mockFn).toHaveBeenCalledWith('arg1', 'arg2')
-      })
-      
-      it('should enforce 30fps throttling (33ms)', () => {
-        const mockFn = vi.fn()
-        const throttledFn = throttle(mockFn, 33)
-        
-        // Simulate rapid calls (like mousemove at 60fps = 16ms)
-        for (let i = 0; i < 10; i++) {
-          throttledFn()
-          vi.advanceTimersByTime(16)
-        }
-        
-        // Should have called roughly every 33ms = ~5 times in 160ms
-        expect(mockFn.mock.calls.length).toBeLessThanOrEqual(6)
-        expect(mockFn.mock.calls.length).toBeGreaterThanOrEqual(4)
-      })
-    })
-    ```
+  - **Tests:** Immediate first call, throttling, wait time, argument preservation, 30fps enforcement, context handling
 
-- [ ] **Unit Test: useBroadcastCursors Hook**
+- [x] **Unit Test: useBroadcastCursors Hook** ✅ 8/8 tests passing
   - **Files created:** `src/hooks/__tests__/useBroadcastCursors.test.ts`
   - **Purpose:** Verify cursor state management and broadcast logic
-  - **Content:**
-    ```ts
-    import { describe, it, expect, vi, beforeEach } from 'vitest'
-    import { renderHook, act, waitFor } from '@testing-library/react'
-    import { useBroadcastCursors } from '../useBroadcastCursors'
-    
-    // Mock Supabase
-    const mockSend = vi.fn()
-    const mockSubscribe = vi.fn()
-    const mockUnsubscribe = vi.fn()
-    
-    vi.mock('../../lib/supabase', () => ({
-      supabase: {
-        channel: vi.fn(() => ({
-          on: vi.fn().mockReturnThis(),
-          subscribe: mockSubscribe.mockReturnValue({
-            unsubscribe: mockUnsubscribe
-          }),
-          send: mockSend
-        }))
-      }
-    }))
-    
-    vi.mock('../useAuth', () => ({
-      useAuth: () => ({
-        user: { id: 'user-123', user_metadata: { display_name: 'Test User' } }
-      })
-    }))
-    
-    describe('useBroadcastCursors', () => {
-      beforeEach(() => {
-        vi.clearAllMocks()
-      })
-      
-      it('should initialize with empty cursors map', () => {
-        const { result } = renderHook(() => useBroadcastCursors())
-        
-        expect(result.current.cursors).toEqual(new Map())
-      })
-      
-      it('should send cursor updates when sendCursorUpdate is called', () => {
-        const { result } = renderHook(() => useBroadcastCursors())
-        
-        act(() => {
-          result.current.sendCursorUpdate(100, 200)
-        })
-        
-        expect(mockSend).toHaveBeenCalledWith({
-          type: 'broadcast',
-          event: 'cursor',
-          payload: expect.objectContaining({
-            x: 100,
-            y: 200,
-            userId: 'user-123',
-            displayName: 'Test User'
-          })
-        })
-      })
-      
-      it('should throttle rapid cursor updates', () => {
-        vi.useFakeTimers()
-        const { result } = renderHook(() => useBroadcastCursors())
-        
-        // Rapid fire updates
-        act(() => {
-          for (let i = 0; i < 10; i++) {
-            result.current.sendCursorUpdate(i * 10, i * 10)
-          }
-        })
-        
-        // Should be throttled (less than 10 calls)
-        expect(mockSend.mock.calls.length).toBeLessThan(10)
-        
-        vi.useRealTimers()
-      })
-      
-      it('should cleanup subscription on unmount', () => {
-        const { unmount } = renderHook(() => useBroadcastCursors())
-        
-        unmount()
-        
-        expect(mockUnsubscribe).toHaveBeenCalled()
-      })
-    })
-    ```
+  - **Tests:** Empty map initialization, send cursor updates, throttling, channel subscription, cleanup, color generation, ignore own cursor
 
-**Commit Message:** `feat: add multiplayer cursors with Supabase Broadcast`
+### Implementation Notes:
+- **Critical Fix**: Changed from unique per-user channels to shared `'canvas-cursors'` channel so all users can see each other
+- **Color Palette**: 10 vibrant colors generated deterministically from userId hash
+- **Cursor Design**: Classic pointer SVG with white stroke outline and colored fill
+- **Logout Button**: Added user info card with logout button to Canvas.tsx for multi-user testing
+- **TypeScript Fix**: Added explicit type annotation to prevent build error in test file
+
+**Commit Messages:** 
+- `feat: add multiplayer cursors with Supabase Broadcast`
+- `fix: add explicit type annotation to prevent TypeScript build error`
 
 ---
 
@@ -1821,14 +1625,14 @@ collabcanvas/
 3. ✅ PR 4: Canvas (workspace)
 4. ✅ PR 5: Shapes (core functionality)
 5. ✅ **PR 6: Realtime Sync (MOST CRITICAL)** - COMPLETE 🎉
-6. ⏳ **PR 7: Cursors (multiplayer proof)** - NEXT
-7. ⏳ PR 8: Presence (requirement)
+6. ✅ **PR 7: Cursors (multiplayer proof)** - COMPLETE 🎨
+7. ⏳ **PR 8: Presence (requirement)** - NEXT
 8. ⚠️ PR 9: Performance (important but can be minimal)
 9. ⏳ PR 10: Deployment (must submit)
 
 **Priority:** If short on time, PR 9 can be reduced to just testing and fixing critical bugs. All other PRs are mandatory.
 
-**Progress:** 5/9 Critical PRs complete (56%). Real-time collaboration is now fully functional!
+**Progress:** 6/9 Critical PRs complete (67%). Multiplayer cursors now working!
 
 ---
 
