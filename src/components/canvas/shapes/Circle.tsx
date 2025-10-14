@@ -3,7 +3,7 @@
  * Draggable circle with boundary constraints and locking
  */
 
-import { memo, useCallback } from 'react';
+import { memo, useRef, useCallback } from 'react';
 import { Circle as KonvaCircle } from 'react-konva';
 import Konva from 'konva';
 import { useAuth } from '../../../hooks/useAuth';
