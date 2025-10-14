@@ -1444,8 +1444,8 @@ collabcanvas/
 **Branch:** `feat/performance-polish`  
 **Goal:** Optimize rendering, add loading states, improve UX  
 **Estimated Time:** 1-1.5 hours  
-**Actual Time:** ~1.5 hours  
-**Status:** ✅ 100% Complete (7/8 tasks) - All tests passing (69/69)
+**Actual Time:** ~1.75 hours  
+**Status:** ✅ 100% Complete (8/8 tasks) - All tests passing (69/69)
 
 ### Tasks:
 - [x] Optimize Konva rendering ✅
@@ -1495,10 +1495,16 @@ collabcanvas/
     - ✅ Wrapped all routes in App.tsx
   - **Impact:** Graceful error handling, no white screen crashes
 
-- [~] Improve text editing UX (SKIPPED)
-  - **Decision:** Kept browser `prompt()` for MVP
-  - **Reason:** Inline HTML editing over Konva adds significant complexity
-  - **Future:** Can implement in post-MVP with proper positioning and portal
+- [x] Improve text editing UX ✅
+  - **Files updated:** `src/components/canvas/shapes/Text.tsx`, `src/components/canvas/CanvasStage.tsx`
+  - **Content:**
+    - ✅ Inline textarea overlay using React Portal
+    - ✅ Positioned directly on canvas at text location
+    - ✅ Auto-focus and select all text on edit
+    - ✅ Enter to save, ESC to cancel, blur to save
+    - ✅ Coordinate transformation for zoom/pan
+    - ✅ Multi-line support with Shift+Enter
+  - **Impact:** Professional inline editing experience
 
 - [x] Add keyboard shortcuts ✅
   - **Files created:** `src/hooks/useKeyboard.ts`
@@ -1523,10 +1529,11 @@ collabcanvas/
 - `src/components/ErrorBoundary.tsx` (92 lines)
 - `src/hooks/useKeyboard.ts` (48 lines)
 
-**Files Modified (6):**
+**Files Modified (7):**
 - `src/components/canvas/shapes/Rectangle.tsx` - Memoization + error recovery
 - `src/components/canvas/shapes/Circle.tsx` - Memoization + error recovery
-- `src/components/canvas/shapes/Text.tsx` - Memoization + error recovery
+- `src/components/canvas/shapes/Text.tsx` - Memoization + error recovery + inline editing
+- `src/components/canvas/CanvasStage.tsx` - Pass scale/position to Text
 - `src/components/canvas/Canvas.tsx` - Keyboard shortcuts + skeleton loading
 - `src/components/canvas/Toolbar.tsx` - Keyboard hint badges
 - `src/App.tsx` - Error boundary wrapper
@@ -1537,8 +1544,11 @@ collabcanvas/
 - ✅ Better error recovery with position revert
 - ✅ Improved perceived performance with skeleton UI
 - ✅ Keyboard shortcuts for faster workflow
+- ✅ Professional inline text editing experience
 
-**Commit Message:** `feat: optimize performance and polish UX with memoization, error recovery, and keyboard shortcuts`
+**Commit Messages:**
+1. `feat: optimize performance and polish UX with memoization, error recovery, and keyboard shortcuts`
+2. `feat: add inline text editing with HTML overlay`
 
 ---
 
