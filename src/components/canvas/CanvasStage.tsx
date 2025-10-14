@@ -3,6 +3,7 @@
  * Handles rendering, pan, zoom, and shape rendering
  */
 
+import { useState, useEffect } from 'react';
 import { Stage, Layer, Rect } from 'react-konva';
 import Konva from 'konva';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../lib/constants';
@@ -30,6 +31,23 @@ export function CanvasStage({
   onDragEnd,
   onUpdateShape,
 }: CanvasStageProps) {
+  // Track window dimensions for responsive canvas
+  const [dimensions, setDimensions] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   /**
    * Check if click is on stage background (not on a shape)
    * Only allow stage dragging if clicking on background
@@ -73,8 +91,8 @@ export function CanvasStage({
   return (
     <Stage
       ref={stageRef}
-      width={window.innerWidth}
-      height={window.innerHeight}
+      width={dimensions.width}
+      height={dimensions.height}
       draggable
       scaleX={scale}
       scaleY={scale}
