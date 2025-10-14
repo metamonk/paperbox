@@ -26,3 +26,8 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// Log Supabase connection info (without exposing keys)
+console.log('🔌 Supabase client initialized');
+console.log('📍 Supabase URL:', supabaseUrl);
+console.log('🔑 Anon key configured:', supabaseAnonKey ? '✅ Yes' : '❌ No');
+

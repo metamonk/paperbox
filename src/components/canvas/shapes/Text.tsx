@@ -1,22 +1,30 @@
 /**
  * Text shape component
- * Draggable text with boundary constraints and editing capability
+ * Draggable text with boundary constraints, editing capability, and locking
  */
 
 import { useState, useRef, useEffect } from 'react';
 import { Text as KonvaText } from 'react-konva';
 import Konva from 'konva';
+import { useAuth } from '../../../hooks/useAuth';
 import type { TextObject } from '../../../types/canvas';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
 interface TextProps {
   shape: TextObject;
   onUpdate: (id: string, updates: Partial<TextObject>) => void;
+  onAcquireLock: (id: string) => Promise<boolean>;
+  onReleaseLock: (id: string) => Promise<void>;
 }
 
-export function Text({ shape, onUpdate }: TextProps) {
+export function Text({ shape, onUpdate, onAcquireLock, onReleaseLock }: TextProps) {
+  const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const textRef = useRef<Konva.Text>(null);
+  
+  // Determine lock state
+  const isLockedByOther = shape.locked_by && shape.locked_by !== user?.id;
+  const isLockedByMe = shape.locked_by === user?.id;
 
   /**
    * Constrain dragging to canvas boundaries
@@ -33,21 +41,44 @@ export function Text({ shape, onUpdate }: TextProps) {
   };
 
   /**
-   * Update position in parent state on drag end
+   * Acquire lock when starting to drag
    */
-  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+  const handleDragStart = async () => {
+    const success = await onAcquireLock(shape.id);
+    if (!success) {
+      // Lock acquisition failed - prevent drag
+      return false;
+    }
+  };
+
+  /**
+   * Update position and release lock on drag end
+   */
+  const handleDragEnd = async (e: Konva.KonvaEventObject<DragEvent>) => {
     const node = e.target;
-    onUpdate(shape.id, {
+    
+    // Update position in database
+    await onUpdate(shape.id, {
       x: node.x(),
       y: node.y(),
     });
+    
+    // Release lock
+    await onReleaseLock(shape.id);
   };
 
   /**
    * Handle double-click to enter edit mode
+   * Acquire lock before editing (any user can edit any text)
    */
-  const handleDoubleClick = () => {
-    setIsEditing(true);
+  const handleDoubleClick = async () => {
+    // Try to acquire lock for editing
+    const success = await onAcquireLock(shape.id);
+    if (success) {
+      setIsEditing(true);
+    } else {
+      alert('This text is currently being edited by another user.');
+    }
   };
 
   /**
@@ -63,8 +94,11 @@ export function Text({ shape, onUpdate }: TextProps) {
         });
       }
       setIsEditing(false);
+      
+      // Release lock after editing
+      onReleaseLock(shape.id);
     }
-  }, [isEditing, shape.id, shape.text_content, onUpdate]);
+  }, [isEditing, shape.id, shape.text_content, onUpdate, onReleaseLock]);
 
   return (
     <KonvaText
@@ -74,11 +108,16 @@ export function Text({ shape, onUpdate }: TextProps) {
       text={shape.text_content}
       fontSize={shape.font_size}
       fill={shape.fill}
-      draggable={!isEditing}
+      draggable={!isEditing && !isLockedByOther}
       dragBoundFunc={handleDragBound}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDblClick={handleDoubleClick}
       onDblTap={handleDoubleClick}
+      // Visual feedback for locked state
+      stroke={isLockedByOther ? '#EF4444' : isLockedByMe ? '#10B981' : undefined}
+      strokeWidth={isLockedByOther || isLockedByMe ? 3 : 0}
+      opacity={isLockedByOther ? 0.7 : 1}
     />
   );
 }

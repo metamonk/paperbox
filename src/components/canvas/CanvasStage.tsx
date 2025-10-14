@@ -20,6 +20,8 @@ interface CanvasStageProps {
   onWheel: (e: Konva.KonvaEventObject<WheelEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onUpdateShape: (id: string, updates: Partial<CanvasObject>) => void;
+  onAcquireLock: (id: string) => Promise<boolean>;
+  onReleaseLock: (id: string) => Promise<void>;
 }
 
 export function CanvasStage({
@@ -30,6 +32,8 @@ export function CanvasStage({
   onWheel,
   onDragEnd,
   onUpdateShape,
+  onAcquireLock,
+  onReleaseLock,
 }: CanvasStageProps) {
   // Track window dimensions for responsive canvas
   const [dimensions, setDimensions] = useState({
@@ -78,11 +82,35 @@ export function CanvasStage({
   const renderShape = (shape: CanvasObject) => {
     switch (shape.type) {
       case 'rectangle':
-        return <Rectangle key={shape.id} shape={shape} onUpdate={onUpdateShape} />;
+        return (
+          <Rectangle 
+            key={shape.id} 
+            shape={shape} 
+            onUpdate={onUpdateShape}
+            onAcquireLock={onAcquireLock}
+            onReleaseLock={onReleaseLock}
+          />
+        );
       case 'circle':
-        return <Circle key={shape.id} shape={shape} onUpdate={onUpdateShape} />;
+        return (
+          <Circle 
+            key={shape.id} 
+            shape={shape} 
+            onUpdate={onUpdateShape}
+            onAcquireLock={onAcquireLock}
+            onReleaseLock={onReleaseLock}
+          />
+        );
       case 'text':
-        return <Text key={shape.id} shape={shape} onUpdate={onUpdateShape} />;
+        return (
+          <Text 
+            key={shape.id} 
+            shape={shape} 
+            onUpdate={onUpdateShape}
+            onAcquireLock={onAcquireLock}
+            onReleaseLock={onReleaseLock}
+          />
+        );
       default:
         return null;
     }
