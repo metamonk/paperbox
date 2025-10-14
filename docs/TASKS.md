@@ -594,13 +594,15 @@ collabcanvas/
 
 ---
 
-## PR #4: Basic Canvas with Pan & Zoom
+## PR #4: Basic Canvas with Pan & Zoom ✅ COMPLETE
 **Branch:** `feat/canvas-foundation`  
 **Goal:** Create canvas workspace with pan, zoom, and viewport controls  
-**Estimated Time:** 1-1.5 hours
+**Estimated Time:** 1-1.5 hours  
+**Actual Time:** ~1 hour  
+**Status:** ✅ 100% Complete (8/8 tasks) - All tests passing (38/38)
 
 ### Tasks:
-- [ ] Create canvas constants
+- [x] Create canvas constants
   - **Files updated:** `src/lib/constants.ts`
   - **Content:**
     ```ts
@@ -611,57 +613,59 @@ collabcanvas/
     export const ZOOM_SPEED = 0.1;
     ```
 
-- [ ] Create canvas stage component
-  - **Files created:** `src/components/canvas/CanvasStage.tsx`
+- [x] Create canvas stage component
+  - **Files created:** `src/components/canvas/CanvasStage.tsx` ✅
   - **Content:**
     - Konva Stage and Layer setup
     - Pan implementation (draggable stage)
     - Zoom implementation (wheel event handler)
     - Stage dimensions and positioning
-    - Background/grid layer (optional)
+    - Background layer with white fill
 
-- [ ] Create canvas utilities
-  - **Files created:** `src/utils/canvas-helpers.ts`
+- [x] Create canvas utilities
+  - **Files created:** `src/utils/canvas-helpers.ts` ✅
   - **Content:**
     - `getViewportCenter()` - calculate center of visible area
     - `clampZoom(scale)` - enforce min/max zoom
     - `screenToCanvas(x, y)` - coordinate transformation
+    - `canvasToScreen(x, y)` - reverse coordinate transformation
     - `constrainToBounds(x, y, width, height)` - keep objects within canvas boundaries (0,0 to 5000,5000)
 
-- [ ] Create canvas hook
-  - **Files created:** `src/hooks/useCanvas.ts`
+- [x] Create canvas hook
+  - **Files created:** `src/hooks/useCanvas.ts` ✅
   - **Content:**
     - `stageRef` for Konva stage reference
     - `scale` state for zoom level
     - `position` state for pan offset
     - `handleWheel` for zoom
     - `handleDragEnd` for pan
+    - `setScale` and `setPosition` setters
 
-- [ ] Create main canvas component
-  - **Files created:** `src/components/canvas/Canvas.tsx`
+- [x] Create main canvas component
+  - **Files created:** `src/components/canvas/Canvas.tsx` ✅
   - **Content:**
-    - Container with sidebar and canvas area
+    - Container with full-screen layout
     - Render CanvasStage
     - Basic layout structure
 
-- [ ] Create canvas page
-  - **Files created:** `src/pages/CanvasPage.tsx`
+- [x] Create canvas page
+  - **Files updated:** `src/pages/CanvasPage.tsx` ✅
   - **Content:**
     - Render Canvas component
-    - Auth check (redirect if not authenticated)
+    - Auth check handled by App.tsx routing
 
-- [ ] Add canvas page to routing
-  - **Files updated:** `src/App.tsx`
-  - **Content:** Add `/canvas` route
+- [x] Add canvas page to routing
+  - **Files verified:** `src/App.tsx` ✅
+  - **Content:** `/canvas` route already configured with auth protection
 
-- [ ] Style canvas layout
-  - **Files updated:** 
+- [x] Style canvas layout
+  - **Files updated:** ✅
     - `src/components/canvas/Canvas.tsx`
     - `src/components/canvas/CanvasStage.tsx`
-  - **Content:** Full-height layout, overflow hidden
+  - **Content:** Full-height layout, overflow hidden, gray background
 
 ### Tests:
-- [ ] **Unit Test: Canvas Helper Utilities**
+- [x] **Unit Test: Canvas Helper Utilities** ✅ 17/17 tests passing
   - **Files created:** `src/utils/__tests__/canvas-helpers.test.ts`
   - **Purpose:** Verify coordinate transformations and zoom clamping
   - **Content:**
@@ -764,59 +768,25 @@ collabcanvas/
     })
     ```
 
-- [ ] **Unit Test: useCanvas Hook**
+- [x] **Unit Test: useCanvas Hook** ✅ 5/5 tests passing
   - **Files created:** `src/hooks/__tests__/useCanvas.test.ts`
   - **Purpose:** Verify canvas state management (zoom, pan)
-  - **Content:**
-    ```ts
-    import { describe, it, expect } from 'vitest'
-    import { renderHook, act } from '@testing-library/react'
-    import { useCanvas } from '../useCanvas'
-    import { MIN_ZOOM, MAX_ZOOM } from '../../lib/constants'
-    
-    describe('useCanvas', () => {
-      it('should initialize with default scale and position', () => {
-        const { result } = renderHook(() => useCanvas())
-        
-        expect(result.current.scale).toBe(1)
-        expect(result.current.position).toEqual({ x: 0, y: 0 })
-      })
-      
-      it('should update zoom within limits', () => {
-        const { result } = renderHook(() => useCanvas())
-        
-        act(() => {
-          result.current.setScale(2)
-        })
-        
-        expect(result.current.scale).toBe(2)
-        
-        act(() => {
-          result.current.setScale(10)
-        })
-        
-        expect(result.current.scale).toBe(MAX_ZOOM)
-        
-        act(() => {
-          result.current.setScale(0.01)
-        })
-        
-        expect(result.current.scale).toBe(MIN_ZOOM)
-      })
-      
-      it('should update position on pan', () => {
-        const { result } = renderHook(() => useCanvas())
-        
-        act(() => {
-          result.current.setPosition({ x: 100, y: 200 })
-        })
-        
-        expect(result.current.position).toEqual({ x: 100, y: 200 })
-      })
-    })
-    ```
+  - **Tests:**
+    - Initialize with default scale and position
+    - Update zoom within limits (clamping)
+    - Update position on pan
+    - Verify stage ref exists
+    - Verify wheel and drag handlers exist
 
 **Commit Message:** `feat: implement canvas with pan and zoom functionality`
+
+**Additional Notes:**
+- ✅ Removed `vite-plugin-checker` due to ESLint 9 incompatibility
+- ✅ Dev server now runs without errors
+- ✅ Canvas renders with white background and gray border
+- ✅ Zoom works toward mouse position
+- ✅ Pan works by dragging the stage
+- ✅ All coordinate transformation utilities tested and working
 
 ---
 
@@ -1812,13 +1782,13 @@ collabcanvas/
 
 1. ✅ PRs 1-2: Setup (foundation)
 2. ✅ PR 3: Auth (gate for canvas access)
-3. ✅ PR 4: Canvas (workspace)
-4. ✅ PR 5: Shapes (core functionality)
-5. ✅ **PR 6: Realtime Sync (MOST CRITICAL)**
-6. ✅ PR 7: Cursors (multiplayer proof)
-7. ✅ PR 8: Presence (requirement)
+3. ✅ PR 4: Canvas (workspace) - COMPLETE
+4. ⏳ PR 5: Shapes (core functionality) - NEXT
+5. ⏳ **PR 6: Realtime Sync (MOST CRITICAL)**
+6. ⏳ PR 7: Cursors (multiplayer proof)
+7. ⏳ PR 8: Presence (requirement)
 8. ⚠️ PR 9: Performance (important but can be minimal)
-9. ✅ PR 10: Deployment (must submit)
+9. ⏳ PR 10: Deployment (must submit)
 
 **Priority:** If short on time, PR 9 can be reduced to just testing and fixing critical bugs. All other PRs are mandatory.
 
