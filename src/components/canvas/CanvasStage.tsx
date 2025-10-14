@@ -1,27 +1,51 @@
 /**
  * Konva-based canvas stage component
- * Handles rendering, pan, and zoom
+ * Handles rendering, pan, zoom, and shape rendering
  */
 
 import { Stage, Layer, Rect } from 'react-konva';
 import Konva from 'konva';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../lib/constants';
+import { CanvasObject } from '../../types/canvas';
+import { Rectangle } from './shapes/Rectangle';
+import { Circle } from './shapes/Circle';
+import { Text } from './shapes/Text';
 
 interface CanvasStageProps {
   stageRef: React.RefObject<Konva.Stage>;
   scale: number;
   position: { x: number; y: number };
+  shapes: CanvasObject[];
   onWheel: (e: Konva.KonvaEventObject<WheelEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
+  onUpdateShape: (id: string, updates: Partial<CanvasObject>) => void;
 }
 
 export function CanvasStage({
   stageRef,
   scale,
   position,
+  shapes,
   onWheel,
   onDragEnd,
+  onUpdateShape,
 }: CanvasStageProps) {
+  /**
+   * Render the appropriate shape component based on type
+   */
+  const renderShape = (shape: CanvasObject) => {
+    switch (shape.type) {
+      case 'rectangle':
+        return <Rectangle key={shape.id} shape={shape} onUpdate={onUpdateShape} />;
+      case 'circle':
+        return <Circle key={shape.id} shape={shape} onUpdate={onUpdateShape} />;
+      case 'text':
+        return <Text key={shape.id} shape={shape} onUpdate={onUpdateShape} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <Stage
       ref={stageRef}
@@ -48,9 +72,9 @@ export function CanvasStage({
         />
       </Layer>
 
-      {/* Objects layer - will be populated in PR #5 */}
+      {/* Objects layer */}
       <Layer>
-        {/* Shapes will be rendered here */}
+        {shapes.map((shape) => renderShape(shape))}
       </Layer>
     </Stage>
   );
