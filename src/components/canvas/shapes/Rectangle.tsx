@@ -75,6 +75,13 @@ function RectangleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate
 
   /**
    * Handle transform end (resize/rotate)
+   * 
+   * Konva best practice:
+   * 1. Calculate new dimensions from scale
+   * 2. Apply new dimensions to node BEFORE resetting scale
+   * 3. Reset scale to 1
+   * 4. Sync to database
+   * This prevents visual "snap back" to original size
    */
   const handleTransformEnd = useCallback(async () => {
     const node = shapeRef.current;
@@ -83,7 +90,15 @@ function RectangleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    // Reset scale and apply to width/height
+    // Calculate new dimensions
+    const newWidth = Math.max(5, node.width() * scaleX);
+    const newHeight = Math.max(5, node.height() * scaleY);
+
+    // Apply new dimensions to node BEFORE resetting scale (prevents snap-back)
+    node.width(newWidth);
+    node.height(newHeight);
+
+    // Now reset scale
     node.scaleX(1);
     node.scaleY(1);
 
@@ -91,8 +106,8 @@ function RectangleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate
       await onUpdate(shape.id, {
         x: node.x(),
         y: node.y(),
-        width: Math.max(5, node.width() * scaleX),
-        height: Math.max(5, node.height() * scaleY),
+        width: newWidth,
+        height: newHeight,
         rotation: node.rotation(),
       });
     } catch (error) {

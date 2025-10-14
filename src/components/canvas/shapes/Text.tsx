@@ -96,7 +96,10 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
    * Figma-style behavior:
    * - Corner anchors: Scale BOTH fontSize and width proportionally (uniform scaling)
    * - Side anchors (middle-left/right): Scale ONLY width, keep fontSize constant
-   * - This gives users control over text box width vs font size
+   * 
+   * Konva best practice:
+   * - Apply new fontSize and width to text node BEFORE resetting group scale
+   * - This prevents visual "snap back" to original size
    */
   const handleTransformEnd = useCallback(async () => {
     const group = groupRef.current;
@@ -125,7 +128,13 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
       // fontSize stays the same
     }
 
-    // Reset the group scale
+    // Apply new dimensions to text node BEFORE resetting scale (prevents snap-back)
+    text.fontSize(Math.round(newFontSize));
+    if (newWidth !== undefined) {
+      text.width(newWidth);
+    }
+
+    // Now reset the group scale
     group.scaleX(1);
     group.scaleY(1);
 

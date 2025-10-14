@@ -76,6 +76,13 @@ function CircleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, o
 
   /**
    * Handle transform end (resize/rotate)
+   * 
+   * Konva best practice:
+   * 1. Calculate new radius from average scale
+   * 2. Apply new radius to node BEFORE resetting scale
+   * 3. Reset scale to 1
+   * 4. Sync to database
+   * This prevents visual "snap back" to original size
    */
   const handleTransformEnd = useCallback(async () => {
     const node = shapeRef.current;
@@ -84,10 +91,14 @@ function CircleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, o
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    // For circles, we use the average scale for radius
+    // For circles, use average scale for radius
     const avgScale = (scaleX + scaleY) / 2;
+    const newRadius = Math.max(5, shape.radius * avgScale);
 
-    // Reset scale
+    // Apply new radius to node BEFORE resetting scale (prevents snap-back)
+    node.radius(newRadius);
+
+    // Now reset scale
     node.scaleX(1);
     node.scaleY(1);
 
@@ -95,7 +106,7 @@ function CircleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, o
       await onUpdate(shape.id, {
         x: node.x(),
         y: node.y(),
-        radius: Math.max(5, shape.radius * avgScale),
+        radius: newRadius,
         rotation: node.rotation(),
       });
     } catch (error) {
