@@ -3,7 +3,7 @@
  * Provides buttons to create shapes on the canvas
  */
 
-import { ShapeType } from '../../types/canvas';
+import type { ShapeType } from '../../types/canvas';
 
 interface ToolbarProps {
   onAddShape: (type: ShapeType) => void;

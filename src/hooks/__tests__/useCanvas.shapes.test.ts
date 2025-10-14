@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCanvas } from '../useCanvas';
 import { SHAPE_DEFAULTS } from '../../lib/constants';
@@ -33,8 +33,10 @@ describe('useCanvas - Shape Creation', () => {
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('rectangle');
-    expect(shape.width).toBe(SHAPE_DEFAULTS.rectangle.width);
-    expect(shape.height).toBe(SHAPE_DEFAULTS.rectangle.height);
+    if (shape.type === 'rectangle') {
+      expect(shape.width).toBe(SHAPE_DEFAULTS.rectangle.width);
+      expect(shape.height).toBe(SHAPE_DEFAULTS.rectangle.height);
+    }
     expect(shape.fill).toBe(SHAPE_DEFAULTS.rectangle.fill);
     expect(shape.id).toBeDefined();
     expect(shape.created_by).toBe('local-user');
@@ -49,7 +51,9 @@ describe('useCanvas - Shape Creation', () => {
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('circle');
-    expect(shape.radius).toBe(SHAPE_DEFAULTS.circle.radius);
+    if (shape.type === 'circle') {
+      expect(shape.radius).toBe(SHAPE_DEFAULTS.circle.radius);
+    }
     expect(shape.fill).toBe(SHAPE_DEFAULTS.circle.fill);
     expect(shape.id).toBeDefined();
   });
@@ -63,8 +67,10 @@ describe('useCanvas - Shape Creation', () => {
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('text');
-    expect(shape.text_content).toBe(SHAPE_DEFAULTS.text.textContent);
-    expect(shape.font_size).toBe(SHAPE_DEFAULTS.text.fontSize);
+    if (shape.type === 'text') {
+      expect(shape.text_content).toBe(SHAPE_DEFAULTS.text.textContent);
+      expect(shape.font_size).toBe(SHAPE_DEFAULTS.text.fontSize);
+    }
     expect(shape.fill).toBe(SHAPE_DEFAULTS.text.fill);
     expect(shape.id).toBeDefined();
   });
@@ -101,7 +107,9 @@ describe('useCanvas - Shape Creation', () => {
     });
 
     const updatedShape = result.current.shapes[0];
-    expect(updatedShape.text_content).toBe('Updated Text');
+    if (updatedShape.type === 'text') {
+      expect(updatedShape.text_content).toBe('Updated Text');
+    }
   });
 
   it('should handle multiple shapes', () => {

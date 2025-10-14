@@ -5,7 +5,7 @@
 
 import { Circle as KonvaCircle } from 'react-konva';
 import Konva from 'konva';
-import { CircleObject } from '../../../types/canvas';
+import type { CircleObject } from '../../../types/canvas';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
 interface CircleProps {

@@ -5,7 +5,7 @@
 
 import { Rect } from 'react-konva';
 import Konva from 'konva';
-import { RectangleObject } from '../../../types/canvas';
+import type { RectangleObject } from '../../../types/canvas';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
 interface RectangleProps {

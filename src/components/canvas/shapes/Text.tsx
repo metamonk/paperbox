@@ -6,7 +6,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Text as KonvaText } from 'react-konva';
 import Konva from 'konva';
-import { TextObject } from '../../../types/canvas';
+import type { TextObject } from '../../../types/canvas';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
 interface TextProps {

@@ -7,7 +7,7 @@ import { useState, useRef, useCallback } from 'react';
 import Konva from 'konva';
 import { DEFAULT_ZOOM, ZOOM_SPEED, SHAPE_DEFAULTS } from '../lib/constants';
 import { clampZoom, getViewportCenter } from '../utils/canvas-helpers';
-import { CanvasObject, ShapeType } from '../types/canvas';
+import type { CanvasObject, ShapeType } from '../types/canvas';
 
 export function useCanvas() {
   const stageRef = useRef<Konva.Stage>(null);
@@ -162,11 +162,12 @@ export function useCanvas() {
    */
   const updateShape = useCallback((id: string, updates: Partial<CanvasObject>) => {
     setShapes((prev) =>
-      prev.map((shape) =>
-        shape.id === id
-          ? { ...shape, ...updates, updated_at: new Date().toISOString() }
-          : shape
-      )
+      prev.map((shape) => {
+        if (shape.id === id) {
+          return { ...shape, ...updates, updated_at: new Date().toISOString() } as CanvasObject;
+        }
+        return shape;
+      })
     );
   }, []);
 

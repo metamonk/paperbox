@@ -7,13 +7,13 @@ import { useState, useEffect } from 'react';
 import { Stage, Layer, Rect } from 'react-konva';
 import Konva from 'konva';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../lib/constants';
-import { CanvasObject } from '../../types/canvas';
+import type { CanvasObject } from '../../types/canvas';
 import { Rectangle } from './shapes/Rectangle';
 import { Circle } from './shapes/Circle';
 import { Text } from './shapes/Text';
 
 interface CanvasStageProps {
-  stageRef: React.RefObject<Konva.Stage>;
+  stageRef: React.RefObject<Konva.Stage | null>;
   scale: number;
   position: { x: number; y: number };
   shapes: CanvasObject[];
