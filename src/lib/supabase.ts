@@ -23,6 +23,13 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10,
     },
+    timeout: 30000, // 30 seconds timeout (increased from default 10s)
+    heartbeatIntervalMs: 15000, // Send heartbeat every 15s (default is 30s)
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'collabcanvas-web',
+    },
   },
 });
 

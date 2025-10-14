@@ -219,6 +219,9 @@ export function useRealtimeObjects() {
 
     let channel: RealtimeChannel;
     let mounted = true;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    const BASE_DELAY = 1000; // Start with 1 second
 
     const setupRealtime = async () => {
       try {
@@ -256,9 +259,17 @@ export function useRealtimeObjects() {
         const fetchDuration = performance.now() - fetchStart;
         console.log(`✅ Loaded ${canvasObjects.length} canvas objects in ${fetchDuration.toFixed(0)}ms`);
 
-        // Set up real-time subscription
+        // Set up real-time subscription with explicit configuration
+        const channelName = `canvas-objects-${user.id}`; // Unique channel per user
+        console.log(`🔌 Creating channel: ${channelName}`);
+        
         channel = supabase
-          .channel('canvas-objects')
+          .channel(channelName, {
+            config: {
+              broadcast: { self: false }, // Don't receive own broadcasts
+              presence: { key: user.id }, // Track presence by user ID
+            },
+          })
           .on(
             'postgres_changes',
             {
@@ -305,31 +316,44 @@ export function useRealtimeObjects() {
               setObjects((prev) => prev.filter((obj) => obj.id !== payload.old.id));
             }
           )
-          .subscribe((status, err) => {
-            // Only log if component is still mounted
+          .subscribe(async (status, err) => {
+            // Only process if component is still mounted
             if (!mounted) return;
             
-            console.log('📡 Realtime subscription status:', status);
+            console.log('📡 Realtime subscription status:', status, `(attempt ${reconnectAttempts + 1})`);
             
             if (status === 'SUBSCRIBED') {
               console.log('✅ Subscribed to canvas-objects realtime channel');
-              setError(null); // Clear any previous errors
-            } else if (status === 'CHANNEL_ERROR') {
-              console.error('❌ Realtime channel error:', err);
+              setError(null);
+              reconnectAttempts = 0; // Reset on successful connection
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              const errorType = status === 'CHANNEL_ERROR' ? 'Channel error' : 'Connection timed out';
+              console.error(`⚠️ ${errorType}:`, err);
               
-              // Log detailed error info for debugging
-              if (err) {
-                console.error('Error details:', err);
+              if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                const delay = BASE_DELAY * Math.pow(2, reconnectAttempts - 1); // Exponential backoff
+                
+                console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+                
+                // Clean up current channel
+                if (channel) {
+                  await supabase.removeChannel(channel);
+                }
+                
+                // Wait with exponential backoff
+                await new Promise(resolve => setTimeout(resolve, delay));
+                
+                // Retry connection if still mounted
+                if (mounted) {
+                  setupRealtime();
+                }
+              } else {
+                console.error('❌ Max reconnection attempts reached');
+                setError('Connection lost. Please refresh the page.');
               }
-              
-              // Don't show error banner - Supabase will retry automatically
-              // Only log to console for debugging
-              console.log('🔄 Supabase client will attempt to reconnect automatically');
-            } else if (status === 'TIMED_OUT') {
-              console.error('⏱️ Subscription timed out');
-              console.log('🔄 Supabase client will attempt to reconnect automatically');
             } else if (status === 'CLOSED') {
-              console.log('🔌 Channel closed');
+              console.log('🔌 Channel closed gracefully');
               if (mounted) {
                 setError(null);
               }
