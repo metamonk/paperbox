@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import type { User, AuthResponse, Session } from '@supabase/supabase-js';
 import { useAuth } from '../useAuth';
 import { supabase } from '../../lib/supabase';
 
@@ -34,11 +35,11 @@ describe('useAuth', () => {
   });
 
   it('should sign up a new user with auto-generated display name', async () => {
-    const mockUser = { id: '123', email: 'test@example.com' };
+    const mockUser = { id: '123', email: 'test@example.com' } as User;
     vi.mocked(supabase.auth.signUp).mockResolvedValue({
-      data: { user: mockUser as any, session: null },
+      data: { user: mockUser, session: null },
       error: null,
-    });
+    } as AuthResponse);
 
     const { result } = renderHook(() => useAuth());
 
@@ -61,11 +62,12 @@ describe('useAuth', () => {
   });
 
   it('should sign in an existing user', async () => {
-    const mockUser = { id: '123', email: 'test@example.com' };
+    const mockUser = { id: '123', email: 'test@example.com' } as User;
+    const mockSession = {} as Session;
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
-      data: { user: mockUser as any, session: {} as any },
+      data: { user: mockUser, session: mockSession },
       error: null,
-    });
+    } as AuthResponse);
 
     const { result } = renderHook(() => useAuth());
 
@@ -136,8 +138,8 @@ describe('useAuth', () => {
     const mockError = new Error('Email already registered');
     vi.mocked(supabase.auth.signUp).mockResolvedValue({
       data: { user: null, session: null },
-      error: mockError as any,
-    });
+      error: mockError,
+    } as AuthResponse);
 
     const { result } = renderHook(() => useAuth());
 
@@ -155,8 +157,8 @@ describe('useAuth', () => {
     const mockError = new Error('Invalid credentials');
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
       data: { user: null, session: null },
-      error: mockError as any,
-    });
+      error: mockError,
+    } as AuthResponse);
 
     const { result } = renderHook(() => useAuth());
 
