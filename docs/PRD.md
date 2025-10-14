@@ -344,35 +344,35 @@ lock_acquired_at (timestamp, nullable) -- When lock was acquired
 ## Success Metrics
 
 ### Hard Requirements (Must Pass MVP Gate)
-- [ ] Authentication works (users can register/login via Supabase Auth)
-- [ ] Three shape types can be created (rectangle, circle, text)
-- [ ] Objects can be moved via drag-and-drop
-- [ ] Pan and zoom work smoothly at 60 FPS
-- [ ] 2+ users see each other's cursors with names in real-time
-- [ ] Real-time sync works (create/move visible to all users < 100ms)
-- [ ] Presence awareness shows who's online
-- [ ] Canvas state persists in Postgres across refreshes
-- [ ] Deployed to Vercel and publicly accessible
-- [ ] Supports 5+ concurrent users without degradation
-- [ ] Broadcast channel handles cursor updates (no DB writes)
-- [ ] Realtime channel handles object updates (with DB persistence)
-- [ ] Object locking prevents simultaneous manipulation conflicts
-- [ ] Visual feedback shows when objects are being manipulated by others
-- [ ] Idle users are marked appropriately in presence UI
-- [ ] Automatic reconnection works after connection drops
+- [x] Authentication works (users can register/login via Supabase Auth) ✅ PR #3
+- [x] Three shape types can be created (rectangle, circle, text) ✅ PR #5
+- [x] Objects can be moved via drag-and-drop ✅ PR #5
+- [x] Pan and zoom work smoothly at 60 FPS ✅ PR #4
+- [ ] 2+ users see each other's cursors with names in real-time (PR #7)
+- [ ] Real-time sync works (create/move visible to all users < 100ms) (PR #6)
+- [ ] Presence awareness shows who's online (PR #8)
+- [ ] Canvas state persists in Postgres across refreshes (PR #6)
+- [ ] Deployed to Vercel and publicly accessible (PR #10)
+- [ ] Supports 5+ concurrent users without degradation (PR #9)
+- [ ] Broadcast channel handles cursor updates (no DB writes) (PR #7)
+- [ ] Realtime channel handles object updates (with DB persistence) (PR #6)
+- [ ] Object locking prevents simultaneous manipulation conflicts (PR #6)
+- [ ] Visual feedback shows when objects are being manipulated by others (PR #6)
+- [ ] Idle users are marked appropriately in presence UI (PR #8)
+- [ ] Automatic reconnection works after connection drops (PR #6)
 
 ### Testing Checklist
-- [ ] 2 users in different browsers can edit simultaneously
-- [ ] User refreshes mid-edit and canvas state persists
-- [ ] 10+ shapes created/moved rapidly sync correctly
-- [ ] Disconnected user can reconnect and see current state
-- [ ] 5 users can work simultaneously without FPS drops
-- [ ] Cursor throttling at 30fps (no excessive updates)
-- [ ] Object updates flow through Postgres (verify in Supabase dashboard)
-- [ ] Objects cannot be dragged outside canvas boundaries (0,0 to 5000,5000)
-- [ ] Visual feedback appears when another user is manipulating an object
-- [ ] Object locks prevent simultaneous manipulation
-- [ ] Text editing locks object from movement
+- [ ] 2 users in different browsers can edit simultaneously (PR #6)
+- [ ] User refreshes mid-edit and canvas state persists (PR #6)
+- [ ] 10+ shapes created/moved rapidly sync correctly (PR #6)
+- [ ] Disconnected user can reconnect and see current state (PR #6)
+- [ ] 5 users can work simultaneously without FPS drops (PR #9)
+- [ ] Cursor throttling at 30fps (no excessive updates) (PR #7)
+- [ ] Object updates flow through Postgres (verify in Supabase dashboard) (PR #6)
+- [x] Objects cannot be dragged outside canvas boundaries (0,0 to 5000,5000) ✅ PR #5
+- [ ] Visual feedback appears when another user is manipulating an object (PR #6)
+- [ ] Object locks prevent simultaneous manipulation (PR #6)
+- [x] Text editing locks object from movement ✅ PR #5
 
 ---
 
