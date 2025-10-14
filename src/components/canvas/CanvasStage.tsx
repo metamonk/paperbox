@@ -114,6 +114,8 @@ export function CanvasStage({
             onAcquireLock={onAcquireLock}
             onReleaseLock={onReleaseLock}
             onActivity={onActivity}
+            scale={scale}
+            stagePosition={position}
           />
         );
       default:
