@@ -15,9 +15,10 @@ interface TextProps {
   onUpdate: (id: string, updates: Partial<TextObject>) => void;
   onAcquireLock: (id: string) => Promise<boolean>;
   onReleaseLock: (id: string) => Promise<void>;
+  onActivity?: () => void;
 }
 
-export function Text({ shape, onUpdate, onAcquireLock, onReleaseLock }: TextProps) {
+export function Text({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivity }: TextProps) {
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const textRef = useRef<Konva.Text>(null);
@@ -42,8 +43,10 @@ export function Text({ shape, onUpdate, onAcquireLock, onReleaseLock }: TextProp
 
   /**
    * Acquire lock when starting to drag
+   * Also update activity for presence tracking
    */
   const handleDragStart = async () => {
+    onActivity?.();
     const success = await onAcquireLock(shape.id);
     if (!success) {
       // Lock acquisition failed - prevent drag
@@ -70,8 +73,10 @@ export function Text({ shape, onUpdate, onAcquireLock, onReleaseLock }: TextProp
   /**
    * Handle double-click to enter edit mode
    * Acquire lock before editing (any user can edit any text)
+   * Also update activity for presence tracking
    */
   const handleDoubleClick = async () => {
+    onActivity?.();
     // Try to acquire lock for editing
     const success = await onAcquireLock(shape.id);
     if (success) {
