@@ -213,8 +213,12 @@ export function CanvasStage({
         <Transformer
           ref={transformerRef}
           boundBoxFunc={(oldBox, newBox) => {
-            // Limit resize
-            if (newBox.width < 5 || newBox.height < 5) {
+            // Prevent shapes from becoming too small to interact with
+            // Minimums: 20px for text width, 10px for other shapes
+            const minWidth = 20;
+            const minHeight = 10;
+            
+            if (newBox.width < minWidth || newBox.height < minHeight) {
               return oldBox;
             }
             return newBox;
