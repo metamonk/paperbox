@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { Stage, Layer, Rect, Transformer } from 'react-konva';
 import Konva from 'konva';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../lib/constants';
-import type { CanvasObject } from '../../types/canvas';
+import type { CanvasObject, ToolMode } from '../../types/canvas';
 import { Rectangle } from './shapes/Rectangle';
 import { Circle } from './shapes/Circle';
 import { Text } from './shapes/Text';
@@ -19,6 +19,7 @@ interface CanvasStageProps {
   position: { x: number; y: number };
   shapes: CanvasObject[];
   selectedShapeId: string | null;
+  effectiveToolMode: ToolMode;
   onWheel: (e: Konva.KonvaEventObject<WheelEvent>) => void;
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onUpdateShape: (id: string, updates: Partial<CanvasObject>) => void;
@@ -36,6 +37,7 @@ export function CanvasStage({
   position,
   shapes,
   selectedShapeId,
+  effectiveToolMode,
   onWheel,
   onDragEnd,
   onUpdateShape,
@@ -88,27 +90,35 @@ export function CanvasStage({
 
   /**
    * Check if click is on stage background (not on a shape)
-   * Deselect shapes and allow stage dragging
+   * In select mode: deselect shapes
+   * In hand mode: allow stage dragging
    */
   const checkDeselect = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     // Check if we clicked on stage or background
     const clickedOnEmpty = e.target === e.target.getStage();
+    
     if (clickedOnEmpty) {
-      // Clicked on empty area, deselect shape
-      onDeselectShape();
+      // Clicked on empty area
+      if (effectiveToolMode === 'select') {
+        // In select mode: deselect all shapes
+        onDeselectShape();
+      }
+      // In hand mode: stage is already draggable, nothing to do
     } else {
-      // Clicked on a shape, disable stage dragging
-      if (stageRef.current) {
+      // Clicked on a shape
+      // In select mode: keep shape selected
+      // In hand mode: disable stage dragging so shape can be interacted with
+      if (effectiveToolMode === 'hand' && stageRef.current) {
         stageRef.current.draggable(false);
       }
     }
   };
 
   /**
-   * Re-enable stage dragging on mouse up
+   * Re-enable stage dragging on mouse up (only in hand mode)
    */
   const handleMouseUp = () => {
-    if (stageRef.current) {
+    if (stageRef.current && effectiveToolMode === 'hand') {
       stageRef.current.draggable(true);
     }
   };
@@ -169,7 +179,7 @@ export function CanvasStage({
       ref={stageRef}
       width={dimensions.width}
       height={dimensions.height}
-      draggable
+      draggable={effectiveToolMode === 'hand'}
       scaleX={scale}
       scaleY={scale}
       x={position.x}
@@ -180,6 +190,7 @@ export function CanvasStage({
       onTouchStart={checkDeselect}
       onMouseUp={handleMouseUp}
       onTouchEnd={handleMouseUp}
+      style={{ cursor: effectiveToolMode === 'hand' ? 'grab' : 'default' }}
     >
       {/* Background layer */}
       <Layer listening={false}>
@@ -202,8 +213,12 @@ export function CanvasStage({
         <Transformer
           ref={transformerRef}
           boundBoxFunc={(oldBox, newBox) => {
-            // Limit resize
-            if (newBox.width < 5 || newBox.height < 5) {
+            // Prevent shapes from becoming too small to interact with
+            // Minimums: 20px for text width, 10px for other shapes
+            const minWidth = 20;
+            const minHeight = 10;
+            
+            if (newBox.width < minWidth || newBox.height < minHeight) {
               return oldBox;
             }
             return newBox;

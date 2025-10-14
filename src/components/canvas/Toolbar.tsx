@@ -7,9 +7,11 @@ import type { ShapeType } from '../../types/canvas';
 
 interface ToolbarProps {
   onAddShape: (type: ShapeType) => void;
+  onDelete?: () => void;
+  hasSelection?: boolean;
 }
 
-export function Toolbar({ onAddShape }: ToolbarProps) {
+export function Toolbar({ onAddShape, onDelete, hasSelection }: ToolbarProps) {
   return (
     <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 flex gap-2 z-10">
       <button
@@ -85,6 +87,36 @@ export function Toolbar({ onAddShape }: ToolbarProps) {
         <span>Text</span>
         <kbd className="ml-1 px-1.5 py-0.5 text-xs bg-gray-800 rounded border border-gray-600">T</kbd>
       </button>
+
+      {/* Separator */}
+      {hasSelection && <div className="w-px bg-gray-300 self-stretch" />}
+
+      {/* Delete button - only shown when something is selected */}
+      {hasSelection && onDelete && (
+        <button
+          onClick={onDelete}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors flex items-center gap-2"
+          title="Delete Selected (Delete/Backspace)"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 20 20"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3 5h14M8 5V3h4v2M6 5v10a2 2 0 002 2h4a2 2 0 002-2V5"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span>Delete</span>
+          <kbd className="ml-1 px-1.5 py-0.5 text-xs bg-red-600 rounded border border-red-400">⌫</kbd>
+        </button>
+      )}
     </div>
   );
 }

@@ -25,12 +25,15 @@ export function Canvas() {
     loading,
     error,
     selectedShapeId,
+    toolMode: _toolMode, // eslint-disable-line @typescript-eslint/no-unused-vars -- Reserved for future tool UI indicator
+    effectiveToolMode,
     handleWheel,
     handleDragEnd,
     addShape,
     updateShape,
     selectShape,
     deselectShape,
+    deleteSelected,
     acquireLock,
     releaseLock,
   } = useCanvas();
@@ -150,7 +153,11 @@ export function Canvas() {
             </div>
           )}
           
-          <Toolbar onAddShape={addShape} />
+          <Toolbar 
+            onAddShape={addShape} 
+            onDelete={deleteSelected}
+            hasSelection={!!selectedShapeId}
+          />
           <CanvasStage
             stageRef={stageRef}
             transformerRef={transformerRef}
@@ -158,6 +165,7 @@ export function Canvas() {
             position={position}
             shapes={shapes}
             selectedShapeId={selectedShapeId}
+            effectiveToolMode={effectiveToolMode}
             onWheel={handleWheel}
             onDragEnd={handleDragEnd}
             onUpdateShape={updateShape}

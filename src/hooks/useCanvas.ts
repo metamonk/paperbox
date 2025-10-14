@@ -3,12 +3,12 @@
  * Handles zoom, pan, canvas transformations, and shape management
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Konva from 'konva';
 import { DEFAULT_ZOOM, ZOOM_SPEED, SHAPE_DEFAULTS } from '../lib/constants';
 import { clampZoom, getViewportCenter } from '../utils/canvas-helpers';
 import { useRealtimeObjects } from './useRealtimeObjects';
-import type { CanvasObject, ShapeType } from '../types/canvas';
+import type { CanvasObject, ShapeType, ToolMode } from '../types/canvas';
 
 export function useCanvas() {
   const stageRef = useRef<Konva.Stage>(null);
@@ -16,6 +16,9 @@ export function useCanvas() {
   const [scale, setScaleState] = useState(DEFAULT_ZOOM);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [toolMode, setToolMode] = useState<ToolMode>('select');
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isCommandPressed, setIsCommandPressed] = useState(false);
   
   // Use realtime objects instead of local state
   const { 
@@ -24,9 +27,65 @@ export function useCanvas() {
     error,
     createObject, 
     updateObject,
+    deleteObjects,
     acquireLock,
     releaseLock 
   } = useRealtimeObjects();
+
+  /**
+   * Keyboard event handlers for tool switching and delete
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Space key for temporary hand tool
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        setIsSpacePressed(true);
+      }
+      
+      // Command (Mac) or Control (Windows/Linux) key
+      if ((e.metaKey || e.ctrlKey) && !e.repeat) {
+        setIsCommandPressed(true);
+      }
+
+      // Delete/Backspace key to delete selected shape
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeId) {
+        e.preventDefault();
+        deleteObjects([selectedShapeId]);
+        setSelectedShapeId(null);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsSpacePressed(false);
+      }
+      
+      if (!e.metaKey && !e.ctrlKey) {
+        setIsCommandPressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [selectedShapeId, deleteObjects]);
+
+  /**
+   * Determine effective tool mode (considering modifiers)
+   */
+  const effectiveToolMode: ToolMode = isSpacePressed || isCommandPressed ? 'hand' : toolMode;
 
   /**
    * Set zoom scale with clamping
@@ -116,6 +175,7 @@ export function useCanvas() {
             width: SHAPE_DEFAULTS.rectangle.width,
             height: SHAPE_DEFAULTS.rectangle.height,
             fill: SHAPE_DEFAULTS.rectangle.fill,
+            type_properties: {}, // No type-specific properties for basic rectangle
           };
           break;
 
@@ -124,8 +184,12 @@ export function useCanvas() {
             type: 'circle',
             x: center.x,
             y: center.y,
-            radius: SHAPE_DEFAULTS.circle.radius,
+            width: SHAPE_DEFAULTS.circle.radius * 2, // Bounding box
+            height: SHAPE_DEFAULTS.circle.radius * 2,
             fill: SHAPE_DEFAULTS.circle.fill,
+            type_properties: {
+              radius: SHAPE_DEFAULTS.circle.radius,
+            },
           };
           break;
 
@@ -134,9 +198,13 @@ export function useCanvas() {
             type: 'text',
             x: center.x,
             y: center.y,
-            text_content: SHAPE_DEFAULTS.text.textContent,
-            font_size: SHAPE_DEFAULTS.text.fontSize,
+            width: 200, // Default text box width
+            height: 50, // Default text box height
             fill: SHAPE_DEFAULTS.text.fill,
+            type_properties: {
+              text_content: SHAPE_DEFAULTS.text.textContent,
+              font_size: SHAPE_DEFAULTS.text.fontSize,
+            },
           };
           break;
       }
@@ -169,6 +237,16 @@ export function useCanvas() {
     setSelectedShapeId(null);
   }, []);
 
+  /**
+   * Delete the currently selected shape
+   */
+  const deleteSelected = useCallback(() => {
+    if (selectedShapeId) {
+      deleteObjects([selectedShapeId]);
+      setSelectedShapeId(null);
+    }
+  }, [selectedShapeId, deleteObjects]);
+
   return {
     stageRef,
     transformerRef,
@@ -178,14 +256,18 @@ export function useCanvas() {
     loading,
     error,
     selectedShapeId,
+    toolMode,
+    effectiveToolMode,
     setScale,
     setPosition,
+    setToolMode,
     handleWheel,
     handleDragEnd,
     addShape,
     updateShape,
     selectShape,
     deselectShape,
+    deleteSelected,
     acquireLock,
     releaseLock,
   };

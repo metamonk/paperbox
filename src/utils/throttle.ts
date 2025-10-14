@@ -5,7 +5,12 @@
  * @param func - The function to throttle
  * @param wait - The minimum time (in ms) between function executions
  * @returns A throttled version of the function
+ * 
+ * Note: Uses `any` for generic function arguments - this is appropriate for utility functions
  */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 export function throttle<T extends (...args: any[]) => any>(
   func: T,
   wait: number

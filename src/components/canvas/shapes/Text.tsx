@@ -1,6 +1,9 @@
 /**
  * Text shape component for canvas
  * Supports inline editing via Html overlay from react-konva-utils
+ * 
+ * Note: Text uses Group + special transform logic, so it doesn't use BaseShape
+ * The editing behavior and resize logic are unique to text objects
  */
 
 import { memo, useRef, useCallback, useState } from 'react';
@@ -23,19 +26,38 @@ interface TextProps {
   stagePosition: { x: number; y: number };
 }
 
-function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity, scale, stagePosition: _stagePosition }: TextProps) {
+function TextComponent({ 
+  shape, 
+  isSelected: _isSelected, // eslint-disable-line @typescript-eslint/no-unused-vars
+  onSelect, 
+  onUpdate, 
+  onAcquireLock, 
+  onReleaseLock, 
+  onActivity, 
+  scale, 
+  stagePosition: _stagePosition // eslint-disable-line @typescript-eslint/no-unused-vars
+}: TextProps) {
   const { user } = useAuth();
   const textRef = useRef<Konva.Text>(null);
+  const groupRef = useRef<Konva.Group>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(shape.text_content || '');
+  const [editValue, setEditValue] = useState(shape.type_properties.text_content || '');
 
   // Determine lock state
   const isLockedByOther = shape.locked_by && shape.locked_by !== user?.id;
   const isLockedByMe = shape.locked_by === user?.id;
 
+  // Get text properties from type_properties
+  const textContent = shape.type_properties.text_content || 'Text';
+  const fontSize = shape.type_properties.font_size || 16;
+  const fontFamily = shape.type_properties.font_family || 'Arial, sans-serif';
+  const fontWeight = shape.type_properties.font_weight || 'normal';
+  const fontStyle = shape.type_properties.font_style || 'normal';
+  const textAlign = shape.type_properties.text_align || 'left';
+
   // Calculate text dimensions for boundary checking
   const textWidth = textRef.current?.getTextWidth() || 100;
-  const textHeight = shape.font_size || 16;
+  const textHeight = fontSize;
 
   /**
    * Constrain dragging to canvas boundaries
@@ -78,27 +100,81 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
   }, [shape.id, shape.x, shape.y, onUpdate, onReleaseLock]);
 
   /**
-   * Handle transform end (resize for width, rotation)
+   * Acquire lock on transform start
+   */
+  const handleTransformStart = useCallback(async () => {
+    if (onActivity) onActivity();
+    
+    const locked = await onAcquireLock(shape.id);
+    if (!locked) {
+      return false;
+    }
+  }, [shape.id, onAcquireLock, onActivity]);
+
+  /**
+   * Handle transform end (resize fontSize and width, rotation)
+   * 
+   * Figma-style behavior:
+   * - Corner anchors: Scale BOTH fontSize and width proportionally (uniform scaling)
+   * - Side anchors (middle-left/right): Scale ONLY width, keep fontSize constant
+   * 
+   * Konva best practice:
+   * - Apply new fontSize and width to text node BEFORE resetting group scale
+   * - This prevents visual "snap back" to original size
    */
   const handleTransformEnd = useCallback(async () => {
-    const node = textRef.current;
-    if (!node) return;
+    const group = groupRef.current;
+    const text = textRef.current;
+    if (!group || !text) return;
 
-    const scaleX = node.scaleX();
-    node.scaleX(1);
-    node.scaleY(1);
+    // Get the scale from the Group (which has the transformer attached)
+    const scaleX = group.scaleX();
+    const scaleY = group.scaleY();
+
+    // Determine if this is a corner resize or side resize
+    // Corner resize: both scaleX and scaleY change significantly
+    // Side resize: only scaleX changes (scaleY ~= 1)
+    const isCornerResize = Math.abs(scaleY - 1) > 0.01;
+    
+    let newFontSize = fontSize;
+    let newWidth = shape.width || 200; // Default width if not set
+
+    if (isCornerResize) {
+      // Corner resize: Scale both fontSize and width (uniform scaling)
+      newFontSize = Math.max(8, fontSize * scaleY);
+      newWidth = Math.max(20, newWidth * scaleX);
+    } else {
+      // Side resize: Only scale width, keep fontSize constant
+      newWidth = Math.max(20, newWidth * scaleX);
+      // fontSize stays the same
+    }
+
+    // Apply new dimensions to text node BEFORE resetting scale (prevents snap-back)
+    text.fontSize(Math.round(newFontSize));
+    text.width(newWidth);
+
+    // Now reset the group scale
+    group.scaleX(1);
+    group.scaleY(1);
 
     try {
       await onUpdate(shape.id, {
-        x: node.x(),
-        y: node.y(),
-        width: Math.max(20, node.width() * scaleX),
-        rotation: node.rotation(),
+        x: group.x(),
+        y: group.y(),
+        width: newWidth,
+        rotation: group.rotation(),
+        type_properties: {
+          ...shape.type_properties,
+          font_size: Math.round(newFontSize),
+        }
       });
     } catch (error) {
       console.error('Failed to update text transform:', error);
+    } finally {
+      // Release lock after transform
+      await onReleaseLock(shape.id);
     }
-  }, [shape.id, onUpdate]);
+  }, [shape.id, fontSize, shape.width, shape.type_properties, onUpdate, onReleaseLock]);
 
   /**
    * Start editing on double-click
@@ -112,9 +188,9 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
     const locked = await onAcquireLock(shape.id);
     if (!locked) return;
     
-    setEditValue(shape.text_content || '');
+    setEditValue(textContent);
     setIsEditing(true);
-  }, [shape.id, shape.text_content, isLockedByOther, onAcquireLock, onActivity]);
+  }, [shape.id, textContent, isLockedByOther, onAcquireLock, onActivity]);
 
   /**
    * Save edited text
@@ -122,24 +198,30 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
   const handleFinishEdit = useCallback(async () => {
     setIsEditing(false);
     
-    if (editValue !== shape.text_content) {
-      await onUpdate(shape.id, { text_content: editValue });
+    if (editValue !== textContent) {
+      await onUpdate(shape.id, { 
+        type_properties: {
+          ...shape.type_properties,
+          text_content: editValue,
+        }
+      });
     }
     
     await onReleaseLock(shape.id);
-  }, [shape.id, shape.text_content, editValue, onUpdate, onReleaseLock]);
+  }, [shape.id, textContent, editValue, shape.type_properties, onUpdate, onReleaseLock]);
 
   /**
    * Cancel editing without saving
    */
   const handleCancelEdit = useCallback(async () => {
     setIsEditing(false);
-    setEditValue(shape.text_content || '');
+    setEditValue(textContent);
     await onReleaseLock(shape.id);
-  }, [shape.id, shape.text_content, onReleaseLock]);
+  }, [shape.id, textContent, onReleaseLock]);
 
   return (
     <Group
+      ref={groupRef}
       x={shape.x}
       y={shape.y}
       rotation={shape.rotation || 0}
@@ -147,6 +229,7 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
       dragBoundFunc={handleDragBound}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onTransformStart={handleTransformStart}
       onTransformEnd={handleTransformEnd}
       onClick={onSelect}
       onTap={onSelect}
@@ -156,15 +239,18 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
     >
       <KonvaText
         ref={textRef}
-        text={shape.text_content || 'Text'}
-        fontSize={shape.font_size || 16}
+        text={textContent}
+        fontSize={fontSize}
+        fontFamily={fontFamily}
+        fontStyle={fontWeight === 'bold' ? 'bold' : fontStyle}
+        align={textAlign}
         fill={shape.fill}
         width={shape.width}
         visible={!isEditing}
         // Visual feedback for locked state
         stroke={isLockedByOther ? '#EF4444' : isLockedByMe ? '#10B981' : undefined}
         strokeWidth={isLockedByOther || isLockedByMe ? 2 : 0}
-        opacity={isLockedByOther ? 0.7 : 1}
+        opacity={isLockedByOther ? 0.7 : shape.opacity}
         perfectDrawEnabled={false}
       />
       
@@ -194,9 +280,9 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
             autoFocus
             style={{
               width: `${Math.max(100, (shape.width || textWidth) / scale)}px`,
-              minHeight: `${(shape.font_size || 16) / scale}px`,
-              fontSize: `${(shape.font_size || 16) / scale}px`,
-              fontFamily: 'Arial, sans-serif',
+              minHeight: `${fontSize / scale}px`,
+              fontSize: `${fontSize / scale}px`,
+              fontFamily: fontFamily,
               color: shape.fill,
               border: '2px solid #3B82F6',
               borderRadius: '4px',
@@ -221,11 +307,13 @@ const areEqual = (prevProps: TextProps, nextProps: TextProps) => {
     prevProps.shape.id === nextProps.shape.id &&
     prevProps.shape.x === nextProps.shape.x &&
     prevProps.shape.y === nextProps.shape.y &&
-    prevProps.shape.text_content === nextProps.shape.text_content &&
-    prevProps.shape.font_size === nextProps.shape.font_size &&
+    prevProps.shape.type_properties.text_content === nextProps.shape.type_properties.text_content &&
+    prevProps.shape.type_properties.font_size === nextProps.shape.type_properties.font_size &&
+    prevProps.shape.type_properties.font_family === nextProps.shape.type_properties.font_family &&
     prevProps.shape.fill === nextProps.shape.fill &&
     prevProps.shape.width === nextProps.shape.width &&
     prevProps.shape.rotation === nextProps.shape.rotation &&
+    prevProps.shape.opacity === nextProps.shape.opacity &&
     prevProps.shape.locked_by === nextProps.shape.locked_by &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.scale === nextProps.scale &&
