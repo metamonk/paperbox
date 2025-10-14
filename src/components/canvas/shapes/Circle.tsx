@@ -20,7 +20,7 @@ interface CircleProps {
   onActivity?: () => void;
 }
 
-function CircleComponent({ shape, isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity }: CircleProps) {
+function CircleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity }: CircleProps) {
   const { user } = useAuth();
   const shapeRef = useRef<Konva.Circle>(null);
   

@@ -23,7 +23,7 @@ interface TextProps {
   stagePosition: { x: number; y: number };
 }
 
-function TextComponent({ shape, isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity, scale, stagePosition }: TextProps) {
+function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity, scale, stagePosition: _stagePosition }: TextProps) {
   const { user } = useAuth();
   const textRef = useRef<Konva.Text>(null);
   const [isEditing, setIsEditing] = useState(false);

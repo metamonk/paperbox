@@ -20,7 +20,7 @@ interface RectangleProps {
   onActivity?: () => void;
 }
 
-function RectangleComponent({ shape, isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity }: RectangleProps) {
+function RectangleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity }: RectangleProps) {
   const { user } = useAuth();
   const shapeRef = useRef<Konva.Rect>(null);
   
