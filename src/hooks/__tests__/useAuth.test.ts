@@ -67,7 +67,7 @@ describe('useAuth', () => {
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
       data: { user: mockUser, session: mockSession },
       error: null,
-    } as AuthResponse);
+    } as any);
 
     const { result } = renderHook(() => useAuth());
 
@@ -158,7 +158,7 @@ describe('useAuth', () => {
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
       data: { user: null, session: null },
       error: mockError,
-    } as AuthResponse);
+    } as any);
 
     const { result } = renderHook(() => useAuth());
 
