@@ -1,10 +1,34 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCanvas } from '../useCanvas';
 import { SHAPE_DEFAULTS } from '../../lib/constants';
+import type { CanvasObject } from '../../types/canvas';
+
+// Mock the realtime objects hook
+const mockObjects: CanvasObject[] = [];
+const mockCreateObject = vi.fn();
+const mockUpdateObject = vi.fn();
+const mockAcquireLock = vi.fn();
+const mockReleaseLock = vi.fn();
+
+vi.mock('../useRealtimeObjects', () => ({
+  useRealtimeObjects: () => ({
+    objects: mockObjects,
+    loading: false,
+    error: null,
+    createObject: mockCreateObject,
+    updateObject: mockUpdateObject,
+    acquireLock: mockAcquireLock,
+    releaseLock: mockReleaseLock,
+  }),
+}));
 
 describe('useCanvas - Shape Creation', () => {
   beforeEach(() => {
+    // Clear mocks
+    vi.clearAllMocks();
+    mockObjects.length = 0;
+    
     // Mock window dimensions for tests
     Object.defineProperty(window, 'innerWidth', {
       writable: true,
@@ -16,6 +40,21 @@ describe('useCanvas - Shape Creation', () => {
       configurable: true,
       value: 768,
     });
+    
+    // Mock createObject to simulate adding to objects array
+    mockCreateObject.mockImplementation(async (shape: Partial<CanvasObject>) => {
+      const newShape = {
+        ...shape,
+        id: `test-${Date.now()}-${Math.random()}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        created_by: 'test-user',
+        locked_by: null,
+        lock_acquired_at: null,
+      } as CanvasObject;
+      mockObjects.push(newShape);
+      return newShape.id;
+    });
   });
 
   it('should initialize with empty shapes array', () => {
@@ -24,12 +63,21 @@ describe('useCanvas - Shape Creation', () => {
     expect(result.current.shapes).toEqual([]);
   });
 
-  it('should create rectangle with correct defaults', () => {
+  it('should create rectangle with correct defaults', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('rectangle');
+    await act(async () => {
+      await result.current.addShape('rectangle');
     });
+
+    expect(mockCreateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'rectangle',
+        width: SHAPE_DEFAULTS.rectangle.width,
+        height: SHAPE_DEFAULTS.rectangle.height,
+        fill: SHAPE_DEFAULTS.rectangle.fill,
+      })
+    );
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('rectangle');
@@ -39,15 +87,22 @@ describe('useCanvas - Shape Creation', () => {
     }
     expect(shape.fill).toBe(SHAPE_DEFAULTS.rectangle.fill);
     expect(shape.id).toBeDefined();
-    expect(shape.created_by).toBe('local-user');
   });
 
-  it('should create circle with correct defaults', () => {
+  it('should create circle with correct defaults', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('circle');
+    await act(async () => {
+      await result.current.addShape('circle');
     });
+
+    expect(mockCreateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'circle',
+        radius: SHAPE_DEFAULTS.circle.radius,
+        fill: SHAPE_DEFAULTS.circle.fill,
+      })
+    );
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('circle');
@@ -58,12 +113,21 @@ describe('useCanvas - Shape Creation', () => {
     expect(shape.id).toBeDefined();
   });
 
-  it('should create text with correct defaults', () => {
+  it('should create text with correct defaults', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('text');
+    await act(async () => {
+      await result.current.addShape('text');
     });
+
+    expect(mockCreateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'text',
+        text_content: SHAPE_DEFAULTS.text.textContent,
+        font_size: SHAPE_DEFAULTS.text.fontSize,
+        fill: SHAPE_DEFAULTS.text.fill,
+      })
+    );
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('text');
@@ -75,11 +139,11 @@ describe('useCanvas - Shape Creation', () => {
     expect(shape.id).toBeDefined();
   });
 
-  it('should update shape position', () => {
+  it('should update shape position', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('rectangle');
+    await act(async () => {
+      await result.current.addShape('rectangle');
     });
 
     const shapeId = result.current.shapes[0].id;
@@ -88,16 +152,14 @@ describe('useCanvas - Shape Creation', () => {
       result.current.updateShape(shapeId, { x: 200, y: 300 });
     });
 
-    const updatedShape = result.current.shapes[0];
-    expect(updatedShape.x).toBe(200);
-    expect(updatedShape.y).toBe(300);
+    expect(mockUpdateObject).toHaveBeenCalledWith(shapeId, { x: 200, y: 300 });
   });
 
-  it('should update shape properties', () => {
+  it('should update shape properties', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('text');
+    await act(async () => {
+      await result.current.addShape('text');
     });
 
     const shapeId = result.current.shapes[0].id;
@@ -106,19 +168,16 @@ describe('useCanvas - Shape Creation', () => {
       result.current.updateShape(shapeId, { text_content: 'Updated Text' });
     });
 
-    const updatedShape = result.current.shapes[0];
-    if (updatedShape.type === 'text') {
-      expect(updatedShape.text_content).toBe('Updated Text');
-    }
+    expect(mockUpdateObject).toHaveBeenCalledWith(shapeId, { text_content: 'Updated Text' });
   });
 
-  it('should handle multiple shapes', () => {
+  it('should handle multiple shapes', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('rectangle');
-      result.current.addShape('circle');
-      result.current.addShape('text');
+    await act(async () => {
+      await result.current.addShape('rectangle');
+      await result.current.addShape('circle');
+      await result.current.addShape('text');
     });
 
     expect(result.current.shapes).toHaveLength(3);
@@ -127,13 +186,13 @@ describe('useCanvas - Shape Creation', () => {
     expect(result.current.shapes[2].type).toBe('text');
   });
 
-  it('should generate unique IDs for each shape', () => {
+  it('should generate unique IDs for each shape', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('rectangle');
-      result.current.addShape('rectangle');
-      result.current.addShape('rectangle');
+    await act(async () => {
+      await result.current.addShape('rectangle');
+      await result.current.addShape('rectangle');
+      await result.current.addShape('rectangle');
     });
 
     const ids = result.current.shapes.map((s) => s.id);
@@ -141,11 +200,11 @@ describe('useCanvas - Shape Creation', () => {
     expect(uniqueIds.size).toBe(3);
   });
 
-  it('should set created_at and updated_at timestamps', () => {
+  it('should set created_at and updated_at timestamps', async () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('circle');
+    await act(async () => {
+      await result.current.addShape('circle');
     });
 
     const shape = result.current.shapes[0];
@@ -154,24 +213,11 @@ describe('useCanvas - Shape Creation', () => {
     expect(new Date(shape.created_at).getTime()).toBeLessThanOrEqual(Date.now());
   });
 
-  it('should update updated_at timestamp on shape update', async () => {
+  it('should call realtime hooks for locking', () => {
     const { result } = renderHook(() => useCanvas());
 
-    act(() => {
-      result.current.addShape('rectangle');
-    });
-
-    const originalTimestamp = result.current.shapes[0].updated_at;
-
-    // Wait a tiny bit to ensure timestamp difference
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    act(() => {
-      result.current.updateShape(result.current.shapes[0].id, { x: 100 });
-    });
-
-    const newTimestamp = result.current.shapes[0].updated_at;
-    expect(newTimestamp).not.toBe(originalTimestamp);
+    expect(result.current.acquireLock).toBe(mockAcquireLock);
+    expect(result.current.releaseLock).toBe(mockReleaseLock);
   });
 });
 

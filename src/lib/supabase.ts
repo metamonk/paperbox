@@ -23,6 +23,18 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10,
     },
+    timeout: 30000, // 30 seconds timeout (increased from default 10s)
+    heartbeatIntervalMs: 15000, // Send heartbeat every 15s (default is 30s)
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'collabcanvas-web',
+    },
   },
 });
+
+// Log Supabase connection info (without exposing keys)
+console.log('🔌 Supabase client initialized');
+console.log('📍 Supabase URL:', supabaseUrl);
+console.log('🔑 Anon key configured:', supabaseAnonKey ? '✅ Yes' : '❌ No');
 

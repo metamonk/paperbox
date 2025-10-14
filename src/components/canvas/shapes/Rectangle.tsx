@@ -1,19 +1,28 @@
 /**
  * Rectangle shape component
- * Draggable rectangle with boundary constraints
+ * Draggable rectangle with boundary constraints and locking
  */
 
 import { Rect } from 'react-konva';
 import Konva from 'konva';
+import { useAuth } from '../../../hooks/useAuth';
 import type { RectangleObject } from '../../../types/canvas';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
 interface RectangleProps {
   shape: RectangleObject;
   onUpdate: (id: string, updates: Partial<RectangleObject>) => void;
+  onAcquireLock: (id: string) => Promise<boolean>;
+  onReleaseLock: (id: string) => Promise<void>;
 }
 
-export function Rectangle({ shape, onUpdate }: RectangleProps) {
+export function Rectangle({ shape, onUpdate, onAcquireLock, onReleaseLock }: RectangleProps) {
+  const { user } = useAuth();
+  
+  // Determine lock state
+  const isLockedByOther = shape.locked_by && shape.locked_by !== user?.id;
+  const isLockedByMe = shape.locked_by === user?.id;
+
   /**
    * Constrain dragging to canvas boundaries
    */
@@ -25,14 +34,30 @@ export function Rectangle({ shape, onUpdate }: RectangleProps) {
   };
 
   /**
-   * Update position in parent state on drag end
+   * Acquire lock when starting to drag
    */
-  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+  const handleDragStart = async () => {
+    const success = await onAcquireLock(shape.id);
+    if (!success) {
+      // Lock acquisition failed - prevent drag
+      return false;
+    }
+  };
+
+  /**
+   * Update position and release lock on drag end
+   */
+  const handleDragEnd = async (e: Konva.KonvaEventObject<DragEvent>) => {
     const node = e.target;
-    onUpdate(shape.id, {
+    
+    // Update position in database
+    await onUpdate(shape.id, {
       x: node.x(),
       y: node.y(),
     });
+    
+    // Release lock
+    await onReleaseLock(shape.id);
   };
 
   return (
@@ -42,9 +67,14 @@ export function Rectangle({ shape, onUpdate }: RectangleProps) {
       width={shape.width}
       height={shape.height}
       fill={shape.fill}
-      draggable
+      draggable={!isLockedByOther}
       dragBoundFunc={handleDragBound}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      // Visual feedback for locked state
+      stroke={isLockedByOther ? '#EF4444' : isLockedByMe ? '#10B981' : undefined}
+      strokeWidth={isLockedByOther || isLockedByMe ? 3 : 0}
+      opacity={isLockedByOther ? 0.7 : 1}
     />
   );
 }
