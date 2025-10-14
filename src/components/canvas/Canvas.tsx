@@ -29,7 +29,8 @@ export function Canvas() {
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto" />
-          <p className="text-gray-600 text-lg">Loading canvas...</p>
+          <p className="text-gray-700 text-lg font-medium">Loading canvas...</p>
+          <p className="text-gray-500 text-sm mt-2">Fetching objects from database</p>
         </div>
       </div>
     );

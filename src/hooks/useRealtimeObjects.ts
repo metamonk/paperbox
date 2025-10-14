@@ -223,11 +223,28 @@ export function useRealtimeObjects() {
     const setupRealtime = async () => {
       try {
         console.log('🔄 Fetching initial canvas objects...');
+        const fetchStart = performance.now();
         
-        // Fetch initial objects
+        // Fetch initial objects - select only needed columns for better performance
         const { data, error: fetchError } = await supabase
           .from('canvas_objects')
-          .select('*')
+          .select(`
+            id,
+            type,
+            x,
+            y,
+            width,
+            height,
+            radius,
+            fill,
+            text_content,
+            font_size,
+            created_by,
+            created_at,
+            updated_at,
+            locked_by,
+            lock_acquired_at
+          `)
           .order('created_at', { ascending: true });
 
         if (fetchError) throw fetchError;
@@ -236,7 +253,8 @@ export function useRealtimeObjects() {
         setObjects(canvasObjects);
         setLoading(false);
         
-        console.log(`✅ Loaded ${canvasObjects.length} canvas objects`);
+        const fetchDuration = performance.now() - fetchStart;
+        console.log(`✅ Loaded ${canvasObjects.length} canvas objects in ${fetchDuration.toFixed(0)}ms`);
 
         // Set up real-time subscription
         channel = supabase
