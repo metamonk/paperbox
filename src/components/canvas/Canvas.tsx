@@ -25,6 +25,8 @@ export function Canvas() {
     loading,
     error,
     selectedShapeId,
+    toolMode: _toolMode, // Reserved for future tool UI indicator
+    effectiveToolMode,
     handleWheel,
     handleDragEnd,
     addShape,
@@ -158,6 +160,7 @@ export function Canvas() {
             position={position}
             shapes={shapes}
             selectedShapeId={selectedShapeId}
+            effectiveToolMode={effectiveToolMode}
             onWheel={handleWheel}
             onDragEnd={handleDragEnd}
             onUpdateShape={updateShape}

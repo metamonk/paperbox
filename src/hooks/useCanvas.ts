@@ -3,12 +3,12 @@
  * Handles zoom, pan, canvas transformations, and shape management
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Konva from 'konva';
 import { DEFAULT_ZOOM, ZOOM_SPEED, SHAPE_DEFAULTS } from '../lib/constants';
 import { clampZoom, getViewportCenter } from '../utils/canvas-helpers';
 import { useRealtimeObjects } from './useRealtimeObjects';
-import type { CanvasObject, ShapeType } from '../types/canvas';
+import type { CanvasObject, ShapeType, ToolMode } from '../types/canvas';
 
 export function useCanvas() {
   const stageRef = useRef<Konva.Stage>(null);
@@ -16,6 +16,9 @@ export function useCanvas() {
   const [scale, setScaleState] = useState(DEFAULT_ZOOM);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [toolMode, setToolMode] = useState<ToolMode>('select');
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [isCommandPressed, setIsCommandPressed] = useState(false);
   
   // Use realtime objects instead of local state
   const { 
@@ -27,6 +30,48 @@ export function useCanvas() {
     acquireLock,
     releaseLock 
   } = useRealtimeObjects();
+
+  /**
+   * Keyboard event handlers for tool switching
+   */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Space key for temporary hand tool
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        setIsSpacePressed(true);
+      }
+      
+      // Command (Mac) or Control (Windows/Linux) key
+      if ((e.metaKey || e.ctrlKey) && !e.repeat) {
+        setIsCommandPressed(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsSpacePressed(false);
+      }
+      
+      if (!e.metaKey && !e.ctrlKey) {
+        setIsCommandPressed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  /**
+   * Determine effective tool mode (considering modifiers)
+   */
+  const effectiveToolMode: ToolMode = isSpacePressed || isCommandPressed ? 'hand' : toolMode;
 
   /**
    * Set zoom scale with clamping
@@ -178,8 +223,11 @@ export function useCanvas() {
     loading,
     error,
     selectedShapeId,
+    toolMode,
+    effectiveToolMode,
     setScale,
     setPosition,
+    setToolMode,
     handleWheel,
     handleDragEnd,
     addShape,

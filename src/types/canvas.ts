@@ -4,6 +4,8 @@
 
 export type ShapeType = 'rectangle' | 'circle' | 'text';
 
+export type ToolMode = 'select' | 'hand';
+
 export interface BaseCanvasObject {
   id: string;
   type: ShapeType;
@@ -55,4 +57,3 @@ export interface ShapeDefaults {
     fill: string;
   };
 }
-

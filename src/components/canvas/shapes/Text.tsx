@@ -92,7 +92,11 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
 
   /**
    * Handle transform end (resize fontSize and width, rotation)
-   * For Konva Text, we scale both fontSize and width proportionally
+   * 
+   * Figma-style behavior:
+   * - Corner anchors: Scale BOTH fontSize and width proportionally (uniform scaling)
+   * - Side anchors (middle-left/right): Scale ONLY width, keep fontSize constant
+   * - This gives users control over text box width vs font size
    */
   const handleTransformEnd = useCallback(async () => {
     const group = groupRef.current;
@@ -103,9 +107,23 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
     const scaleX = group.scaleX();
     const scaleY = group.scaleY();
 
-    // For text, we want to scale fontSize proportionally
-    const newFontSize = Math.max(8, (shape.font_size || 16) * scaleY);
-    const newWidth = shape.width ? Math.max(20, shape.width * scaleX) : undefined;
+    // Determine if this is a corner resize or side resize
+    // Corner resize: both scaleX and scaleY change significantly
+    // Side resize: only scaleX changes (scaleY ~= 1)
+    const isCornerResize = Math.abs(scaleY - 1) > 0.01;
+    
+    let newFontSize = shape.font_size || 16;
+    let newWidth = shape.width;
+
+    if (isCornerResize) {
+      // Corner resize: Scale both fontSize and width (uniform scaling)
+      newFontSize = Math.max(8, (shape.font_size || 16) * scaleY);
+      newWidth = shape.width ? Math.max(20, shape.width * scaleX) : undefined;
+    } else {
+      // Side resize: Only scale width, keep fontSize constant
+      newWidth = shape.width ? Math.max(20, shape.width * scaleX) : undefined;
+      // fontSize stays the same
+    }
 
     // Reset the group scale
     group.scaleX(1);
