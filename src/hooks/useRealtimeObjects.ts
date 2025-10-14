@@ -259,17 +259,13 @@ export function useRealtimeObjects() {
         const fetchDuration = performance.now() - fetchStart;
         console.log(`✅ Loaded ${canvasObjects.length} canvas objects in ${fetchDuration.toFixed(0)}ms`);
 
-        // Set up real-time subscription with explicit configuration
-        const channelName = `canvas-objects-${user.id}`; // Unique channel per user
+        // Set up real-time subscription
+        // Use shared channel name for postgres_changes (all users need to see same events)
+        const channelName = 'canvas-objects-changes';
         console.log(`🔌 Creating channel: ${channelName}`);
         
         channel = supabase
-          .channel(channelName, {
-            config: {
-              broadcast: { self: false }, // Don't receive own broadcasts
-              presence: { key: user.id }, // Track presence by user ID
-            },
-          })
+          .channel(channelName)
           .on(
             'postgres_changes',
             {
