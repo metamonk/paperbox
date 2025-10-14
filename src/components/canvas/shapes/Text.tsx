@@ -149,6 +149,7 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
    */
   useEffect(() => {
     if (isEditing && inputRef.current) {
+      console.log('Focusing input, position:', inputRef.current.style.left, inputRef.current.style.top);
       inputRef.current.focus();
       inputRef.current.select();
     }
@@ -156,13 +157,20 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
 
   /**
    * Calculate screen position for the input overlay
+   * Account for Group position + padding offset
    */
   const getInputPosition = () => {
-    if (!textRef.current) return { x: 0, y: 0 };
-    
+    // Use the group position (shape.x, shape.y) and add padding for text offset
     // Convert canvas coordinates to screen coordinates
-    const x = shape.x * scale + stagePosition.x;
-    const y = shape.y * scale + stagePosition.y;
+    const x = (shape.x + padding) * scale + stagePosition.x;
+    const y = (shape.y + padding) * scale + stagePosition.y;
+    
+    console.log('Input position calculation:', {
+      shapePos: { x: shape.x, y: shape.y },
+      scale,
+      stagePos: stagePosition,
+      finalPos: { x, y }
+    });
     
     return { x, y };
   };
@@ -215,42 +223,48 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
 
       {/* Inline text editor - rendered as portal over canvas */}
       {isEditing && createPortal(
-        <textarea
-          ref={inputRef}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={handleFinishEdit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleFinishEdit();
-            }
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              handleCancelEdit();
-            }
-          }}
+        <div
           style={{
             position: 'absolute',
             left: `${inputPosition.x}px`,
             top: `${inputPosition.y}px`,
-            fontSize: `${shape.font_size * scale}px`,
-            fontFamily: 'Arial, sans-serif',
-            color: shape.fill,
-            background: 'white',
-            border: '2px solid #3B82F6',
-            borderRadius: '4px',
-            padding: '4px 8px',
-            outline: 'none',
-            resize: 'none',
-            minWidth: '100px',
-            minHeight: `${shape.font_size * scale * 1.5}px`,
-            lineHeight: '1.5',
             zIndex: 1000,
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
           }}
-          rows={1}
-        />,
+        >
+          <textarea
+            ref={inputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleFinishEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleFinishEdit();
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                handleCancelEdit();
+              }
+            }}
+            style={{
+              fontSize: `${shape.font_size * scale}px`,
+              fontFamily: 'Arial, sans-serif',
+              color: shape.fill,
+              background: 'white',
+              border: '2px solid #3B82F6',
+              borderRadius: '4px',
+              padding: '8px',
+              outline: 'none',
+              resize: 'none',
+              minWidth: `${Math.max(boxWidth * scale, 150)}px`,
+              minHeight: `${Math.max(boxHeight * scale, 40)}px`,
+              lineHeight: '1.5',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+              display: 'block',
+            }}
+            rows={1}
+          />
+        </div>,
         document.body
       )}
     </>
