@@ -99,15 +99,17 @@ describe('useCanvas - Shape Creation', () => {
     expect(mockCreateObject).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'circle',
-        radius: SHAPE_DEFAULTS.circle.radius,
         fill: SHAPE_DEFAULTS.circle.fill,
+        type_properties: {
+          radius: SHAPE_DEFAULTS.circle.radius,
+        },
       })
     );
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('circle');
     if (shape.type === 'circle') {
-      expect(shape.radius).toBe(SHAPE_DEFAULTS.circle.radius);
+      expect(shape.type_properties.radius).toBe(SHAPE_DEFAULTS.circle.radius);
     }
     expect(shape.fill).toBe(SHAPE_DEFAULTS.circle.fill);
     expect(shape.id).toBeDefined();
@@ -123,17 +125,19 @@ describe('useCanvas - Shape Creation', () => {
     expect(mockCreateObject).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'text',
-        text_content: SHAPE_DEFAULTS.text.textContent,
-        font_size: SHAPE_DEFAULTS.text.fontSize,
         fill: SHAPE_DEFAULTS.text.fill,
+        type_properties: {
+          text_content: SHAPE_DEFAULTS.text.textContent,
+          font_size: SHAPE_DEFAULTS.text.fontSize,
+        },
       })
     );
 
     const shape = result.current.shapes[0];
     expect(shape.type).toBe('text');
     if (shape.type === 'text') {
-      expect(shape.text_content).toBe(SHAPE_DEFAULTS.text.textContent);
-      expect(shape.font_size).toBe(SHAPE_DEFAULTS.text.fontSize);
+      expect(shape.type_properties.text_content).toBe(SHAPE_DEFAULTS.text.textContent);
+      expect(shape.type_properties.font_size).toBe(SHAPE_DEFAULTS.text.fontSize);
     }
     expect(shape.fill).toBe(SHAPE_DEFAULTS.text.fill);
     expect(shape.id).toBeDefined();
@@ -165,10 +169,20 @@ describe('useCanvas - Shape Creation', () => {
     const shapeId = result.current.shapes[0].id;
 
     act(() => {
-      result.current.updateShape(shapeId, { text_content: 'Updated Text' });
+      result.current.updateShape(shapeId, { 
+        type_properties: { 
+          text_content: 'Updated Text',
+          font_size: 16
+        } 
+      });
     });
 
-    expect(mockUpdateObject).toHaveBeenCalledWith(shapeId, { text_content: 'Updated Text' });
+    expect(mockUpdateObject).toHaveBeenCalledWith(shapeId, { 
+      type_properties: { 
+        text_content: 'Updated Text',
+        font_size: 16
+      } 
+    });
   });
 
   it('should handle multiple shapes', async () => {

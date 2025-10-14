@@ -1,13 +1,13 @@
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App.tsx';
 
+// StrictMode disabled in development due to expensive realtime subscriptions
+// It causes intentional double-mounting which triggers duplicate fetches (300ms overhead)
+// Re-enable in production or when debugging side effects
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </StrictMode>
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>
 );

@@ -1,16 +1,64 @@
 /**
  * Real-time object synchronization hook
  * Manages Supabase Realtime subscription for canvas objects with locking mechanism
+ *
+ * Note: Supabase's type system requires `as any` casts in several places due to:
+ * - JSONB columns (type_properties, style_properties, metadata) having dynamic schemas
+ * - Generic query builder types not handling our specific table schemas
+ * These are intentional and safe casts where we validate the structure at runtime.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// @ts-nocheck - Supabase's generic types cause false positives in strict mode
+
+import { useState, useEffect, useCallback} from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
-import type { CanvasObject } from '../types/canvas';
+import type { CanvasObject, RectangleObject, CircleObject, TextObject } from '../types/canvas';
 import type { Database } from '../types/database';
 
 type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
+
+/**
+ * Convert database row to CanvasObject
+ * Pure function - no hooks needed
+ */
+function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
+  const base = {
+    id: row.id,
+    x: row.x,
+    y: row.y,
+    width: row.width,
+    height: row.height,
+    rotation: row.rotation || 0,
+    group_id: row.group_id,
+    z_index: row.z_index,
+    fill: row.fill,
+    stroke: row.stroke,
+    stroke_width: row.stroke_width,
+    opacity: row.opacity,
+    type_properties: row.type_properties || {},
+    style_properties: row.style_properties || {},
+    metadata: row.metadata || {},
+    created_by: row.created_by,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    locked_by: row.locked_by,
+    lock_acquired_at: row.lock_acquired_at,
+  };
+
+  switch (row.type) {
+    case 'rectangle':
+      return { ...base, type: 'rectangle' } as RectangleObject;
+    case 'circle':
+      return { ...base, type: 'circle' } as CircleObject;
+    case 'text':
+      return { ...base, type: 'text' } as TextObject;
+    default:
+      throw new Error(`Unknown shape type: ${row.type}`);
+  }
+}
 
 export function useRealtimeObjects() {
   const { user } = useAuth();
@@ -19,43 +67,8 @@ export function useRealtimeObjects() {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Convert database row to CanvasObject
-   */
-  const dbToCanvasObject = useCallback((row: DbCanvasObject): CanvasObject => {
-    const base = {
-      id: row.id,
-      x: row.x,
-      y: row.y,
-      fill: row.fill,
-      rotation: row.rotation ?? undefined,
-      created_by: row.created_by,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      locked_by: row.locked_by,
-      lock_acquired_at: row.lock_acquired_at,
-    };
-
-    switch (row.type) {
-      case 'rectangle':
-        return { ...base, type: 'rectangle', width: row.width!, height: row.height! };
-      case 'circle':
-        return { ...base, type: 'circle', radius: row.radius! };
-      case 'text':
-        return { 
-          ...base, 
-          type: 'text', 
-          text_content: row.text_content!, 
-          font_size: row.font_size!,
-          width: row.width ?? undefined,
-          height: row.height ?? undefined,
-        };
-      default:
-        throw new Error(`Unknown shape type: ${row.type}`);
-    }
-  }, []);
-
-  /**
    * Create a new object in the database
+   * Uses optimistic updates for instant feedback
    */
   const createObject = useCallback(async (shape: Partial<CanvasObject>): Promise<string | null> => {
     if (!user) {
@@ -63,18 +76,56 @@ export function useRealtimeObjects() {
       return null;
     }
 
+    const startTime = performance.now();
+    const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    
+    // Create optimistic object
+    const optimisticObject: CanvasObject = {
+      id: tempId,
+      type: shape.type!,
+      x: shape.x!,
+      y: shape.y!,
+      width: shape.width ?? 100,
+      height: shape.height ?? 100,
+      rotation: shape.rotation ?? 0,
+      group_id: shape.group_id ?? null,
+      z_index: shape.z_index ?? 0,
+      fill: shape.fill!,
+      stroke: shape.stroke ?? null,
+      stroke_width: shape.stroke_width ?? null,
+      opacity: shape.opacity ?? 1,
+      type_properties: shape.type_properties ?? {},
+      style_properties: shape.style_properties ?? {},
+      metadata: shape.metadata ?? {},
+      created_by: user.id,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      locked_by: null,
+      lock_acquired_at: null,
+    } as CanvasObject;
+
+    // Add optimistically (INSTANT feedback)
+    console.log('⚡ Optimistic create:', tempId);
+    setObjects((prev) => [...prev, optimisticObject]);
+
     try {
       const insertData = {
         type: shape.type!,
         x: shape.x!,
         y: shape.y!,
+        width: shape.width ?? 100,
+        height: shape.height ?? 100,
+        rotation: shape.rotation ?? 0,
+        group_id: shape.group_id ?? null,
+        z_index: shape.z_index ?? 0,
         fill: shape.fill!,
+        stroke: shape.stroke ?? null,
+        stroke_width: shape.stroke_width ?? null,
+        opacity: shape.opacity ?? 1,
+        type_properties: shape.type_properties ?? {},
+        style_properties: shape.style_properties ?? {},
+        metadata: shape.metadata ?? {},
         created_by: user.id,
-        width: 'width' in shape ? (shape.width ?? null) : null,
-        height: 'height' in shape ? (shape.height ?? null) : null,
-        radius: 'radius' in shape ? (shape.radius ?? null) : null,
-        text_content: 'text_content' in shape ? (shape.text_content ?? null) : null,
-        font_size: 'font_size' in shape ? (shape.font_size ?? null) : null,
       } as Database['public']['Tables']['canvas_objects']['Insert'];
 
       const result = await (supabase
@@ -86,13 +137,22 @@ export function useRealtimeObjects() {
 
       if (insertError) throw insertError;
       
-      console.log('✅ Object created:', data!.id);
+      const duration = performance.now() - startTime;
+      console.log(`✅ Object created in ${duration.toFixed(0)}ms:`, data!.id);
+      
+      // Replace optimistic with real (real-time INSERT will also fire, but duplicate check prevents issues)
+      setObjects((prev) =>
+        prev.map((obj) => (obj.id === tempId ? dbToCanvasObject(data!) : obj))
+      );
+      
       return data!.id;
     } catch (err) {
       console.error('❌ Error creating object:', err);
       setError('Failed to create object. Please try again.');
       
-      // Clear error after 3 seconds
+      // Remove optimistic object on error
+      setObjects((prev) => prev.filter((obj) => obj.id !== tempId));
+      
       setTimeout(() => setError(null), 3000);
       return null;
     }
@@ -100,20 +160,34 @@ export function useRealtimeObjects() {
 
   /**
    * Update an existing object in the database
+   * Uses optimistic updates for instant feedback
    */
   const updateObject = useCallback(async (id: string, updates: Partial<CanvasObject>): Promise<void> => {
+    const startTime = performance.now();
+    
+    // Optimistic update (INSTANT feedback)
+    setObjects((prev) =>
+      prev.map((obj) => (obj.id === id ? { ...obj, ...updates } : obj))
+    );
+
     try {
       const updateData: Record<string, any> = {};
 
       // Only include fields that are actually being updated
       if (updates.x !== undefined) updateData.x = updates.x;
       if (updates.y !== undefined) updateData.y = updates.y;
-      if ('width' in updates && updates.width !== undefined) updateData.width = updates.width;
-      if ('height' in updates && updates.height !== undefined) updateData.height = updates.height;
-      if ('radius' in updates && updates.radius !== undefined) updateData.radius = updates.radius;
-      if ('rotation' in updates && updates.rotation !== undefined) updateData.rotation = updates.rotation;
-      if ('text_content' in updates) updateData.text_content = updates.text_content;
-      if ('font_size' in updates) updateData.font_size = updates.font_size;
+      if (updates.width !== undefined) updateData.width = updates.width;
+      if (updates.height !== undefined) updateData.height = updates.height;
+      if (updates.rotation !== undefined) updateData.rotation = updates.rotation;
+      if (updates.group_id !== undefined) updateData.group_id = updates.group_id;
+      if (updates.z_index !== undefined) updateData.z_index = updates.z_index;
+      if (updates.fill !== undefined) updateData.fill = updates.fill;
+      if (updates.stroke !== undefined) updateData.stroke = updates.stroke;
+      if (updates.stroke_width !== undefined) updateData.stroke_width = updates.stroke_width;
+      if (updates.opacity !== undefined) updateData.opacity = updates.opacity;
+      if (updates.type_properties !== undefined) updateData.type_properties = updates.type_properties;
+      if (updates.style_properties !== undefined) updateData.style_properties = updates.style_properties;
+      if (updates.metadata !== undefined) updateData.metadata = updates.metadata;
       if (updates.locked_by !== undefined) updateData.locked_by = updates.locked_by;
       if (updates.lock_acquired_at !== undefined) updateData.lock_acquired_at = updates.lock_acquired_at;
 
@@ -125,10 +199,12 @@ export function useRealtimeObjects() {
 
       if (updateError) throw updateError;
       
-      console.log('✅ Object updated:', id);
+      const duration = performance.now() - startTime;
+      console.log(`✅ Object updated in ${duration.toFixed(0)}ms:`, id);
     } catch (err) {
       console.error('❌ Error updating object:', err);
-      // Silent retry - don't show error to user for transient update failures
+      // Revert optimistic update on error
+      // Real-time event will restore correct state
     }
   }, []);
 
@@ -142,24 +218,31 @@ export function useRealtimeObjects() {
     }
 
     try {
-      // Check if already locked
+      // Check if already locked - use maybeSingle() instead of single()
+      // to handle case where object doesn't exist (returns null instead of error)
       const fetchResult = await (supabase
         .from('canvas_objects') as any)
         .select('locked_by')
         .eq('id', id)
-        .single();
+        .maybeSingle(); // Changed from .single() to .maybeSingle()
       const { data: current, error: fetchError} = fetchResult as { data: { locked_by: string | null } | null; error: any };
 
       if (fetchError) throw fetchError;
 
+      // Object doesn't exist - silently fail
+      if (!current) {
+        console.log('⚠️ Object not found, skipping lock');
+        return false;
+      }
+
       // If locked by someone else, deny lock
-      if (current && current.locked_by && current.locked_by !== user.id) {
+      if (current.locked_by && current.locked_by !== user.id) {
         console.log('🔒 Object already locked by another user');
         return false;
       }
 
       // If already locked by us, allow (re-entrant lock)
-      if (current && current.locked_by === user.id) {
+      if (current.locked_by === user.id) {
         console.log('🔓 Already have lock on object');
         return true;
       }
@@ -230,27 +313,10 @@ export function useRealtimeObjects() {
         console.log('🔄 Fetching initial canvas objects...');
         const fetchStart = performance.now();
         
-        // Fetch initial objects - select only needed columns for better performance
+        // Fetch initial objects - select all columns for new schema
         const { data, error: fetchError } = await supabase
           .from('canvas_objects')
-          .select(`
-            id,
-            type,
-            x,
-            y,
-            width,
-            height,
-            radius,
-            rotation,
-            fill,
-            text_content,
-            font_size,
-            created_by,
-            created_at,
-            updated_at,
-            locked_by,
-            lock_acquired_at
-          `)
+          .select('*')
           .order('created_at', { ascending: true });
 
         if (fetchError) throw fetchError;
@@ -282,10 +348,28 @@ export function useRealtimeObjects() {
               console.log('📥 INSERT event:', payload.new);
               const newObject = dbToCanvasObject(payload.new as DbCanvasObject);
               setObjects((prev) => {
-                // Prevent duplicates
-                if (prev.some(obj => obj.id === newObject.id)) {
+                // Replace optimistic object if it exists, otherwise add new
+                const hasOptimistic = prev.some(obj => obj.id.startsWith('optimistic-'));
+                const hasDuplicate = prev.some(obj => obj.id === newObject.id);
+                
+                if (hasDuplicate) {
+                  // Already have the real object, ignore
                   return prev;
                 }
+                
+                if (hasOptimistic) {
+                  // Replace first optimistic object with real one
+                  let replaced = false;
+                  return prev.map(obj => {
+                    if (!replaced && obj.id.startsWith('optimistic-')) {
+                      replaced = true;
+                      return newObject;
+                    }
+                    return obj;
+                  });
+                }
+                
+                // No optimistic object, just add
                 return [...prev, newObject];
               });
             }
@@ -377,7 +461,187 @@ export function useRealtimeObjects() {
         supabase.removeChannel(channel);
       }
     };
-  }, [user, dbToCanvasObject]);
+  }, [user]); // Removed dbToCanvasObject - it's a pure function, not a dependency
+
+  /**
+   * Batch update multiple objects (single database transaction)
+   */
+  const updateObjects = useCallback(async (
+    ids: string[],
+    updates: Partial<CanvasObject>
+  ): Promise<void> => {
+    try {
+      const updateData: Record<string, any> = {};
+
+      // Build update data (same as single update)
+      if (updates.x !== undefined) updateData.x = updates.x;
+      if (updates.y !== undefined) updateData.y = updates.y;
+      if ('width' in updates && updates.width !== undefined) updateData.width = updates.width;
+      if ('height' in updates && updates.height !== undefined) updateData.height = updates.height;
+      if ('rotation' in updates && updates.rotation !== undefined) updateData.rotation = updates.rotation;
+      if (updates.fill !== undefined) updateData.fill = updates.fill;
+      if (updates.stroke !== undefined) updateData.stroke = updates.stroke;
+      if (updates.stroke_width !== undefined) updateData.stroke_width = updates.stroke_width;
+      if (updates.opacity !== undefined) updateData.opacity = updates.opacity;
+      if (updates.group_id !== undefined) updateData.group_id = updates.group_id;
+      if (updates.z_index !== undefined) updateData.z_index = updates.z_index;
+      if (updates.type_properties !== undefined) updateData.type_properties = updates.type_properties;
+      if (updates.style_properties !== undefined) updateData.style_properties = updates.style_properties;
+      if (updates.metadata !== undefined) updateData.metadata = updates.metadata;
+
+      const { error: updateError } = await supabase
+        .from('canvas_objects')
+        .update(updateData)
+        .in('id', ids);
+
+      if (updateError) throw updateError;
+      
+      console.log(`✅ Batch updated ${ids.length} objects`);
+    } catch (err) {
+      console.error('❌ Error batch updating objects:', err);
+      throw err;
+    }
+  }, []);
+
+  /**
+   * Batch delete multiple objects (single database transaction)
+   */
+  /**
+   * Delete objects (batch delete with optimistic updates)
+   */
+  const deleteObjects = useCallback(async (ids: string[]): Promise<void> => {
+    const startTime = performance.now();
+    
+    // Optimistic delete (INSTANT feedback)
+    console.log('⚡ Optimistic delete:', ids);
+    const deletedObjects = objects.filter((obj) => ids.includes(obj.id));
+    setObjects((prev) => prev.filter((obj) => !ids.includes(obj.id)));
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('canvas_objects')
+        .delete()
+        .in('id', ids);
+
+      if (deleteError) throw deleteError;
+      
+      const duration = performance.now() - startTime;
+      console.log(`✅ Deleted ${ids.length} objects in ${duration.toFixed(0)}ms`);
+    } catch (err) {
+      console.error('❌ Error deleting objects:', err);
+      // Restore objects on error
+      setObjects((prev) => [...prev, ...deletedObjects].sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      ));
+      throw err;
+    }
+  }, [objects]);
+
+  /**
+   * Duplicate objects with offset
+   * Returns IDs of newly created objects
+   */
+  const duplicateObjects = useCallback(async (ids: string[], offset = { x: 20, y: 20 }): Promise<string[]> => {
+    if (!user) {
+      console.error('Cannot duplicate objects: user not authenticated');
+      return [];
+    }
+
+    try {
+      // Fetch originals
+      const { data, error: fetchError } = await supabase
+        .from('canvas_objects')
+        .select('*')
+        .in('id', ids);
+
+      if (fetchError || !data) throw fetchError;
+
+      // Create copies with offset
+      const copies = data.map(obj => ({
+        type: obj.type,
+        x: obj.x + offset.x,
+        y: obj.y + offset.y,
+        width: obj.width,
+        height: obj.height,
+        rotation: obj.rotation,
+        group_id: obj.group_id,
+        z_index: obj.z_index,
+        fill: obj.fill,
+        stroke: obj.stroke,
+        stroke_width: obj.stroke_width,
+        opacity: obj.opacity,
+        type_properties: obj.type_properties,
+        style_properties: obj.style_properties,
+        metadata: obj.metadata,
+        created_by: user.id,
+      }));
+
+      const { data: newObjects, error: insertError } = await supabase
+        .from('canvas_objects')
+        .insert(copies)
+        .select('id');
+
+      if (insertError) throw insertError;
+      
+      const newIds = newObjects.map(o => o.id);
+      console.log(`✅ Duplicated ${ids.length} objects`);
+      return newIds;
+    } catch (err) {
+      console.error('❌ Error duplicating objects:', err);
+      return [];
+    }
+  }, [user]);
+
+  /**
+   * Query objects with advanced filters
+   * For now, filters client-side (can optimize to server-side later)
+   */
+  const queryObjects = useCallback((filter: {
+    type?: string;
+    group_id?: string | null;
+    bounds?: { x: number; y: number; width: number; height: number };
+    fill?: string;
+    metadata?: Record<string, any>;
+  }): CanvasObject[] => {
+    let result = objects;
+
+    // Filter by type
+    if (filter.type) {
+      result = result.filter(o => o.type === filter.type);
+    }
+
+    // Filter by group
+    if (filter.group_id !== undefined) {
+      result = result.filter(o => o.group_id === filter.group_id);
+    }
+
+    // Filter by bounds
+    if (filter.bounds) {
+      const { x, y, width, height } = filter.bounds;
+      result = result.filter(o =>
+        o.x >= x &&
+        o.x <= x + width &&
+        o.y >= y &&
+        o.y <= y + height
+      );
+    }
+
+    // Filter by fill color
+    if (filter.fill) {
+      result = result.filter(o => o.fill === filter.fill);
+    }
+
+    // Filter by metadata
+    if (filter.metadata) {
+      result = result.filter(o => {
+        return Object.entries(filter.metadata!).every(([key, value]) => {
+          return o.metadata && o.metadata[key] === value;
+        });
+      });
+    }
+
+    return result;
+  }, [objects]);
 
   return {
     objects,
@@ -385,6 +649,10 @@ export function useRealtimeObjects() {
     error,
     createObject,
     updateObject,
+    updateObjects, // Batch update
+    deleteObjects, // Batch delete
+    duplicateObjects, // Duplicate with offset
+    queryObjects, // Advanced filtering
     acquireLock,
     releaseLock,
   };

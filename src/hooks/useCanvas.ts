@@ -27,15 +27,22 @@ export function useCanvas() {
     error,
     createObject, 
     updateObject,
+    deleteObjects,
     acquireLock,
     releaseLock 
   } = useRealtimeObjects();
 
   /**
-   * Keyboard event handlers for tool switching
+   * Keyboard event handlers for tool switching and delete
    */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
       // Space key for temporary hand tool
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
@@ -45,6 +52,13 @@ export function useCanvas() {
       // Command (Mac) or Control (Windows/Linux) key
       if ((e.metaKey || e.ctrlKey) && !e.repeat) {
         setIsCommandPressed(true);
+      }
+
+      // Delete/Backspace key to delete selected shape
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeId) {
+        e.preventDefault();
+        deleteObjects([selectedShapeId]);
+        setSelectedShapeId(null);
       }
     };
 
@@ -66,7 +80,7 @@ export function useCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [selectedShapeId, deleteObjects]);
 
   /**
    * Determine effective tool mode (considering modifiers)
@@ -161,6 +175,7 @@ export function useCanvas() {
             width: SHAPE_DEFAULTS.rectangle.width,
             height: SHAPE_DEFAULTS.rectangle.height,
             fill: SHAPE_DEFAULTS.rectangle.fill,
+            type_properties: {}, // No type-specific properties for basic rectangle
           };
           break;
 
@@ -169,8 +184,12 @@ export function useCanvas() {
             type: 'circle',
             x: center.x,
             y: center.y,
-            radius: SHAPE_DEFAULTS.circle.radius,
+            width: SHAPE_DEFAULTS.circle.radius * 2, // Bounding box
+            height: SHAPE_DEFAULTS.circle.radius * 2,
             fill: SHAPE_DEFAULTS.circle.fill,
+            type_properties: {
+              radius: SHAPE_DEFAULTS.circle.radius,
+            },
           };
           break;
 
@@ -179,9 +198,13 @@ export function useCanvas() {
             type: 'text',
             x: center.x,
             y: center.y,
-            text_content: SHAPE_DEFAULTS.text.textContent,
-            font_size: SHAPE_DEFAULTS.text.fontSize,
+            width: 200, // Default text box width
+            height: 50, // Default text box height
             fill: SHAPE_DEFAULTS.text.fill,
+            type_properties: {
+              text_content: SHAPE_DEFAULTS.text.textContent,
+              font_size: SHAPE_DEFAULTS.text.fontSize,
+            },
           };
           break;
       }
@@ -214,6 +237,16 @@ export function useCanvas() {
     setSelectedShapeId(null);
   }, []);
 
+  /**
+   * Delete the currently selected shape
+   */
+  const deleteSelected = useCallback(() => {
+    if (selectedShapeId) {
+      deleteObjects([selectedShapeId]);
+      setSelectedShapeId(null);
+    }
+  }, [selectedShapeId, deleteObjects]);
+
   return {
     stageRef,
     transformerRef,
@@ -234,6 +267,7 @@ export function useCanvas() {
     updateShape,
     selectShape,
     deselectShape,
+    deleteSelected,
     acquireLock,
     releaseLock,
   };

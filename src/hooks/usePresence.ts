@@ -1,3 +1,10 @@
+/**
+ * Presence tracking hook
+ * Note: Supabase presence state types require any casts
+ */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -70,6 +77,7 @@ export function usePresence(): UsePresenceReturn {
    * Update user's last activity timestamp
    * Throttled to once per 5 seconds to avoid excessive broadcasts
    */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const updateActivity = useCallback(
     throttle(() => {
       lastActivityRef.current = Date.now();

@@ -59,6 +59,7 @@ export function useBroadcastCursors(): UseBroadcastCursorsReturn {
   /**
    * Send cursor position update (throttled to 30 FPS)
    */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const sendCursorUpdate = useCallback(
     throttle((x: number, y: number) => {
       if (!channelRef.current || !userId) {
@@ -143,9 +144,11 @@ export function useBroadcastCursors(): UseBroadcastCursorsReturn {
 
     // Cleanup on unmount
     return () => {
-      // Clear all cursor timeouts
-      cursorTimeoutRef.current.forEach((timeout) => clearTimeout(timeout));
-      cursorTimeoutRef.current.clear();
+      // Clear all cursor timeouts (capture ref value for cleanup)
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const timeouts = cursorTimeoutRef.current;
+      timeouts.forEach((timeout) => clearTimeout(timeout));
+      timeouts.clear();
 
       // Unsubscribe from channel
       if (channelRef.current) {

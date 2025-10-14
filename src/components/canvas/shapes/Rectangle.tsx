@@ -1,14 +1,13 @@
 /**
  * Rectangle shape component
- * Draggable rectangle with boundary constraints and locking
+ * Uses BaseShape for all common logic - just handles rendering
  */
 
-import { memo, useRef, useCallback } from 'react';
-import { Rect } from 'react-konva';
+import { memo } from 'react';
 import Konva from 'konva';
-import { useAuth } from '../../../hooks/useAuth';
+import { Rect } from 'react-konva';
+import { BaseShape, type ShapeRenderProps } from './BaseShape';
 import type { RectangleObject } from '../../../types/canvas';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
 interface RectangleProps {
   shape: RectangleObject;
@@ -20,126 +19,28 @@ interface RectangleProps {
   onActivity?: () => void;
 }
 
-function RectangleComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity }: RectangleProps) {
-  const { user } = useAuth();
-  const shapeRef = useRef<Konva.Rect>(null);
-  
-  // Determine lock state
-  const isLockedByOther = shape.locked_by && shape.locked_by !== user?.id;
-  const isLockedByMe = shape.locked_by === user?.id;
-
-  /**
-   * Constrain dragging to canvas boundaries
-   */
-  const handleDragBound = useCallback((pos: { x: number; y: number }) => {
-    return {
-      x: Math.max(0, Math.min(pos.x, CANVAS_WIDTH - shape.width)),
-      y: Math.max(0, Math.min(pos.y, CANVAS_HEIGHT - shape.height)),
-    };
-  }, [shape.width, shape.height]);
-
-  /**
-   * Acquire lock when starting to drag
-   * Also update activity for presence tracking
-   */
-  const handleDragStart = useCallback(async () => {
-    onActivity?.();
-    const success = await onAcquireLock(shape.id);
-    if (!success) {
-      // Lock acquisition failed - prevent drag
-      return false;
-    }
-  }, [shape.id, onAcquireLock, onActivity]);
-
-  /**
-   * Update position and release lock on drag end
-   * Includes error recovery to revert position on failed update
-   */
-  const handleDragEnd = useCallback(async (e: Konva.KonvaEventObject<DragEvent>) => {
-    const node = e.target;
-    const newPos = { x: node.x(), y: node.y() };
-    const originalPos = { x: shape.x, y: shape.y };
-    
-    try {
-      // Update position in database
-      await onUpdate(shape.id, newPos);
-    } catch (error) {
-      // Revert position on failure
-      console.error('Failed to update shape position:', error);
-      node.position(originalPos);
-    } finally {
-      // Always release lock
-      await onReleaseLock(shape.id);
-    }
-  }, [shape.id, shape.x, shape.y, onUpdate, onReleaseLock]);
-
-  /**
-   * Handle transform end (resize/rotate)
-   * 
-   * Konva best practice:
-   * 1. Calculate new dimensions from scale
-   * 2. Apply new dimensions to node BEFORE resetting scale
-   * 3. Reset scale to 1
-   * 4. Sync to database
-   * This prevents visual "snap back" to original size
-   */
-  const handleTransformEnd = useCallback(async () => {
-    const node = shapeRef.current;
-    if (!node) return;
-
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-
-    // Calculate new dimensions
-    const newWidth = Math.max(5, node.width() * scaleX);
-    const newHeight = Math.max(5, node.height() * scaleY);
-
-    // Apply new dimensions to node BEFORE resetting scale (prevents snap-back)
-    node.width(newWidth);
-    node.height(newHeight);
-
-    // Now reset scale
-    node.scaleX(1);
-    node.scaleY(1);
-
-    try {
-      await onUpdate(shape.id, {
-        x: node.x(),
-        y: node.y(),
-        width: newWidth,
-        height: newHeight,
-        rotation: node.rotation(),
-      });
-    } catch (error) {
-      console.error('Failed to update shape transform:', error);
-    }
-  }, [shape.id, onUpdate]);
-
+function RectangleComponent({ shape, isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity }: RectangleProps) {
   return (
-    <Rect
-      ref={shapeRef}
-      id={shape.id}
-      x={shape.x}
-      y={shape.y}
-      width={shape.width}
-      height={shape.height}
-      fill={shape.fill}
-      rotation={shape.rotation || 0}
-      draggable={!isLockedByOther}
-      dragBoundFunc={handleDragBound}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onTransformEnd={handleTransformEnd}
-      onClick={onSelect}
-      onTap={onSelect}
-      // Visual feedback for locked state
-      stroke={isLockedByOther ? '#EF4444' : isLockedByMe ? '#10B981' : undefined}
-      strokeWidth={isLockedByOther || isLockedByMe ? 3 : 0}
-      opacity={isLockedByOther ? 0.7 : 1}
-      // Performance optimizations
-      perfectDrawEnabled={false}
-      shadowForStrokeEnabled={false}
-    />
+    <BaseShape
+      shape={shape}
+      isSelected={isSelected}
+      onSelect={onSelect}
+      onUpdate={onUpdate}
+      onAcquireLock={onAcquireLock}
+      onReleaseLock={onReleaseLock}
+      onActivity={onActivity}
+    >
+      {({ shapeRef, commonProps }: ShapeRenderProps<RectangleObject>) => (
+        <Rect
+          ref={shapeRef as React.RefObject<Konva.Rect>}
+          {...commonProps}
+          width={shape.width}
+          height={shape.height}
+          fill={shape.fill}
+          cornerRadius={shape.type_properties.corner_radius}
+        />
+      )}
+    </BaseShape>
   );
 }
 
@@ -156,10 +57,11 @@ const areEqual = (prevProps: RectangleProps, nextProps: RectangleProps) => {
     prevProps.shape.height === nextProps.shape.height &&
     prevProps.shape.fill === nextProps.shape.fill &&
     prevProps.shape.rotation === nextProps.shape.rotation &&
+    prevProps.shape.opacity === nextProps.shape.opacity &&
     prevProps.shape.locked_by === nextProps.shape.locked_by &&
+    prevProps.shape.type_properties.corner_radius === nextProps.shape.type_properties.corner_radius &&
     prevProps.isSelected === nextProps.isSelected
   );
 };
 
 export const Rectangle = memo(RectangleComponent, areEqual);
-
