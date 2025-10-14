@@ -1549,6 +1549,18 @@ collabcanvas/
 **Commit Messages:**
 1. `feat: optimize performance and polish UX with memoization, error recovery, and keyboard shortcuts`
 2. `feat: add inline text editing with HTML overlay`
+3. `refactor: comprehensive architecture refactor with transformer support`
+
+**Major Refactor Summary:**
+- ✅ Installed `react-konva-utils` for proper Html component
+- ✅ Added selection state management (click to select, click empty to deselect)
+- ✅ Implemented Konva Transformer for resize/rotate on all shapes
+- ✅ Unified architecture across all shapes following DRY principles
+- ✅ Completely rewrote Text component using Html overlay (removed buggy Portal approach)
+- ✅ Added rotation support to all shapes (Rectangle, Circle, Text)
+- ✅ All shapes now support: select, drag, resize, rotate, lock
+- ✅ All 69 tests passing, no linter errors
+- ✅ Extensible architecture for future shape types
 
 ---
 
