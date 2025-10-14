@@ -5,7 +5,7 @@
 
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Text as KonvaText } from 'react-konva';
+import { Group, Rect, Text as KonvaText } from 'react-konva';
 import Konva from 'konva';
 import { useAuth } from '../../../hooks/useAuth';
 import type { TextObject } from '../../../types/canvas';
@@ -25,6 +25,7 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
   const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
+  const groupRef = useRef<Konva.Group>(null);
   const textRef = useRef<Konva.Text>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   
@@ -32,19 +33,26 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
   const isLockedByOther = shape.locked_by && shape.locked_by !== user?.id;
   const isLockedByMe = shape.locked_by === user?.id;
 
+  // Calculate text dimensions for bounding box
+  const padding = 10;
+  const textWidth = textRef.current?.width() || 100;
+  const textHeight = textRef.current?.height() || shape.font_size * 1.5;
+  const boxWidth = textWidth + padding * 2;
+  const boxHeight = textHeight + padding * 2;
+
   /**
    * Constrain dragging to canvas boundaries
-   * Estimate text dimensions for boundary checking
+   * Use the bounding box dimensions for boundary checking
    */
   const handleDragBound = useCallback((pos: { x: number; y: number }) => {
-    const textWidth = shape.width || 100;
-    const textHeight = shape.height || shape.font_size * 1.2;
+    const width = boxWidth || 120;
+    const height = boxHeight || 40;
 
     return {
-      x: Math.max(0, Math.min(pos.x, CANVAS_WIDTH - textWidth)),
-      y: Math.max(0, Math.min(pos.y, CANVAS_HEIGHT - textHeight)),
+      x: Math.max(0, Math.min(pos.x, CANVAS_WIDTH - width)),
+      y: Math.max(0, Math.min(pos.y, CANVAS_HEIGHT - height)),
     };
-  }, [shape.width, shape.height, shape.font_size]);
+  }, [boxWidth, boxHeight]);
 
   /**
    * Acquire lock when starting to drag
@@ -64,8 +72,11 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
    * Includes error recovery to revert position on failed update
    */
   const handleDragEnd = useCallback(async (e: Konva.KonvaEventObject<DragEvent>) => {
-    const node = e.target;
-    const newPos = { x: node.x(), y: node.y() };
+    // Get the group's position
+    const group = groupRef.current;
+    if (!group) return;
+    
+    const newPos = { x: group.x(), y: group.y() };
     const originalPos = { x: shape.x, y: shape.y };
     
     try {
@@ -74,7 +85,7 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
     } catch (error) {
       // Revert position on failure
       console.error('Failed to update shape position:', error);
-      node.position(originalPos);
+      group.position(originalPos);
     } finally {
       // Always release lock
       await onReleaseLock(shape.id);
@@ -86,10 +97,17 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
    * Acquire lock before editing (any user can edit any text)
    * Also update activity for presence tracking
    */
-  const handleDoubleClick = useCallback(async () => {
+  const handleDoubleClick = useCallback(async (e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Prevent stage from handling this event
+    e.cancelBubble = true;
+    
+    console.log('Text double-clicked!', shape.id);
     onActivity?.();
+    
     // Try to acquire lock for editing
     const success = await onAcquireLock(shape.id);
+    console.log('Lock acquired:', success);
+    
     if (success) {
       setEditValue(shape.text_content || '');
       setIsEditing(true);
@@ -153,28 +171,47 @@ function TextComponent({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivi
 
   return (
     <>
-      <KonvaText
-        ref={textRef}
+      <Group
+        ref={groupRef}
         x={shape.x}
         y={shape.y}
-        text={shape.text_content}
-        fontSize={shape.font_size}
-        fill={shape.fill}
         draggable={!isEditing && !isLockedByOther}
         dragBoundFunc={handleDragBound}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDblClick={handleDoubleClick}
         onDblTap={handleDoubleClick}
-        // Visual feedback for locked state
-        stroke={isLockedByOther ? '#EF4444' : isLockedByMe ? '#10B981' : undefined}
-        strokeWidth={isLockedByOther || isLockedByMe ? 3 : 0}
-        opacity={isLockedByOther ? 0.7 : 1}
-        // Hide text while editing
         visible={!isEditing}
-        // Performance optimizations
-        perfectDrawEnabled={false}
-      />
+      >
+        {/* Background rectangle - bounded container */}
+        <Rect
+          x={0}
+          y={0}
+          width={boxWidth}
+          height={boxHeight}
+          fill="rgba(255, 255, 255, 0.9)"
+          stroke={isLockedByOther ? '#EF4444' : isLockedByMe ? '#10B981' : '#E5E7EB'}
+          strokeWidth={isLockedByOther || isLockedByMe ? 3 : 1}
+          cornerRadius={4}
+          shadowColor="black"
+          shadowBlur={4}
+          shadowOpacity={0.1}
+          shadowOffsetX={0}
+          shadowOffsetY={2}
+          opacity={isLockedByOther ? 0.7 : 1}
+        />
+        
+        {/* Text content */}
+        <KonvaText
+          ref={textRef}
+          x={padding}
+          y={padding}
+          text={shape.text_content}
+          fontSize={shape.font_size}
+          fill={shape.fill}
+          perfectDrawEnabled={false}
+        />
+      </Group>
 
       {/* Inline text editor - rendered as portal over canvas */}
       {isEditing && createPortal(
