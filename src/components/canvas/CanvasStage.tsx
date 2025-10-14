@@ -22,6 +22,7 @@ interface CanvasStageProps {
   onUpdateShape: (id: string, updates: Partial<CanvasObject>) => void;
   onAcquireLock: (id: string) => Promise<boolean>;
   onReleaseLock: (id: string) => Promise<void>;
+  onActivity?: () => void;
 }
 
 export function CanvasStage({
@@ -34,6 +35,7 @@ export function CanvasStage({
   onUpdateShape,
   onAcquireLock,
   onReleaseLock,
+  onActivity,
 }: CanvasStageProps) {
   // Track window dimensions for responsive canvas
   const [dimensions, setDimensions] = useState({
@@ -89,6 +91,7 @@ export function CanvasStage({
             onUpdate={onUpdateShape}
             onAcquireLock={onAcquireLock}
             onReleaseLock={onReleaseLock}
+            onActivity={onActivity}
           />
         );
       case 'circle':
@@ -99,6 +102,7 @@ export function CanvasStage({
             onUpdate={onUpdateShape}
             onAcquireLock={onAcquireLock}
             onReleaseLock={onReleaseLock}
+            onActivity={onActivity}
           />
         );
       case 'text':
@@ -109,6 +113,7 @@ export function CanvasStage({
             onUpdate={onUpdateShape}
             onAcquireLock={onAcquireLock}
             onReleaseLock={onReleaseLock}
+            onActivity={onActivity}
           />
         );
       default:

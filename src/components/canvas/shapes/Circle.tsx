@@ -14,9 +14,10 @@ interface CircleProps {
   onUpdate: (id: string, updates: Partial<CircleObject>) => void;
   onAcquireLock: (id: string) => Promise<boolean>;
   onReleaseLock: (id: string) => Promise<void>;
+  onActivity?: () => void;
 }
 
-export function Circle({ shape, onUpdate, onAcquireLock, onReleaseLock }: CircleProps) {
+export function Circle({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivity }: CircleProps) {
   const { user } = useAuth();
   
   // Determine lock state
@@ -36,8 +37,10 @@ export function Circle({ shape, onUpdate, onAcquireLock, onReleaseLock }: Circle
 
   /**
    * Acquire lock when starting to drag
+   * Also update activity for presence tracking
    */
   const handleDragStart = async () => {
+    onActivity?.();
     const success = await onAcquireLock(shape.id);
     if (!success) {
       // Lock acquisition failed - prevent drag

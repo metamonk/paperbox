@@ -14,9 +14,10 @@ interface RectangleProps {
   onUpdate: (id: string, updates: Partial<RectangleObject>) => void;
   onAcquireLock: (id: string) => Promise<boolean>;
   onReleaseLock: (id: string) => Promise<void>;
+  onActivity?: () => void;
 }
 
-export function Rectangle({ shape, onUpdate, onAcquireLock, onReleaseLock }: RectangleProps) {
+export function Rectangle({ shape, onUpdate, onAcquireLock, onReleaseLock, onActivity }: RectangleProps) {
   const { user } = useAuth();
   
   // Determine lock state
@@ -35,8 +36,10 @@ export function Rectangle({ shape, onUpdate, onAcquireLock, onReleaseLock }: Rec
 
   /**
    * Acquire lock when starting to drag
+   * Also update activity for presence tracking
    */
   const handleDragStart = async () => {
+    onActivity?.();
     const success = await onAcquireLock(shape.id);
     if (!success) {
       // Lock acquisition failed - prevent drag
