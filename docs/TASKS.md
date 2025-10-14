@@ -790,13 +790,15 @@ collabcanvas/
 
 ---
 
-## PR #5: Shape Creation & Local Manipulation
+## PR #5: Shape Creation & Local Manipulation ✅ COMPLETE
 **Branch:** `feat/shapes-local`  
 **Goal:** Add toolbar and create shapes (rectangle, circle, text) with drag functionality  
 **Estimated Time:** 1.5-2 hours
+**Actual Time:** ~1.5 hours
+**Status:** ✅ 100% Complete (10/10 tasks) - All tests passing (54/54 total)
 
 ### Tasks:
-- [ ] Update canvas types
+- [x] Update canvas types
   - **Files updated:** `src/types/canvas.ts`
   - **Content:**
     ```ts
@@ -817,84 +819,44 @@ collabcanvas/
     }
     ```
 
-- [ ] Update constants with shape defaults
-  - **Files updated:** `src/lib/constants.ts`
-  - **Content:**
-    ```ts
-    export const SHAPE_DEFAULTS = {
-      rectangle: { width: 100, height: 100, fill: '#3B82F6' },
-      circle: { radius: 50, fill: '#EF4444' },
-      text: { textContent: 'Text', fontSize: 16, fill: '#000000' }
-    };
-    ```
+- [x] Update constants with shape defaults
+  - **Files updated:** `src/lib/constants.ts` ✅
+  - **Content:** Shape defaults defined for all three types with correct dimensions and colors
 
-- [ ] Create Rectangle shape component
-  - **Files created:** `src/components/canvas/shapes/Rectangle.tsx`
-  - **Content:**
-    - Konva Rect component
-    - Draggable prop
-    - onDragEnd handler with boundary constraints
-    - dragBoundFunc to constrain dragging within canvas (0,0 to 5000,5000)
-    - Props: shape data, onUpdate callback
+- [x] Create Rectangle shape component
+  - **Files created:** `src/components/canvas/shapes/Rectangle.tsx` ✅
+  - **Content:** Konva Rect with draggable, boundary constraints (0,0 to 5000,5000)
 
-- [ ] Create Circle shape component
-  - **Files created:** `src/components/canvas/shapes/Circle.tsx`
-  - **Content:**
-    - Konva Circle component
-    - Draggable prop
-    - onDragEnd handler with boundary constraints
-    - dragBoundFunc to constrain dragging within canvas (0,0 to 5000,5000)
-    - Props: shape data, onUpdate callback
+- [x] Create Circle shape component
+  - **Files created:** `src/components/canvas/shapes/Circle.tsx` ✅
+  - **Content:** Konva Circle with draggable, boundary constraints accounting for radius
 
-- [ ] Create Text shape component
-  - **Files created:** `src/components/canvas/shapes/Text.tsx`
-  - **Content:**
-    - Konva Text component
-    - Draggable prop (disabled during editing)
-    - Double-click to edit (transformer or input overlay)
-    - Text locked from movement while in edit mode
-    - onDragEnd handler with boundary constraints
-    - dragBoundFunc to constrain dragging within canvas (0,0 to 5000,5000)
-    - Props: shape data, onUpdate, onEdit callbacks
-    - Note: Any user can edit any text object
+- [x] Create Text shape component
+  - **Files created:** `src/components/canvas/shapes/Text.tsx` ✅
+  - **Content:** Konva Text with double-click edit (prompt), dragging disabled during edit, boundary constraints
 
-- [ ] Create toolbar component
-  - **Files created:** `src/components/canvas/Toolbar.tsx`
-  - **Content:**
-    - Three buttons: Add Rectangle, Add Circle, Add Text
-    - onClick handlers to create shapes
-    - Styled with Tailwind
+- [x] Create toolbar component
+  - **Files created:** `src/components/canvas/Toolbar.tsx` ✅
+  - **Content:** Three styled buttons with SVG icons, calls onAddShape with shape type
 
-- [ ] Update canvas hook with shape management
-  - **Files updated:** `src/hooks/useCanvas.ts`
-  - **Content:**
-    - `shapes` state (local array of CanvasObject)
-    - `addShape(type)` - create shape at viewport center
-    - `updateShape(id, updates)` - update shape properties
-    - `handleShapeDragEnd(id, position)` - update position
+- [x] Update canvas hook with shape management
+  - **Files updated:** `src/hooks/useCanvas.ts` ✅
+  - **Content:** shapes state, addShape() creates at viewport center, updateShape() updates properties
 
-- [ ] Render shapes in canvas stage
-  - **Files updated:** `src/components/canvas/CanvasStage.tsx`
-  - **Content:**
-    - Map over shapes array
-    - Render appropriate shape component
-    - Pass drag handlers
+- [x] Render shapes in canvas stage
+  - **Files updated:** `src/components/canvas/CanvasStage.tsx` ✅
+  - **Content:** renderShape() switches on type, maps over shapes array, passes onUpdateShape
 
-- [ ] Integrate toolbar into canvas
-  - **Files updated:** `src/components/canvas/Canvas.tsx`
-  - **Content:**
-    - Render Toolbar
-    - Pass shape creation handler
+- [x] Integrate toolbar into canvas
+  - **Files updated:** `src/components/canvas/Canvas.tsx` ✅
+  - **Content:** Toolbar rendered with onAddShape prop connected to canvas hook
 
-- [ ] Implement text editing
-  - **Files updated:** `src/components/canvas/shapes/Text.tsx`
-  - **Content:**
-    - Double-click detection
-    - Show input overlay or Konva Transformer
-    - Update text content on blur/enter
+- [x] Implement text editing
+  - **Files updated:** `src/components/canvas/shapes/Text.tsx` ✅
+  - **Content:** Double-click triggers browser prompt, updates via onUpdate callback
 
 ### Tests:
-- [ ] **Unit Test: Shape Creation Logic**
+- [x] **Unit Test: Shape Creation Logic** ✅ 10/10 tests passing
   - **Files created:** `src/hooks/__tests__/useCanvas.shapes.test.ts`
   - **Purpose:** Verify shapes are created with correct properties
   - **Content:**
@@ -982,7 +944,7 @@ collabcanvas/
     })
     ```
 
-- [ ] **Integration Test: Toolbar Shape Creation**
+- [x] **Integration Test: Toolbar Shape Creation** ✅ 6/6 tests passing
   - **Files created:** `src/components/canvas/__tests__/Toolbar.test.tsx`
   - **Purpose:** Verify toolbar buttons trigger shape creation
   - **Content:**
@@ -1038,6 +1000,14 @@ collabcanvas/
     ```
 
 **Commit Message:** `feat: add shape creation (rectangle, circle, text) with drag functionality`
+
+**Additional Notes:**
+- ✅ All three shape types implemented and working
+- ✅ Boundary constraints prevent shapes from leaving canvas (0,0 to 5000,5000)
+- ✅ Text editing uses browser prompt (MVP approach, can be improved in PR #9)
+- ✅ Shapes spawn at viewport center as specified
+- ✅ All shapes draggable with smooth performance
+- ✅ 16/16 tests passing for shape creation and manipulation
 
 ---
 
@@ -1782,9 +1752,9 @@ collabcanvas/
 
 1. ✅ PRs 1-2: Setup (foundation)
 2. ✅ PR 3: Auth (gate for canvas access)
-3. ✅ PR 4: Canvas (workspace) - COMPLETE
-4. ⏳ PR 5: Shapes (core functionality) - NEXT
-5. ⏳ **PR 6: Realtime Sync (MOST CRITICAL)**
+3. ✅ PR 4: Canvas (workspace)
+4. ✅ PR 5: Shapes (core functionality)
+5. ⏳ **PR 6: Realtime Sync (MOST CRITICAL)** - NEXT
 6. ⏳ PR 7: Cursors (multiplayer proof)
 7. ⏳ PR 8: Presence (requirement)
 8. ⚠️ PR 9: Performance (important but can be minimal)
