@@ -27,6 +27,7 @@ export function useRealtimeObjects() {
       x: row.x,
       y: row.y,
       fill: row.fill,
+      rotation: row.rotation ?? undefined,
       created_by: row.created_by,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -110,6 +111,7 @@ export function useRealtimeObjects() {
       if ('width' in updates && updates.width !== undefined) updateData.width = updates.width;
       if ('height' in updates && updates.height !== undefined) updateData.height = updates.height;
       if ('radius' in updates && updates.radius !== undefined) updateData.radius = updates.radius;
+      if ('rotation' in updates && updates.rotation !== undefined) updateData.rotation = updates.rotation;
       if ('text_content' in updates) updateData.text_content = updates.text_content;
       if ('font_size' in updates) updateData.font_size = updates.font_size;
       if (updates.locked_by !== undefined) updateData.locked_by = updates.locked_by;
@@ -239,6 +241,7 @@ export function useRealtimeObjects() {
             width,
             height,
             radius,
+            rotation,
             fill,
             text_content,
             font_size,

@@ -31,6 +31,7 @@ export interface Database {
           width: number | null;
           height: number | null;
           radius: number | null;
+          rotation: number | null;
           fill: string;
           text_content: string | null;
           font_size: number | null;
@@ -48,6 +49,7 @@ export interface Database {
           width?: number | null;
           height?: number | null;
           radius?: number | null;
+          rotation?: number | null;
           fill: string;
           text_content?: string | null;
           font_size?: number | null;
@@ -65,6 +67,7 @@ export interface Database {
           width?: number | null;
           height?: number | null;
           radius?: number | null;
+          rotation?: number | null;
           fill?: string;
           text_content?: string | null;
           font_size?: number | null;
