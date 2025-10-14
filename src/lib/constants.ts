@@ -10,6 +10,7 @@ export const CANVAS_HEIGHT = 5000;
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 5;
 export const DEFAULT_ZOOM = 1;
+export const ZOOM_SPEED = 0.1;
 
 // Shape defaults
 export const SHAPE_DEFAULTS: ShapeDefaults = {
