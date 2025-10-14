@@ -26,6 +26,7 @@ interface TextProps {
 function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onAcquireLock, onReleaseLock, onActivity, scale, stagePosition: _stagePosition }: TextProps) {
   const { user } = useAuth();
   const textRef = useRef<Konva.Text>(null);
+  const groupRef = useRef<Konva.Group>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(shape.text_content || '');
 
@@ -78,27 +79,53 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
   }, [shape.id, shape.x, shape.y, onUpdate, onReleaseLock]);
 
   /**
-   * Handle transform end (resize for width, rotation)
+   * Acquire lock on transform start
+   */
+  const handleTransformStart = useCallback(async () => {
+    if (onActivity) onActivity();
+    
+    const locked = await onAcquireLock(shape.id);
+    if (!locked) {
+      return false;
+    }
+  }, [shape.id, onAcquireLock, onActivity]);
+
+  /**
+   * Handle transform end (resize fontSize and width, rotation)
+   * For Konva Text, we scale both fontSize and width proportionally
    */
   const handleTransformEnd = useCallback(async () => {
-    const node = textRef.current;
-    if (!node) return;
+    const group = groupRef.current;
+    const text = textRef.current;
+    if (!group || !text) return;
 
-    const scaleX = node.scaleX();
-    node.scaleX(1);
-    node.scaleY(1);
+    // Get the scale from the Group (which has the transformer attached)
+    const scaleX = group.scaleX();
+    const scaleY = group.scaleY();
+
+    // For text, we want to scale fontSize proportionally
+    const newFontSize = Math.max(8, (shape.font_size || 16) * scaleY);
+    const newWidth = shape.width ? Math.max(20, shape.width * scaleX) : undefined;
+
+    // Reset the group scale
+    group.scaleX(1);
+    group.scaleY(1);
 
     try {
       await onUpdate(shape.id, {
-        x: node.x(),
-        y: node.y(),
-        width: Math.max(20, node.width() * scaleX),
-        rotation: node.rotation(),
+        x: group.x(),
+        y: group.y(),
+        width: newWidth,
+        font_size: Math.round(newFontSize),
+        rotation: group.rotation(),
       });
     } catch (error) {
       console.error('Failed to update text transform:', error);
+    } finally {
+      // Release lock after transform
+      await onReleaseLock(shape.id);
     }
-  }, [shape.id, onUpdate]);
+  }, [shape.id, shape.font_size, shape.width, onUpdate, onReleaseLock]);
 
   /**
    * Start editing on double-click
@@ -140,6 +167,7 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
 
   return (
     <Group
+      ref={groupRef}
       x={shape.x}
       y={shape.y}
       rotation={shape.rotation || 0}
@@ -147,6 +175,7 @@ function TextComponent({ shape, isSelected: _isSelected, onSelect, onUpdate, onA
       dragBoundFunc={handleDragBound}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onTransformStart={handleTransformStart}
       onTransformEnd={handleTransformEnd}
       onClick={onSelect}
       onTap={onSelect}
