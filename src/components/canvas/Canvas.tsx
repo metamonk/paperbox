@@ -3,14 +3,16 @@
  * Provides layout and integrates CanvasStage with Toolbar and other UI elements
  */
 
+import { useState, useEffect } from 'react';
 import { useCanvas } from '../../hooks/useCanvas';
 import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
 import { usePresence } from '../../hooks/usePresence';
 import { useAuth } from '../../hooks/useAuth';
 import { useKeyboard } from '../../hooks/useKeyboard';
 import { CanvasStage } from './CanvasStage';
-import { Toolbar } from './Toolbar';
+import { ToolsSidebar } from './ToolsSidebar';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
+import { UsersPanel } from '../collaboration/UsersPanel';
 import { Header } from '../layout/Header';
 import { Sidebar } from '../layout/Sidebar';
 import { screenToCanvas } from '../../utils/canvas-helpers';
@@ -46,6 +48,54 @@ export function Canvas() {
 
   // Auth for logout
   const { signOut, user } = useAuth();
+
+  // Sidebar state - which content and whether it's open
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarContent, setSidebarContent] = useState<'users' | 'tools'>('tools');
+  
+  // Auto-hide sidebar on mobile, default to tools on desktop
+  useEffect(() => {
+    const handleResize = () => {
+      // 768px = Tailwind's md breakpoint
+      const isDesktop = window.innerWidth >= 768;
+      setSidebarOpen(isDesktop);
+      // Default to tools sidebar on desktop
+      if (isDesktop) {
+        setSidebarContent('tools');
+      }
+    };
+    
+    // Set initial state
+    handleResize();
+    
+    // Listen for resize events
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Toggle tools sidebar
+  const handleToggleTools = () => {
+    if (sidebarOpen && sidebarContent === 'tools') {
+      // Already open with tools → close
+      setSidebarOpen(false);
+    } else {
+      // Either closed or showing users → open with tools
+      setSidebarOpen(true);
+      setSidebarContent('tools');
+    }
+  };
+
+  // Toggle users sidebar  
+  const handleToggleUsers = () => {
+    if (sidebarOpen && sidebarContent === 'users') {
+      // Already open with users → close
+      setSidebarOpen(false);
+    } else {
+      // Either closed or showing tools → open with users
+      setSidebarOpen(true);
+      setSidebarContent('users');
+    }
+  };
 
   // Keyboard shortcuts for shape creation
   useKeyboard({
@@ -128,11 +178,15 @@ export function Canvas() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header with presence badge and sign out */}
+      {/* Header with tools button, presence badge, and sign out */}
       <Header 
         userCount={onlineUsers.length}
         onSignOut={() => signOut()}
         userName={user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User'}
+        sidebarOpen={sidebarOpen}
+        sidebarContent={sidebarContent}
+        onToggleTools={handleToggleTools}
+        onToggleUsers={handleToggleUsers}
       />
 
       {/* Main content area with canvas and sidebar */}
@@ -153,11 +207,6 @@ export function Canvas() {
             </div>
           )}
           
-          <Toolbar 
-            onAddShape={addShape} 
-            onDelete={deleteSelected}
-            hasSelection={!!selectedShapeId}
-          />
           <CanvasStage
             stageRef={stageRef}
             transformerRef={transformerRef}
@@ -184,8 +233,30 @@ export function Canvas() {
           />
         </div>
 
-        {/* Sidebar with online users */}
-        <Sidebar users={onlineUsers} currentUserId={currentUserId} />
+        {/* Backdrop for mobile sidebar overlay */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Sidebar with dynamic content - responsive overlay/inline */}
+        <Sidebar 
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        >
+          {sidebarContent === 'users' ? (
+            <UsersPanel users={onlineUsers} currentUserId={currentUserId} />
+          ) : (
+            <ToolsSidebar 
+              onAddShape={addShape}
+              onDelete={deleteSelected}
+              hasSelection={!!selectedShapeId}
+            />
+          )}
+        </Sidebar>
       </div>
     </div>
   );
