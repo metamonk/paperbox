@@ -6,6 +6,7 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck - Supabase's generic types cause false positives in strict mode
 
 import { useState, useEffect, useCallback } from 'react';

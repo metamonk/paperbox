@@ -4,33 +4,50 @@ interface HeaderProps {
   userCount: number;
   onSignOut: () => void;
   userName: string;
+  sidebarOpen: boolean;
+  sidebarContent: 'users' | 'tools';
+  onToggleTools: () => void;
+  onToggleUsers: () => void;
 }
 
 /**
  * Header component displays the top navigation bar
- * - App title on the left
- * - Presence badge in the center
+ * - App title, tools button, and presence badge on the left
  * - User info and sign out button on the right
  */
-export function Header({ userCount, onSignOut, userName }: HeaderProps) {
+export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarContent, onToggleTools, onToggleUsers }: HeaderProps) {
   return (
-    <header className="h-16 bg-white border-b border-gray-200 px-6 flex items-center justify-between">
-      {/* App title */}
+    <header className="h-16 bg-white border-b border-gray-200 px-4 md:px-6 flex items-center justify-between gap-4">
+      {/* Left side: Title + Tools Button + Presence Badge */}
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-bold text-gray-900">
           CollabCanvas
         </h1>
-        <span className="text-sm text-gray-500 hidden sm:inline">
-          Real-time Collaborative Canvas
-        </span>
+        
+        {/* Tools button */}
+        <button 
+          onClick={onToggleTools}
+          className={`
+            px-3 py-1.5 text-sm font-medium rounded-lg transition-all
+            ${sidebarOpen && sidebarContent === 'tools' 
+              ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300 ring-offset-1' 
+              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+            }
+          `}
+          aria-label="Toggle tools sidebar"
+        >
+          🎨 <span className="hidden sm:inline">Tools</span>
+        </button>
+        
+        {/* Clickable presence badge for users sidebar */}
+        <PresenceBadge 
+          count={userCount} 
+          onClick={onToggleUsers}
+          isActive={sidebarOpen && sidebarContent === 'users'}
+        />
       </div>
 
-      {/* Presence badge (center) */}
-      <div className="flex-1 flex justify-center">
-        <PresenceBadge count={userCount} />
-      </div>
-
-      {/* User actions (right) */}
+      {/* Right side: User actions */}
       <div className="flex items-center gap-3">
         <div className="text-sm text-gray-700 hidden sm:block">
           <span className="font-medium">{userName}</span>
