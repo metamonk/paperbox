@@ -19,6 +19,7 @@ vi.mock('fabric', () => {
     private eventHandlers: Map<string, Function[]> = new Map();
     private _zoom: number = 1;
     public viewportTransform: number[] = [1, 0, 0, 1, 0, 0];
+    public defaultCursor: string = 'default';
 
     constructor(_element: HTMLCanvasElement | string, config: any = {}) {
       this._width = config.width || 800;
@@ -49,6 +50,7 @@ vi.mock('fabric', () => {
     discardActiveObject() { this.activeObject = undefined; }
     renderAll() {}
     requestRenderAll() {}
+    setCursor(cursor: string) { this.defaultCursor = cursor; }
     dispose() { this.activeObject = undefined; }
 
     on(event: string, handler: Function) {

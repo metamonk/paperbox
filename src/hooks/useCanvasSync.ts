@@ -34,6 +34,7 @@ import { usePaperboxStore } from '../stores';
 import { getSyncManager, cleanupSyncManager } from '../lib/sync/SyncManager';
 import { CanvasSyncManager } from '../lib/sync/CanvasSyncManager';
 import { FabricCanvasManager } from '../lib/fabric/FabricCanvasManager';
+import { NavigationShortcuts } from '../features/shortcuts/NavigationShortcuts';
 
 interface UseCanvasSyncResult {
   initialized: boolean;
@@ -63,6 +64,7 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
   // Refs to hold manager instances for cleanup
   const canvasSyncManagerRef = useRef<CanvasSyncManager | null>(null);
   const fabricManagerRef = useRef<FabricCanvasManager | null>(null);
+  const navigationShortcutsRef = useRef<NavigationShortcuts | null>(null);
 
   const initializeCanvas = usePaperboxStore((state) => state.initialize);
   const storeError = usePaperboxStore((state) => state.error);
@@ -132,6 +134,21 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         canvasSyncManagerRef.current = canvasSync;
         console.log('[useCanvasSync] CanvasSyncManager initialized');
 
+        // Step 5: Setup navigation shortcuts (W2.D8)
+        console.log('[useCanvasSync] Setting up navigation shortcuts...');
+        const navShortcuts = new NavigationShortcuts({ canvasManager: fabric });
+        navShortcuts.initialize();
+
+        if (!mounted) {
+          navShortcuts.dispose();
+          canvasSync.dispose();
+          fabric.dispose();
+          return;
+        }
+
+        navigationShortcutsRef.current = navShortcuts;
+        console.log('[useCanvasSync] NavigationShortcuts initialized');
+
         setInitialized(true);
         setError(null);
         console.log('[useCanvasSync] Complete initialization successful ✅');
@@ -144,14 +161,18 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         console.error('[useCanvasSync] Initialization error:', err);
 
         // Cleanup on error
-        if (fabricManagerRef.current) {
-          fabricManagerRef.current.dispose();
-          fabricManagerRef.current = null;
-          setFabricManager(null);
+        if (navigationShortcutsRef.current) {
+          navigationShortcutsRef.current.dispose();
+          navigationShortcutsRef.current = null;
         }
         if (canvasSyncManagerRef.current) {
           canvasSyncManagerRef.current.dispose();
           canvasSyncManagerRef.current = null;
+        }
+        if (fabricManagerRef.current) {
+          fabricManagerRef.current.dispose();
+          fabricManagerRef.current = null;
+          setFabricManager(null);
         }
       }
     };
@@ -162,6 +183,12 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
     return () => {
       mounted = false;
       console.log('[useCanvasSync] Cleaning up');
+
+      // Cleanup NavigationShortcuts (W2.D8)
+      if (navigationShortcutsRef.current) {
+        navigationShortcutsRef.current.dispose();
+        navigationShortcutsRef.current = null;
+      }
 
       // Cleanup CanvasSyncManager (Fabric↔Zustand sync)
       if (canvasSyncManagerRef.current) {
