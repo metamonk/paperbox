@@ -110,24 +110,24 @@
 
 ### Morning Block (4 hours)
 
-- [ ] **W1.D2.1**: [Context7] Fetch Fabric.js serialization patterns
+- [✓] **W1.D2.1**: [Context7] Fetch Fabric.js serialization patterns
   - Topic: toJSON, loadFromJSON, object serialization
   - Focus: Custom properties, data preservation
 
-- [ ] **W1.D2.2**: Write tests for toCanvasObject() serialization [RED]
+- [✓] **W1.D2.2**: Write tests for toCanvasObject() serialization [RED]
   - Test: fabric.Rect → CanvasObject conversion
   - Test: fabric.Circle → CanvasObject conversion
   - Test: fabric.Text → CanvasObject conversion
   - Test: Preserves custom data properties
   - Expect: Tests fail
 
-- [ ] **W1.D2.3**: Implement toCanvasObject() serialization [GREEN]
+- [✓] **W1.D2.3**: Implement toCanvasObject() serialization [GREEN]
   - Extract base properties (x, y, width, height, rotation)
   - Extract style properties (fill, stroke, opacity)
   - Handle type-specific properties
   - Expect: Tests pass
 
-- [ ] **W1.D2.4**: Refactor serialization for DRY pattern [REFACTOR]
+- [✓] **W1.D2.4**: Refactor serialization for DRY pattern [REFACTOR]
   - Extract common property mapping
   - Create type-specific serializers
   - Add comprehensive comments
@@ -135,37 +135,37 @@
 
 ### Afternoon Block (4 hours)
 
-- [ ] **W1.D2.5**: Write tests for addObject() and removeObject() [RED]
+- [✓] **W1.D2.5**: Write tests for addObject() and removeObject() [RED]
   - Test: addObject() adds to canvas and renders
   - Test: removeObject() removes from canvas
   - Test: findObjectById() finds correct object
   - Expect: Tests fail
 
-- [ ] **W1.D2.6**: Implement object management methods [GREEN]
+- [✓] **W1.D2.6**: Implement object management methods [GREEN]
   - Implement addObject()
   - Implement removeObject()
   - Implement findObjectById()
   - Implement getActiveObjects()
   - Expect: Tests pass
 
-- [ ] **W1.D2.7**: Write tests for selection management [RED]
+- [✓] **W1.D2.7**: Write tests for selection management [RED]
   - Test: getActiveObjects() returns selected objects
   - Test: discardActiveObject() clears selection
   - Test: Selection events fire correctly
   - Expect: Tests fail
 
-- [ ] **W1.D2.8**: Implement selection management [GREEN]
+- [✓] **W1.D2.8**: Implement selection management [GREEN]
   - Implement getActiveObjects()
   - Implement discardActiveObject()
   - Wire up to Fabric.js selection API
   - Expect: Tests pass
 
-- [ ] **W1.D2.9**: Integration testing - Full object lifecycle
+- [✓] **W1.D2.9**: Integration testing - Full object lifecycle
   - Create object → Add to canvas → Modify → Remove
   - Verify Fabric.js state consistency
   - Visual verification in browser
 
-- [ ] **W1.D2.10**: Commit Day 2 work [COMMIT]
+- [→] **W1.D2.10**: Commit Day 2 work [COMMIT]
   - Run: `pnpm test`
   - Run: `pnpm typecheck`
   - Commit: `feat(fabric): Add object serialization and lifecycle management`
