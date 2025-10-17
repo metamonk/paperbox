@@ -93,6 +93,7 @@ export class FabricCanvasManager {
   private config: Required<FabricCanvasConfig>;
   private eventHandlers: FabricCanvasEventHandlers = {};
   private cursorObjects: FabricObject[] = []; // W1.D6: Track cursor overlay objects
+  private viewportSyncCallback: ((zoom: number, panX: number, panY: number) => void) | null = null; // W2.D6.6: Viewport sync callback
 
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -573,11 +574,219 @@ export class FabricCanvasManager {
     this.canvas.renderAll();
   }
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // Viewport Management (W2.D6.4-6.6)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * W2.D6.6: Set viewport sync callback
+   *
+   * This callback is called after zoom/pan events to sync viewport state to Zustand.
+   *
+   * @param callback - Function to call with (zoom, panX, panY) values
+   */
+  setViewportSyncCallback(callback: (zoom: number, panX: number, panY: number) => void): void {
+    this.viewportSyncCallback = callback;
+  }
+
+  /**
+   * W2.D6.6: Setup mousewheel zoom functionality
+   *
+   * Implements official Fabric.js pattern for zoom-to-cursor.
+   * Formula: zoom *= 0.999 ** deltaY
+   * Clamped: 0.01 <= zoom <= 20
+   */
+  setupMousewheelZoom(): void {
+    if (!this.canvas) {
+      throw new Error('Canvas not initialized');
+    }
+
+    this.canvas.on('mouse:wheel', (opt: any) => {
+      const delta = opt.e.deltaY;
+      let zoom = this.canvas!.getZoom();
+
+      // Apply zoom formula
+      zoom *= 0.999 ** delta;
+
+      // Clamp zoom to range
+      if (zoom > 20) zoom = 20;
+      if (zoom < 0.01) zoom = 0.01;
+
+      // Zoom to cursor position
+      this.canvas!.zoomToPoint(
+        { x: opt.e.offsetX || 0, y: opt.e.offsetY || 0 },
+        zoom
+      );
+
+      // Prevent default browser scroll
+      opt.e.preventDefault();
+      opt.e.stopPropagation();
+
+      // Sync viewport to Zustand
+      if (this.viewportSyncCallback) {
+        const viewport = this.getViewport();
+        this.viewportSyncCallback(viewport.zoom, viewport.panX, viewport.panY);
+      }
+    });
+  }
+
+  /**
+   * W2.D6.8: Setup spacebar + drag panning controls
+   *
+   * Pattern: Spacebar activates pan mode, mouse drag pans canvas
+   * - Spacebar key detection via document keydown/keyup
+   * - Pan mode disables canvas selection during pan
+   * - Mouse drag updates viewport via relativePan()
+   * - Syncs viewport to Zustand on mouse:up
+   */
+  setupSpacebarPan(): void {
+    if (!this.canvas) {
+      throw new Error('Canvas not initialized');
+    }
+
+    let isPanning = false;
+    let isSpacePressed = false;
+    let lastPosX = 0;
+    let lastPosY = 0;
+
+    // Spacebar keydown - enable pan mode
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === ' ' && !isSpacePressed) {
+        isSpacePressed = true;
+        if (this.canvas) {
+          this.canvas.selection = false; // Disable selection during pan
+        }
+      }
+    };
+
+    // Spacebar keyup - disable pan mode
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        isSpacePressed = false;
+        isPanning = false;
+        if (this.canvas) {
+          this.canvas.selection = true; // Re-enable selection
+        }
+      }
+    };
+
+    // Mouse down - start panning if spacebar held
+    this.canvas.on('mouse:down', (opt: any) => {
+      if (isSpacePressed && this.canvas) {
+        isPanning = true;
+        lastPosX = opt.e.clientX || 0;
+        lastPosY = opt.e.clientY || 0;
+      }
+    });
+
+    // Mouse move - pan viewport if panning active
+    this.canvas.on('mouse:move', (opt: any) => {
+      if (isPanning && this.canvas) {
+        const e = opt.e;
+        const currentX = e.clientX || 0;
+        const currentY = e.clientY || 0;
+
+        // Calculate delta from last position
+        const deltaX = currentX - lastPosX;
+        const deltaY = currentY - lastPosY;
+
+        // Update viewport using relativePan
+        const vpt = this.canvas.viewportTransform;
+        vpt[4] += deltaX;
+        vpt[5] += deltaY;
+
+        this.canvas.requestRenderAll();
+
+        // Update last position
+        lastPosX = currentX;
+        lastPosY = currentY;
+      }
+    });
+
+    // Mouse up - end panning and sync viewport
+    this.canvas.on('mouse:up', () => {
+      if (isPanning && this.canvas) {
+        isPanning = false;
+
+        // Sync viewport to Zustand
+        if (this.viewportSyncCallback) {
+          const viewport = this.getViewport();
+          this.viewportSyncCallback(viewport.zoom, viewport.panX, viewport.panY);
+        }
+      }
+    });
+
+    // Add event listeners to document
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+
+    // Store references for cleanup (attach to canvas instance)
+    (this.canvas as any).__spacebarHandlers = {
+      keydown: handleKeyDown,
+      keyup: handleKeyUp,
+    };
+  }
+
+  /**
+   * W2.D6.4: Get current viewport state from Fabric.js canvas
+   *
+   * Reads zoom and pan from viewportTransform matrix.
+   * viewportTransform is a 6-element array: [scaleX, skewY, skewX, scaleY, translateX, translateY]
+   *
+   * @returns Object with zoom, panX, panY values
+   */
+  getViewport(): { zoom: number; panX: number; panY: number } {
+    if (!this.canvas) {
+      throw new Error('Canvas not initialized');
+    }
+
+    const zoom = this.canvas.getZoom();
+    const vpt = this.canvas.viewportTransform;
+
+    return {
+      zoom,
+      panX: vpt[4],
+      panY: vpt[5],
+    };
+  }
+
+  /**
+   * W2.D6.4: Restore viewport state to Fabric.js canvas
+   *
+   * Applies zoom and pan using setZoom() and absolutePan().
+   * This is called during initialization to restore saved viewport.
+   *
+   * @param zoom - Zoom level to apply
+   * @param panX - Horizontal pan offset
+   * @param panY - Vertical pan offset
+   */
+  restoreViewport(zoom: number, panX: number, panY: number): void {
+    if (!this.canvas) {
+      throw new Error('Canvas not initialized');
+    }
+
+    // Apply zoom first
+    this.canvas.setZoom(zoom);
+
+    // Then apply pan using absolutePan
+    this.canvas.absolutePan({ x: panX, y: panY });
+
+    // Render the canvas with new viewport
+    this.canvas.renderAll();
+  }
+
   /**
    * Dispose of the canvas and clean up resources
    */
   dispose(): void {
     if (this.canvas) {
+      // Clean up spacebar pan event listeners
+      const handlers = (this.canvas as any).__spacebarHandlers;
+      if (handlers) {
+        document.removeEventListener('keydown', handlers.keydown);
+        document.removeEventListener('keyup', handlers.keyup);
+      }
+
       this.canvas.dispose();
       this.canvas = null;
     }

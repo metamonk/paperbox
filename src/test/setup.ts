@@ -17,6 +17,8 @@ vi.mock('fabric', () => {
     private objects: any[] = [];
     private activeObject: any = undefined;
     private eventHandlers: Map<string, Function[]> = new Map();
+    private _zoom: number = 1;
+    public viewportTransform: number[] = [1, 0, 0, 1, 0, 0];
 
     constructor(_element: HTMLCanvasElement | string, config: any = {}) {
       this._width = config.width || 800;
@@ -71,6 +73,29 @@ vi.mock('fabric', () => {
       if (handlers) {
         handlers.forEach(handler => handler(eventData));
       }
+    }
+
+    // Viewport methods (W2.D6.6)
+    getZoom() { return this._zoom; }
+    setZoom(zoom: number) {
+      this._zoom = zoom;
+      this.viewportTransform[0] = zoom;
+      this.viewportTransform[3] = zoom;
+    }
+    zoomToPoint(point: { x: number; y: number }, zoom: number) {
+      const beforeX = point.x;
+      const beforeY = point.y;
+      this.setZoom(zoom);
+      const afterX = point.x;
+      const afterY = point.y;
+      const deltaX = afterX - beforeX;
+      const deltaY = afterY - beforeY;
+      this.viewportTransform[4] -= deltaX;
+      this.viewportTransform[5] -= deltaY;
+    }
+    absolutePan(point: { x: number; y: number }) {
+      this.viewportTransform[4] = point.x;
+      this.viewportTransform[5] = point.y;
     }
   }
 

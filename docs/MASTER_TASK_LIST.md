@@ -675,32 +675,33 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - Topic: viewportTransform matrix, setViewportTransform, getZoom, absolutePan
   - Focus: Pan/zoom patterns, transform matrix handling
 
-- [ ] **W2.D6.2**: Create viewport management structure
+- [x] **W2.D6.2**: Create viewport management structure ✅
   - Update `src/stores/slices/canvasStore.ts` with viewport state
   - Add viewport property: `{ zoom: number, panX: number, panY: number }`
   - Add syncViewport() and restoreViewport() actions
+  - **Result**: ViewportState interface added, viewport state initialized with defaults
 
-- [ ] **W2.D6.3**: Write tests for viewport state management [RED]
+- [x] **W2.D6.3**: Write tests for viewport state management [RED] ✅
   - Test: syncViewport() reads from Fabric.js viewportTransform
   - Test: restoreViewport() applies zoom and pan to Fabric.js
   - Test: Viewport persistence via localStorage
-  - Expect: Tests fail
+  - **Result**: 18 tests created in canvasSlice.viewport.test.ts, all failing as expected
 
-- [ ] **W2.D6.4**: Implement viewport synchronization [GREEN]
+- [x] **W2.D6.4**: Implement viewport synchronization [GREEN] ✅
   - Implement syncViewport() reading viewportTransform[4], viewportTransform[5], and getZoom()
   - Implement restoreViewport() using setZoom() and absolutePan()
   - Event-driven sync on mouse:up (NOT mouse:move)
-  - Expect: Tests pass
+  - **Result**: getViewport() and restoreViewport() methods implemented, all 18 tests pass
 
 ### Day 6: Afternoon Block (4 hours)
 
-- [ ] **W2.D6.5**: Write tests for mousewheel zoom [RED]
+- [x] **W2.D6.5**: Write tests for mousewheel zoom [RED] ✅
   - Test: Mousewheel delta changes zoom
   - Test: Zoom clamped to 0.01-20 range
   - Test: Zoom centered on cursor position
-  - Expect: Tests fail
+  - **Result**: 15 tests created in FabricCanvasManager.zoom.test.ts, all failing as expected
 
-- [ ] **W2.D6.6**: Implement mousewheel zoom (Fabric.js official pattern) [GREEN]
+- [x] **W2.D6.6**: Implement mousewheel zoom (Fabric.js official pattern) [GREEN] ✅
   ```javascript
   canvas.on('mouse:wheel', function(opt) {
     var delta = opt.e.deltaY;
@@ -713,19 +714,19 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
     opt.e.stopPropagation();
   });
   ```
-  - Expect: Tests pass
+  - **Result**: setupMousewheelZoom() implemented with official pattern, all 15 tests pass
 
-- [ ] **W2.D6.7**: Write tests for spacebar + drag panning [RED]
+- [x] **W2.D6.7**: Write tests for spacebar + drag panning [RED] ✅
   - Test: Spacebar key enables pan mode
   - Test: Mouse drag updates viewport position
   - Test: Pan syncs to Zustand on mouse:up
-  - Expect: Tests fail
+  - **Result**: 16 tests created in FabricCanvasManager.pan.test.ts, all failing as expected
 
-- [ ] **W2.D6.8**: Implement pan controls [GREEN]
+- [x] **W2.D6.8**: Implement pan controls [GREEN] ✅
   - Implement spacebar detection in mouse:down
   - Implement relativePan() on mouse:move during pan mode
   - Call syncViewport() on mouse:up
-  - Expect: Tests pass
+  - **Result**: setupSpacebarPan() implemented with keydown/keyup handlers, all 16 tests pass
 
 - [ ] **W2.D6.9**: Commit Day 6 work [COMMIT]
   - Run: `pnpm test`

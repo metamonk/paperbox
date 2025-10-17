@@ -70,6 +70,16 @@ function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
 }
 
 /**
+ * Viewport state for infinite canvas
+ * W2.D6.2: Hybrid approach - Fabric.js primary + Zustand snapshots
+ */
+export interface ViewportState {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
+/**
  * Canvas slice state interface
  */
 export interface CanvasSlice {
@@ -78,6 +88,7 @@ export interface CanvasSlice {
   loading: boolean;
   error: string | null;
   realtimeChannel: RealtimeChannel | null;
+  viewport: ViewportState;
 
   // Lifecycle
   initialize: (userId: string) => Promise<void>;
@@ -91,6 +102,10 @@ export interface CanvasSlice {
   // Realtime Subscriptions (W1.D4.7-4.9)
   setupRealtimeSubscription: (userId: string) => void;
   cleanupRealtimeSubscription: () => void;
+
+  // Viewport Management (W2.D6.2)
+  syncViewport: (zoom: number, panX: number, panY: number) => void;
+  restoreViewport: () => ViewportState;
 
   // Internal mutations (for SyncManager)
   _addObject: (object: CanvasObject) => void;
@@ -123,6 +138,7 @@ export const createCanvasSlice: StateCreator<
   loading: false,
   error: null,
   realtimeChannel: null,
+  viewport: { zoom: 1, panX: 0, panY: 0 }, // W2.D6.2: Default viewport state
 
   // ─── Lifecycle ───
 
@@ -521,6 +537,33 @@ export const createCanvasSlice: StateCreator<
       channel.unsubscribe();
       set({ realtimeChannel: null }, undefined, 'canvas/cleanupRealtime');
     }
+  },
+
+  // ─── Viewport Management (W2.D6.2) ───
+
+  /**
+   * W2.D6.2: Sync viewport state from Fabric.js
+   *
+   * Called by FabricCanvasManager after pan/zoom events
+   * Reads from viewportTransform[4], [5] and getZoom()
+   */
+  syncViewport: (zoom: number, panX: number, panY: number) =>
+    set(
+      {
+        viewport: { zoom, panX, panY },
+      },
+      undefined,
+      'canvas/syncViewport',
+    ),
+
+  /**
+   * W2.D6.2: Get viewport state for restoration
+   *
+   * Called by FabricCanvasManager during initialization
+   * Returns current viewport state to apply to Fabric.js
+   */
+  restoreViewport: () => {
+    return get().viewport;
   },
 
   // ─── Utility selectors ───
