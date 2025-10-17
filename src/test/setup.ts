@@ -15,6 +15,7 @@ vi.mock('fabric', () => {
     public enableRetinaScaling: boolean;
     public renderOnAddRemove: boolean;
     private objects: any[] = [];
+    private activeObject: any = undefined;
     private eventHandlers: Map<string, Function[]> = new Map();
 
     constructor(_element: HTMLCanvasElement | string, config: any = {}) {
@@ -41,9 +42,12 @@ vi.mock('fabric', () => {
     }
     getObjects() { return this.objects; }
     getActiveObjects() { return []; }
-    discardActiveObject() {}
+    getActiveObject() { return this.activeObject; }
+    setActiveObject(obj: any) { this.activeObject = obj; }
+    discardActiveObject() { this.activeObject = undefined; }
+    renderAll() {}
     requestRenderAll() {}
-    dispose() {}
+    dispose() { this.activeObject = undefined; }
 
     on(event: string, handler: Function) {
       if (!this.eventHandlers.has(event)) {

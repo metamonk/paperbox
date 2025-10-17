@@ -14,7 +14,7 @@
  */
 
 import { Canvas as FabricCanvas, FabricObject, Rect, Circle, Textbox } from 'fabric';
-import type { CanvasObject } from '@/types/canvas';
+import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
 
 /**
  * Configuration options for FabricCanvasManager
@@ -249,6 +249,253 @@ export class FabricCanvasManager {
     }
 
     return fabricObject;
+  }
+
+  /**
+   * Converts a Fabric.js object back to our database CanvasObject format
+   * This is the reverse operation of createFabricObject()
+   *
+   * NOTE: This method is primarily used for:
+   * 1. Serializing modified objects back to database format
+   * 2. Testing round-trip serialization
+   * 3. State synchronization with Zustand
+   *
+   * @param fabricObject - The Fabric.js object to serialize
+   * @returns CanvasObject suitable for database storage, or null if input is null
+   */
+  toCanvasObject(fabricObject: FabricObject | null): CanvasObject | null {
+    if (!fabricObject || !fabricObject.data) {
+      return null;
+    }
+
+    // Extract stored database type and ID from data property
+    // These were set when the object was created via createFabricObject()
+    const dbType = fabricObject.data.type as ShapeType;
+    const dbId = fabricObject.data.id as string;
+
+    // Extract common properties from Fabric.js object
+    // Maps Fabric.js property names to our database schema
+    const baseProperties = {
+      id: dbId,
+      x: fabricObject.left || 0,
+      y: fabricObject.top || 0,
+      width: fabricObject.width || 0,
+      height: fabricObject.height || 0,
+      rotation: fabricObject.angle || 0,
+      group_id: null, // TODO: Implement group support in W1.D3
+      z_index: 1, // TODO: Calculate from canvas.getObjects() index in W1.D3
+      fill: fabricObject.fill as string,
+      stroke: (fabricObject.stroke as string) || null,
+      stroke_width: fabricObject.strokeWidth || null,
+      opacity: fabricObject.opacity ?? 1,
+      style_properties: {}, // TODO: Implement style properties in W2.D1
+      metadata: {}, // TODO: Implement metadata in W2.D1
+      // Audit fields: These should ideally be preserved from original object
+      // For now, using fresh timestamps (will be overwritten by Zustand layer)
+      created_by: 'system',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      locked_by: null,
+      lock_acquired_at: null,
+    };
+
+    // Create type-specific CanvasObject based on stored type
+    switch (dbType) {
+      case 'rectangle': {
+        const rect = fabricObject as any; // Cast to access rx/ry
+        return {
+          ...baseProperties,
+          type: 'rectangle',
+          type_properties: {
+            corner_radius: rect.rx || 0,
+          },
+        } as RectangleObject;
+      }
+
+      case 'circle': {
+        const circle = fabricObject as any; // Cast to access radius
+        return {
+          ...baseProperties,
+          type: 'circle',
+          type_properties: {
+            radius: circle.radius || 0,
+          },
+        } as CircleObject;
+      }
+
+      case 'text': {
+        const textbox = fabricObject as any; // Cast to access text properties
+        return {
+          ...baseProperties,
+          type: 'text',
+          type_properties: {
+            text_content: textbox.text || '',
+            font_size: textbox.fontSize || 16,
+            font_family: textbox.fontFamily || 'Arial',
+            font_weight: textbox.fontWeight || 'normal',
+            font_style: textbox.fontStyle || 'normal',
+            text_align: textbox.textAlign || 'left',
+          },
+        } as TextObject;
+      }
+
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Add a CanvasObject to the canvas
+   *
+   * Converts a database CanvasObject to a Fabric.js object and adds it to the canvas.
+   * The Fabric.js object is automatically rendered on the canvas.
+   *
+   * @param canvasObject - Database CanvasObject to add
+   * @returns The created Fabric.js object, or null if canvas not initialized or object creation failed
+   */
+  addObject(canvasObject: CanvasObject): FabricObject | null {
+    if (!this.canvas) {
+      return null;
+    }
+
+    // Convert database object to Fabric.js object
+    const fabricObject = this.createFabricObject(canvasObject);
+
+    if (!fabricObject) {
+      return null;
+    }
+
+    // Add to canvas and render
+    this.canvas.add(fabricObject);
+
+    return fabricObject;
+  }
+
+  /**
+   * Remove an object from the canvas by its database ID
+   *
+   * Searches for an object with the specified database ID and removes it from the canvas.
+   *
+   * @param id - Database ID of the object to remove
+   * @returns true if object was found and removed, false otherwise
+   */
+  removeObject(id: string): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    // Find the object by ID
+    const fabricObject = this.findObjectById(id);
+
+    if (!fabricObject) {
+      return false;
+    }
+
+    // Remove from canvas
+    this.canvas.remove(fabricObject);
+
+    return true;
+  }
+
+  /**
+   * Find a Fabric.js object on the canvas by its database ID
+   *
+   * Searches all objects on the canvas for one with matching database ID
+   * stored in the data property.
+   *
+   * @param id - Database ID to search for
+   * @returns The Fabric.js object if found, null otherwise
+   */
+  findObjectById(id: string): FabricObject | null {
+    if (!this.canvas) {
+      return null;
+    }
+
+    // Search through all canvas objects
+    const objects = this.canvas.getObjects();
+
+    for (const obj of objects) {
+      if (obj.data?.id === id) {
+        return obj;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Select an object on the canvas by its database ID
+   *
+   * Sets the specified object as the active selection on the canvas.
+   *
+   * @param id - Database ID of the object to select
+   * @returns true if object was found and selected, false otherwise
+   */
+  selectObject(id: string): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    // Find the object by ID
+    const fabricObject = this.findObjectById(id);
+
+    if (!fabricObject) {
+      return false;
+    }
+
+    // Set as active object (select it)
+    this.canvas.setActiveObject(fabricObject);
+    this.canvas.renderAll();
+
+    return true;
+  }
+
+  /**
+   * Deselect all selected objects on the canvas
+   *
+   * Clears the current selection, leaving no objects selected.
+   */
+  deselectAll(): void {
+    if (!this.canvas) {
+      return;
+    }
+
+    this.canvas.discardActiveObject();
+    this.canvas.renderAll();
+  }
+
+  /**
+   * Get the database IDs of all currently selected objects
+   *
+   * Returns an array of database IDs for objects in the current selection.
+   * For single selection, returns array with one ID.
+   * For multiple selection, returns array with all selected IDs.
+   *
+   * @returns Array of database IDs of selected objects, empty array if none selected
+   */
+  getSelectedObjects(): string[] {
+    if (!this.canvas) {
+      return [];
+    }
+
+    const activeObject = this.canvas.getActiveObject();
+
+    if (!activeObject) {
+      return [];
+    }
+
+    // Check if it's a multi-selection (ActiveSelection)
+    if (activeObject.type === 'activeSelection') {
+      // Get all objects in the selection
+      const objects = (activeObject as any)._objects || [];
+      return objects
+        .map((obj: FabricObject) => obj.data?.id)
+        .filter((id: string | undefined) => id !== undefined) as string[];
+    }
+
+    // Single object selected
+    const id = activeObject.data?.id;
+    return id ? [id] : [];
   }
 
   /**
