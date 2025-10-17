@@ -13,7 +13,7 @@
  * @see docs/PHASE_2_PRD.md for architecture details
  */
 
-import { Canvas as FabricCanvas, FabricObject } from 'fabric';
+import { Canvas as FabricCanvas, FabricObject, Rect, Circle, Textbox } from 'fabric';
 import type { CanvasObject } from '@/types/canvas';
 
 /**
@@ -181,9 +181,74 @@ export class FabricCanvasManager {
    * @returns Fabric.js object or null if type is unknown
    */
   createFabricObject(canvasObject: CanvasObject): FabricObject | null {
-    // Implementation will be added in TDD cycle
-    // This is a placeholder for the test-driven implementation
-    return null;
+    let fabricObject: FabricObject | null = null;
+
+    // Common properties for all objects
+    const commonProps = {
+      left: canvasObject.x,
+      top: canvasObject.y,
+      angle: canvasObject.rotation,
+      fill: canvasObject.fill,
+      stroke: canvasObject.stroke || undefined,
+      strokeWidth: canvasObject.stroke_width || undefined,
+      opacity: canvasObject.opacity,
+      data: {
+        id: canvasObject.id,
+        type: canvasObject.type,
+      },
+    };
+
+    // Create type-specific Fabric.js object
+    switch (canvasObject.type) {
+      case 'rectangle': {
+        const cornerRadius = canvasObject.type_properties.corner_radius || 0;
+        fabricObject = new Rect({
+          ...commonProps,
+          width: canvasObject.width,
+          height: canvasObject.height,
+          rx: cornerRadius,
+          ry: cornerRadius,
+        });
+        break;
+      }
+
+      case 'circle': {
+        const radius = canvasObject.type_properties.radius;
+        fabricObject = new Circle({
+          ...commonProps,
+          radius,
+        });
+        break;
+      }
+
+      case 'text': {
+        const {
+          text_content,
+          font_size,
+          font_family,
+          font_weight,
+          font_style,
+          text_align,
+        } = canvasObject.type_properties;
+
+        fabricObject = new Textbox(text_content, {
+          ...commonProps,
+          width: canvasObject.width,
+          fontSize: font_size,
+          fontFamily: font_family || 'Arial',
+          fontWeight: font_weight || 'normal',
+          fontStyle: font_style || 'normal',
+          textAlign: text_align || 'left',
+        });
+        break;
+      }
+
+      default:
+        // Unknown type, return null
+        return null;
+    }
+
+    return fabricObject;
   }
 
   /**

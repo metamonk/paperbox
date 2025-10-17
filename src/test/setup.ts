@@ -71,6 +71,7 @@ vi.mock('fabric', () => {
   }
 
   class MockRect {
+    public type = 'rect';
     public left: number;
     public top: number;
     public width: number;
@@ -81,6 +82,8 @@ vi.mock('fabric', () => {
     public angle?: number;
     public opacity?: number;
     public data?: any;
+    public rx?: number;
+    public ry?: number;
 
     constructor(config: any = {}) {
       this.left = config.left || 0;
@@ -93,10 +96,13 @@ vi.mock('fabric', () => {
       this.angle = config.angle;
       this.opacity = config.opacity;
       this.data = config.data;
+      this.rx = config.rx;
+      this.ry = config.ry;
     }
   }
 
   class MockCircle {
+    public type = 'circle';
     public left: number;
     public top: number;
     public radius: number;
@@ -120,11 +126,17 @@ vi.mock('fabric', () => {
     }
   }
 
-  class MockText {
+  class MockTextbox {
+    public type = 'textbox';
     public left: number;
     public top: number;
+    public width: number;
     public text: string;
     public fontSize: number;
+    public fontFamily: string;
+    public fontWeight: string;
+    public fontStyle: string;
+    public textAlign: string;
     public fill: string;
     public stroke?: string;
     public strokeWidth?: number;
@@ -136,7 +148,12 @@ vi.mock('fabric', () => {
       this.text = text;
       this.left = config.left || 0;
       this.top = config.top || 0;
+      this.width = config.width || 200;
       this.fontSize = config.fontSize || 16;
+      this.fontFamily = config.fontFamily || 'Arial';
+      this.fontWeight = config.fontWeight || 'normal';
+      this.fontStyle = config.fontStyle || 'normal';
+      this.textAlign = config.textAlign || 'left';
       this.fill = config.fill || '#000000';
       this.stroke = config.stroke;
       this.strokeWidth = config.strokeWidth;
@@ -150,7 +167,7 @@ vi.mock('fabric', () => {
     Canvas: MockCanvas,
     Rect: MockRect,
     Circle: MockCircle,
-    Text: MockText,
+    Textbox: MockTextbox,
   };
 });
 

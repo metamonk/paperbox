@@ -223,10 +223,236 @@ describe('FabricCanvasManager - Event Listeners', () => {
       expect(canvas).not.toBeNull();
 
       // Act
-      canvas!.fire('selection:cleared', {});
+      canvas!.fire('selection:cleared', { deselected: [] });
 
       // Assert
       expect(onSelectionCleared).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe('FabricCanvasManager - Object Factory', () => {
+  let manager: FabricCanvasManager;
+  let canvasElement: HTMLCanvasElement;
+
+  beforeEach(() => {
+    canvasElement = document.createElement('canvas');
+    canvasElement.id = 'test-canvas-factory';
+    document.body.appendChild(canvasElement);
+    manager = new FabricCanvasManager();
+    manager.initialize(canvasElement);
+  });
+
+  afterEach(() => {
+    manager.dispose();
+    document.body.removeChild(canvasElement);
+  });
+
+  describe('createFabricObject()', () => {
+    it('should create fabric.Rect from rectangle CanvasObject', () => {
+      // Arrange
+      const rectangleObject: import('@/types/canvas').RectangleObject = {
+        id: 'rect-1',
+        type: 'rectangle',
+        x: 100,
+        y: 150,
+        width: 200,
+        height: 100,
+        rotation: 0,
+        group_id: null,
+        z_index: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
+        opacity: 1,
+        type_properties: {
+          corner_radius: 10,
+        },
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-1',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      // Act
+      const fabricObject = manager.createFabricObject(rectangleObject);
+
+      // Assert
+      expect(fabricObject).not.toBeNull();
+      expect(fabricObject?.type).toBe('rect');
+      expect(fabricObject?.left).toBe(100);
+      expect(fabricObject?.top).toBe(150);
+      expect(fabricObject?.width).toBe(200);
+      expect(fabricObject?.height).toBe(100);
+      expect(fabricObject?.fill).toBe('#ff0000');
+      expect(fabricObject?.stroke).toBe('#000000');
+      expect(fabricObject?.strokeWidth).toBe(2);
+      expect(fabricObject?.opacity).toBe(1);
+      expect((fabricObject as any)?.rx).toBe(10); // corner radius
+      expect((fabricObject as any)?.ry).toBe(10);
+    });
+
+    it('should create fabric.Circle from circle CanvasObject', () => {
+      // Arrange
+      const circleObject: import('@/types/canvas').CircleObject = {
+        id: 'circle-1',
+        type: 'circle',
+        x: 250,
+        y: 200,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        group_id: null,
+        z_index: 2,
+        fill: '#00ff00',
+        stroke: null,
+        stroke_width: null,
+        opacity: 0.8,
+        type_properties: {
+          radius: 50,
+        },
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-1',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      // Act
+      const fabricObject = manager.createFabricObject(circleObject);
+
+      // Assert
+      expect(fabricObject).not.toBeNull();
+      expect(fabricObject?.type).toBe('circle');
+      expect(fabricObject?.left).toBe(250);
+      expect(fabricObject?.top).toBe(200);
+      expect((fabricObject as any)?.radius).toBe(50);
+      expect(fabricObject?.fill).toBe('#00ff00');
+      expect(fabricObject?.opacity).toBe(0.8);
+    });
+
+    it('should create fabric.Textbox from text CanvasObject', () => {
+      // Arrange
+      const textObject: import('@/types/canvas').TextObject = {
+        id: 'text-1',
+        type: 'text',
+        x: 300,
+        y: 100,
+        width: 150,
+        height: 50,
+        rotation: 0,
+        group_id: null,
+        z_index: 3,
+        fill: '#0000ff',
+        stroke: null,
+        stroke_width: null,
+        opacity: 1,
+        type_properties: {
+          text_content: 'Hello World',
+          font_size: 24,
+          font_family: 'Arial',
+          font_weight: 'bold',
+          text_align: 'center',
+        },
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-1',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      // Act
+      const fabricObject = manager.createFabricObject(textObject);
+
+      // Assert
+      expect(fabricObject).not.toBeNull();
+      expect(fabricObject?.type).toBe('textbox');
+      expect(fabricObject?.left).toBe(300);
+      expect(fabricObject?.top).toBe(100);
+      expect((fabricObject as any)?.text).toBe('Hello World');
+      expect((fabricObject as any)?.fontSize).toBe(24);
+      expect((fabricObject as any)?.fontFamily).toBe('Arial');
+      expect((fabricObject as any)?.fontWeight).toBe('bold');
+      expect((fabricObject as any)?.textAlign).toBe('center');
+      expect(fabricObject?.fill).toBe('#0000ff');
+    });
+
+    it('should store database ID in fabric object data property', () => {
+      // Arrange
+      const rectangleObject: import('@/types/canvas').RectangleObject = {
+        id: 'rect-with-id',
+        type: 'rectangle',
+        x: 0,
+        y: 0,
+        width: 50,
+        height: 50,
+        rotation: 0,
+        group_id: null,
+        z_index: 1,
+        fill: '#ffffff',
+        stroke: null,
+        stroke_width: null,
+        opacity: 1,
+        type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-1',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      // Act
+      const fabricObject = manager.createFabricObject(rectangleObject);
+
+      // Assert
+      expect(fabricObject).not.toBeNull();
+      expect((fabricObject as any)?.data).toEqual({
+        id: 'rect-with-id',
+        type: 'rectangle',
+      });
+    });
+
+    it('should apply rotation to fabric object', () => {
+      // Arrange
+      const rectangleObject: import('@/types/canvas').RectangleObject = {
+        id: 'rect-rotated',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 100,
+        height: 100,
+        rotation: 45,
+        group_id: null,
+        z_index: 1,
+        fill: '#ffffff',
+        stroke: null,
+        stroke_width: null,
+        opacity: 1,
+        type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-1',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      // Act
+      const fabricObject = manager.createFabricObject(rectangleObject);
+
+      // Assert
+      expect(fabricObject).not.toBeNull();
+      expect(fabricObject?.angle).toBe(45);
     });
   });
 });
