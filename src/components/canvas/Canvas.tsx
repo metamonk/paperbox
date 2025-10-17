@@ -138,7 +138,11 @@ export function Canvas() {
         {sidebarOpen && (
           <div
             className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={() => setSidebarOpen(false)}
+            onClick={() => {
+              // Toggle based on current sidebar content to close
+              if (sidebarContent === 'tools') handleToggleTools();
+              else handleToggleUsers();
+            }}
             aria-hidden="true"
           />
         )}
@@ -150,7 +154,9 @@ export function Canvas() {
             // On mobile, close the sidebar when backdrop is clicked
             // Desktop behavior handled by useSidebarState
             if (window.innerWidth < 768) {
-              handleToggleTools(); // This will close the sidebar
+              // Toggle based on current sidebar content to close
+              if (sidebarContent === 'tools') handleToggleTools();
+              else handleToggleUsers();
             }
           }}
         >
