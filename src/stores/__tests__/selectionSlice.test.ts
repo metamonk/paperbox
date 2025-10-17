@@ -11,9 +11,9 @@ import type { CanvasObject } from '@/types/canvas';
 
 describe('selectionSlice - Selection State Management', () => {
   beforeEach(() => {
-    // Reset store before each test
+    // Reset store before each test using W1.D4 internal mutations
     const store = usePaperboxStore.getState();
-    store.clearAllObjects();
+    store._setObjects({}); // Use internal mutation instead of clearAllObjects
     store.deselectAll();
   });
 
@@ -306,7 +306,7 @@ describe('selectionSlice - Selection State Management', () => {
         type_properties: {},
       };
 
-      usePaperboxStore.getState().addObject(rect);
+      usePaperboxStore.getState()._addObject(rect);
       usePaperboxStore.getState().selectObject('rect-1');
 
       const state = usePaperboxStore.getState();
@@ -330,9 +330,9 @@ describe('selectionSlice - Selection State Management', () => {
         type_properties: {},
       };
 
-      usePaperboxStore.getState().addObject(rect);
+      usePaperboxStore.getState()._addObject(rect);
       usePaperboxStore.getState().selectObject('rect-1');
-      usePaperboxStore.getState().removeObject('rect-1');
+      usePaperboxStore.getState()._removeObject('rect-1');
 
       const { selectedIds } = usePaperboxStore.getState();
       // Selection state should still contain the ID
@@ -393,9 +393,9 @@ describe('selectionSlice - Selection State Management', () => {
       };
 
       const store = usePaperboxStore.getState();
-      store.addObject(rect);
-      store.addObject(circle);
-      store.addObject(text);
+      store._addObject(rect);
+      store._addObject(circle);
+      store._addObject(text);
       store.selectObjects(['rect-1', 'circle-1', 'text-1']);
 
       expect(store.getSelectedCount()).toBe(3);

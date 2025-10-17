@@ -1,19 +1,44 @@
 /**
- * Canvas Slice Tests
+ * Canvas Slice Tests (W1.D4-aligned)
  *
- * TDD [RED→GREEN] for canvasSlice
- * Tests canvas object CRUD operations and state management
+ * Tests for Supabase-integrated canvasSlice with:
+ * - Async CRUD operations with optimistic updates
+ * - Internal mutation methods for SyncManager
+ * - Error handling and rollback
+ * - Lifecycle management
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { usePaperboxStore } from '../index';
 import type { CanvasObject } from '@/types/canvas';
+import { supabase } from '@/lib/supabase';
 
-describe('canvasSlice - Canvas Object Management', () => {
+// Mock Supabase client
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => Promise.resolve({ data: [], error: null })),
+      })),
+      insert: vi.fn(() => Promise.resolve({ error: null })),
+      update: vi.fn(() => ({
+        eq: vi.fn(() => Promise.resolve({ error: null })),
+      })),
+      delete: vi.fn(() => ({
+        in: vi.fn(() => Promise.resolve({ error: null })),
+      })),
+    })),
+  },
+}));
+
+describe('canvasSlice - W1.D4 Supabase Integration', () => {
   beforeEach(() => {
-    // Reset store before each test
+    // Reset store before each test using internal mutation
     const store = usePaperboxStore.getState();
-    store.clearAllObjects();
+    store._setObjects({});
+    store._setLoading(false);
+    store._setError(null);
+    vi.clearAllMocks();
   });
 
   describe('Initial State', () => {
@@ -24,13 +49,166 @@ describe('canvasSlice - Canvas Object Management', () => {
       expect(loading).toBe(false);
       expect(error).toBeNull();
     });
+
+    it('should have all required methods', () => {
+      const store = usePaperboxStore.getState();
+
+      // Async CRUD operations
+      expect(typeof store.initialize).toBe('function');
+      expect(typeof store.createObject).toBe('function');
+      expect(typeof store.updateObject).toBe('function');
+      expect(typeof store.deleteObjects).toBe('function');
+      expect(typeof store.cleanup).toBe('function');
+
+      // Internal mutations
+      expect(typeof store._addObject).toBe('function');
+      expect(typeof store._updateObject).toBe('function');
+      expect(typeof store._removeObject).toBe('function');
+      expect(typeof store._removeObjects).toBe('function');
+      expect(typeof store._setObjects).toBe('function');
+
+      // Utilities
+      expect(typeof store.getObjectById).toBe('function');
+      expect(typeof store.getAllObjects).toBe('function');
+    });
   });
 
-  describe('addObject', () => {
-    it('should add a rectangle object', () => {
-      const { addObject, getObjectById } = usePaperboxStore.getState();
+  describe('initialize() - Lifecycle', () => {
+    it('should set loading state during initialization', async () => {
+      const { initialize } = usePaperboxStore.getState();
 
-      const rectangle: CanvasObject = {
+      const initPromise = initialize('user-123');
+
+      // Check loading state is true during async operation
+      expect(usePaperboxStore.getState().loading).toBe(true);
+
+      await initPromise;
+
+      // Check loading state is false after completion
+      expect(usePaperboxStore.getState().loading).toBe(false);
+    });
+
+    it('should load objects from Supabase on initialize', async () => {
+      // Mock Supabase response
+      const mockObjects = [
+        {
+          id: 'rect-1',
+          type: 'rectangle',
+          x: 100,
+          y: 100,
+          width: 200,
+          height: 150,
+          rotation: 0,
+          opacity: 1,
+          fill: '#ff0000',
+          stroke: '#000000',
+          stroke_width: 2,
+          type_properties: {},
+          style_properties: {},
+          metadata: {},
+          created_by: 'user-123',
+          created_at: '2025-01-01T00:00:00Z',
+          updated_at: '2025-01-01T00:00:00Z',
+          group_id: null,
+          z_index: 0,
+          locked_by: null,
+          lock_acquired_at: null,
+        },
+      ];
+
+      vi.mocked(supabase.from).mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => Promise.resolve({ data: mockObjects, error: null })),
+        })),
+      } as any);
+
+      const { initialize, getAllObjects } = usePaperboxStore.getState();
+
+      await initialize('user-123');
+
+      const objects = getAllObjects();
+      expect(objects).toHaveLength(1);
+      expect(objects[0].id).toBe('rect-1');
+      expect(objects[0].type).toBe('rectangle');
+    });
+
+    it('should handle initialization error', async () => {
+      const mockError = new Error('Database connection failed');
+
+      vi.mocked(supabase.from).mockReturnValueOnce({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => Promise.resolve({ data: null, error: mockError })),
+        })),
+      } as any);
+
+      const { initialize } = usePaperboxStore.getState();
+
+      await initialize('user-123');
+
+      const { error, loading } = usePaperboxStore.getState();
+      expect(loading).toBe(false);
+      expect(error).toContain('Database connection failed');
+    });
+  });
+
+  describe('createObject() - Async CRUD', () => {
+    it('should create object with optimistic update', async () => {
+      const { createObject, getObjectById } = usePaperboxStore.getState();
+
+      const newObject: Partial<CanvasObject> = {
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
+        fill: '#ff0000',
+      };
+
+      const createdId = await createObject(newObject, 'user-123');
+
+      // Check object exists in store
+      const retrieved = getObjectById(createdId);
+      expect(retrieved).toBeDefined();
+      expect(retrieved?.type).toBe('rectangle');
+      expect(retrieved?.x).toBe(100);
+      expect(retrieved?.fill).toBe('#ff0000');
+
+      // Verify Supabase insert was called
+      expect(supabase.from).toHaveBeenCalledWith('canvas_objects');
+    });
+
+    it('should rollback on database error', async () => {
+      const mockError = new Error('Insert failed');
+
+      vi.mocked(supabase.from).mockReturnValueOnce({
+        insert: vi.fn(() => Promise.resolve({ error: mockError })),
+      } as any);
+
+      const { createObject, getAllObjects } = usePaperboxStore.getState();
+
+      const newObject: Partial<CanvasObject> = {
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
+      };
+
+      await expect(createObject(newObject, 'user-123')).rejects.toThrow(
+        'Insert failed',
+      );
+
+      // Verify rollback - object should not exist
+      expect(getAllObjects()).toHaveLength(0);
+    });
+  });
+
+  describe('updateObject() - Async CRUD', () => {
+    it('should update object with optimistic update', async () => {
+      const { _addObject, updateObject, getObjectById } =
+        usePaperboxStore.getState();
+
+      const initialObject: CanvasObject = {
         id: 'rect-1',
         type: 'rectangle',
         x: 100,
@@ -39,569 +217,436 @@ describe('canvasSlice - Canvas Object Management', () => {
         height: 150,
         rotation: 0,
         opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
+        fill: '#ff0000',
+        stroke: '#000000',
         stroke_width: 2,
         type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
       };
 
-      addObject(rectangle);
+      _addObject(initialObject);
+
+      await updateObject('rect-1', { x: 300, y: 400 });
+
+      const updated = getObjectById('rect-1');
+      expect(updated?.x).toBe(300);
+      expect(updated?.y).toBe(400);
+      expect(updated?.fill).toBe('#ff0000'); // Preserved
+
+      // Verify Supabase update was called
+      expect(supabase.from).toHaveBeenCalledWith('canvas_objects');
+    });
+
+    it('should rollback update on database error', async () => {
+      const mockError = new Error('Update failed');
+
+      const { _addObject, updateObject, getObjectById } =
+        usePaperboxStore.getState();
+
+      const initialObject: CanvasObject = {
+        id: 'rect-1',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
+        rotation: 0,
+        opacity: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
+        type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      _addObject(initialObject);
+
+      vi.mocked(supabase.from).mockReturnValueOnce({
+        update: vi.fn(() => ({
+          eq: vi.fn(() => Promise.resolve({ error: mockError })),
+        })),
+      } as any);
+
+      await expect(updateObject('rect-1', { x: 300 })).rejects.toThrow(
+        'Update failed',
+      );
+
+      // Verify rollback - x should still be 100
+      const retrieved = getObjectById('rect-1');
+      expect(retrieved?.x).toBe(100);
+    });
+
+    it('should throw error for non-existent object', async () => {
+      const { updateObject } = usePaperboxStore.getState();
+
+      await expect(
+        updateObject('nonexistent', { x: 100 }),
+      ).rejects.toThrow('Object nonexistent not found');
+    });
+  });
+
+  describe('deleteObjects() - Async CRUD', () => {
+    it('should delete objects with optimistic update', async () => {
+      const { _addObject, deleteObjects, getAllObjects } =
+        usePaperboxStore.getState();
+
+      const obj1: CanvasObject = {
+        id: 'rect-1',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
+        rotation: 0,
+        opacity: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
+        type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      const obj2: CanvasObject = {
+        ...obj1,
+        id: 'circle-1',
+        type: 'circle',
+      };
+
+      _addObject(obj1);
+      _addObject(obj2);
+
+      expect(getAllObjects()).toHaveLength(2);
+
+      await deleteObjects(['rect-1']);
+
+      expect(getAllObjects()).toHaveLength(1);
+      expect(getAllObjects()[0].id).toBe('circle-1');
+
+      // Verify Supabase delete was called
+      expect(supabase.from).toHaveBeenCalledWith('canvas_objects');
+    });
+
+    it('should rollback delete on database error', async () => {
+      const mockError = new Error('Delete failed');
+
+      const { _addObject, deleteObjects, getAllObjects } =
+        usePaperboxStore.getState();
+
+      const obj: CanvasObject = {
+        id: 'rect-1',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
+        rotation: 0,
+        opacity: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
+        type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      _addObject(obj);
+
+      vi.mocked(supabase.from).mockReturnValueOnce({
+        delete: vi.fn(() => ({
+          in: vi.fn(() => Promise.resolve({ error: mockError })),
+        })),
+      } as any);
+
+      await expect(deleteObjects(['rect-1'])).rejects.toThrow('Delete failed');
+
+      // Verify rollback - object should still exist
+      expect(getAllObjects()).toHaveLength(1);
+      expect(getAllObjects()[0].id).toBe('rect-1');
+    });
+
+    it('should handle deleting empty array', async () => {
+      const { deleteObjects, getAllObjects } = usePaperboxStore.getState();
+
+      await deleteObjects([]);
+
+      expect(getAllObjects()).toHaveLength(0);
+      // Should not call Supabase
+      expect(supabase.from).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Internal Mutations (_methods for SyncManager)', () => {
+    it('_addObject should add object synchronously', () => {
+      const { _addObject, getObjectById } = usePaperboxStore.getState();
+
+      const obj: CanvasObject = {
+        id: 'rect-1',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
+        rotation: 0,
+        opacity: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
+        type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+
+      _addObject(obj);
 
       const retrieved = getObjectById('rect-1');
-      expect(retrieved).toEqual(rectangle);
+      expect(retrieved).toEqual(obj);
     });
 
-    it('should add a circle object', () => {
-      const { addObject, getObjectById } = usePaperboxStore.getState();
-
-      const circle: CanvasObject = {
-        id: 'circle-1',
-        type: 'circle',
-        x: 200,
-        y: 200,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#00ff00',
-        stroke_color: '#000000',
-        stroke_width: 2,
-        type_properties: {
-          radius: 50,
-        },
-      };
-
-      addObject(circle);
-
-      const retrieved = getObjectById('circle-1');
-      expect(retrieved).toEqual(circle);
-      if (retrieved?.type === 'circle') {
-        expect(retrieved.type_properties.radius).toBe(50);
-      }
-    });
-
-    it('should add a text object', () => {
-      const { addObject, getObjectById } = usePaperboxStore.getState();
-
-      const text: CanvasObject = {
-        id: 'text-1',
-        type: 'text',
-        x: 50,
-        y: 50,
-        width: 300,
-        height: 40,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#0000ff',
-        stroke_color: undefined,
-        stroke_width: 0,
-        type_properties: {
-          text_content: 'Hello World',
-          font_size: 24,
-          font_family: 'Arial',
-        },
-      };
-
-      addObject(text);
-
-      const retrieved = getObjectById('text-1');
-      expect(retrieved).toEqual(text);
-      if (retrieved?.type === 'text') {
-        expect(retrieved.type_properties.text_content).toBe('Hello World');
-        expect(retrieved.type_properties.font_size).toBe(24);
-      }
-    });
-
-    it('should add multiple objects', () => {
-      const { addObject, getAllObjects } = usePaperboxStore.getState();
-
-      const rect: CanvasObject = {
-        id: 'rect-1',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      const circle: CanvasObject = {
-        id: 'circle-1',
-        type: 'circle',
-        x: 100,
-        y: 100,
-        width: 80,
-        height: 80,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#00ff00',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {
-          radius: 40,
-        },
-      };
-
-      addObject(rect);
-      addObject(circle);
-
-      const all = getAllObjects();
-      expect(all).toHaveLength(2);
-      expect(all.map((o) => o.id)).toContain('rect-1');
-      expect(all.map((o) => o.id)).toContain('circle-1');
-    });
-  });
-
-  describe('updateObject', () => {
-    it('should update object position', () => {
-      const { addObject, updateObject, getObjectById } =
+    it('_updateObject should update object synchronously', () => {
+      const { _addObject, _updateObject, getObjectById } =
         usePaperboxStore.getState();
 
-      const rect: CanvasObject = {
+      const obj: CanvasObject = {
         id: 'rect-1',
         type: 'rectangle',
         x: 100,
         y: 100,
-        width: 50,
-        height: 50,
+        width: 200,
+        height: 150,
         rotation: 0,
         opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      addObject(rect);
-      updateObject('rect-1', { x: 200, y: 300 });
-
-      const updated = getObjectById('rect-1');
-      expect(updated?.x).toBe(200);
-      expect(updated?.y).toBe(300);
-    });
-
-    it('should update object size', () => {
-      const { addObject, updateObject, getObjectById } =
-        usePaperboxStore.getState();
-
-      const circle: CanvasObject = {
-        id: 'circle-1',
-        type: 'circle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#00ff00',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {
-          radius: 50,
-        },
-      };
-
-      addObject(circle);
-      updateObject('circle-1', { width: 200, height: 200 });
-
-      const updated = getObjectById('circle-1');
-      expect(updated?.width).toBe(200);
-      expect(updated?.height).toBe(200);
-    });
-
-    it('should update object colors', () => {
-      const { addObject, updateObject, getObjectById } =
-        usePaperboxStore.getState();
-
-      const rect: CanvasObject = {
-        id: 'rect-1',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      addObject(rect);
-      updateObject('rect-1', {
-        fill_color: '#0000ff',
-        stroke_color: '#ffffff',
-      });
-
-      const updated = getObjectById('rect-1');
-      expect(updated?.fill_color).toBe('#0000ff');
-      expect(updated?.stroke_color).toBe('#ffffff');
-    });
-
-    it('should update rotation and opacity', () => {
-      const { addObject, updateObject, getObjectById } =
-        usePaperboxStore.getState();
-
-      const rect: CanvasObject = {
-        id: 'rect-1',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      addObject(rect);
-      updateObject('rect-1', { rotation: 45, opacity: 0.5 });
-
-      const updated = getObjectById('rect-1');
-      expect(updated?.rotation).toBe(45);
-      expect(updated?.opacity).toBe(0.5);
-    });
-
-    it('should not update non-existent object', () => {
-      const { updateObject, getObjectById } = usePaperboxStore.getState();
-
-      updateObject('nonexistent', { x: 100 });
-
-      const result = getObjectById('nonexistent');
-      expect(result).toBeUndefined();
-    });
-
-    it('should preserve other properties when updating', () => {
-      const { addObject, updateObject, getObjectById } =
-        usePaperboxStore.getState();
-
-      const rect: CanvasObject = {
-        id: 'rect-1',
-        type: 'rectangle',
-        x: 100,
-        y: 100,
-        width: 50,
-        height: 50,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
+        fill: '#ff0000',
+        stroke: '#000000',
         stroke_width: 2,
         type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
       };
 
-      addObject(rect);
-      updateObject('rect-1', { x: 200 }); // Only update x
+      _addObject(obj);
+      _updateObject('rect-1', { x: 300, y: 400 });
 
       const updated = getObjectById('rect-1');
-      expect(updated?.x).toBe(200);
-      expect(updated?.y).toBe(100); // Preserved
-      expect(updated?.fill_color).toBe('#ff0000'); // Preserved
-      expect(updated?.stroke_width).toBe(2); // Preserved
+      expect(updated?.x).toBe(300);
+      expect(updated?.y).toBe(400);
+      expect(updated?.fill).toBe('#ff0000'); // Preserved
     });
-  });
 
-  describe('removeObject', () => {
-    it('should remove an object', () => {
-      const { addObject, removeObject, getObjectById } =
+    it('_removeObject should remove object synchronously', () => {
+      const { _addObject, _removeObject, getObjectById } =
         usePaperboxStore.getState();
 
-      const rect: CanvasObject = {
+      const obj: CanvasObject = {
         id: 'rect-1',
         type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
         rotation: 0,
         opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
         type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
       };
 
-      addObject(rect);
+      _addObject(obj);
       expect(getObjectById('rect-1')).toBeDefined();
 
-      removeObject('rect-1');
+      _removeObject('rect-1');
       expect(getObjectById('rect-1')).toBeUndefined();
     });
 
-    it('should handle removing non-existent object gracefully', () => {
-      const { removeObject, getAllObjects } = usePaperboxStore.getState();
-
-      expect(() => removeObject('nonexistent')).not.toThrow();
-      expect(getAllObjects()).toHaveLength(0);
-    });
-  });
-
-  describe('removeObjects (batch)', () => {
-    it('should remove multiple objects', () => {
-      const { addObject, removeObjects, getAllObjects } =
+    it('_removeObjects should remove multiple objects synchronously', () => {
+      const { _addObject, _removeObjects, getAllObjects } =
         usePaperboxStore.getState();
 
-      const rect1: CanvasObject = {
+      const obj1: CanvasObject = {
         id: 'rect-1',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      const rect2: CanvasObject = {
-        id: 'rect-2',
         type: 'rectangle',
         x: 100,
         y: 100,
-        width: 100,
-        height: 100,
+        width: 200,
+        height: 150,
         rotation: 0,
         opacity: 1,
-        fill_color: '#00ff00',
-        stroke_color: '#000000',
-        stroke_width: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
         type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
       };
 
-      const circle: CanvasObject = {
-        id: 'circle-1',
-        type: 'circle',
-        x: 200,
-        y: 200,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#0000ff',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {
-          radius: 50,
-        },
-      };
+      const obj2: CanvasObject = { ...obj1, id: 'circle-1', type: 'circle' };
+      const obj3: CanvasObject = { ...obj1, id: 'text-1', type: 'text' };
 
-      addObject(rect1);
-      addObject(rect2);
-      addObject(circle);
+      _addObject(obj1);
+      _addObject(obj2);
+      _addObject(obj3);
 
       expect(getAllObjects()).toHaveLength(3);
 
-      removeObjects(['rect-1', 'rect-2']);
+      _removeObjects(['rect-1', 'circle-1']);
 
       const remaining = getAllObjects();
       expect(remaining).toHaveLength(1);
-      expect(remaining[0].id).toBe('circle-1');
+      expect(remaining[0].id).toBe('text-1');
     });
 
-    it('should handle empty array', () => {
-      const { addObject, removeObjects, getAllObjects } =
+    it('_setObjects should replace all objects synchronously', () => {
+      const { _addObject, _setObjects, getAllObjects } =
         usePaperboxStore.getState();
 
-      const rect: CanvasObject = {
-        id: 'rect-1',
+      const oldObj: CanvasObject = {
+        id: 'old-1',
         type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      addObject(rect);
-      removeObjects([]);
-
-      expect(getAllObjects()).toHaveLength(1);
-    });
-  });
-
-  describe('clearAllObjects', () => {
-    it('should clear all objects', () => {
-      const { addObject, clearAllObjects, getAllObjects } =
-        usePaperboxStore.getState();
-
-      const rect: CanvasObject = {
-        id: 'rect-1',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      const circle: CanvasObject = {
-        id: 'circle-1',
-        type: 'circle',
         x: 100,
         y: 100,
-        width: 80,
-        height: 80,
+        width: 200,
+        height: 150,
         rotation: 0,
         opacity: 1,
-        fill_color: '#00ff00',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {
-          radius: 40,
-        },
-      };
-
-      addObject(rect);
-      addObject(circle);
-      expect(getAllObjects()).toHaveLength(2);
-
-      clearAllObjects();
-      expect(getAllObjects()).toHaveLength(0);
-    });
-
-    it('should handle clearing empty store', () => {
-      const { clearAllObjects, getAllObjects } = usePaperboxStore.getState();
-
-      expect(() => clearAllObjects()).not.toThrow();
-      expect(getAllObjects()).toHaveLength(0);
-    });
-  });
-
-  describe('setObjects (batch)', () => {
-    it('should replace all objects', () => {
-      const { addObject, setObjects, getAllObjects } =
-        usePaperboxStore.getState();
-
-      const oldRect: CanvasObject = {
-        id: 'old-rect',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
         type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
       };
 
-      addObject(oldRect);
+      _addObject(oldObj);
 
-      const newObjects: Record<string, CanvasObject> = {
-        'new-rect': {
-          id: 'new-rect',
-          type: 'rectangle',
-          x: 200,
-          y: 200,
-          width: 50,
-          height: 50,
-          rotation: 0,
-          opacity: 1,
-          fill_color: '#00ff00',
-          stroke_color: '#000000',
-          stroke_width: 1,
-          type_properties: {},
-        },
-        'new-circle': {
-          id: 'new-circle',
-          type: 'circle',
-          x: 300,
-          y: 300,
-          width: 60,
-          height: 60,
-          rotation: 0,
-          opacity: 1,
-          fill_color: '#0000ff',
-          stroke_color: '#000000',
-          stroke_width: 1,
-          type_properties: {
-            radius: 30,
-          },
-        },
-      };
-
-      setObjects(newObjects);
+      const newObj: CanvasObject = { ...oldObj, id: 'new-1' };
+      _setObjects({ 'new-1': newObj });
 
       const all = getAllObjects();
-      expect(all).toHaveLength(2);
-      expect(all.map((o) => o.id)).toContain('new-rect');
-      expect(all.map((o) => o.id)).toContain('new-circle');
-      expect(all.map((o) => o.id)).not.toContain('old-rect');
+      expect(all).toHaveLength(1);
+      expect(all[0].id).toBe('new-1');
     });
 
-    it('should handle setting empty object map', () => {
-      const { addObject, setObjects, getAllObjects } =
-        usePaperboxStore.getState();
+    it('_setLoading should update loading state', () => {
+      const { _setLoading } = usePaperboxStore.getState();
 
-      const rect: CanvasObject = {
-        id: 'rect-1',
-        type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
+      _setLoading(true);
+      expect(usePaperboxStore.getState().loading).toBe(true);
 
-      addObject(rect);
-      setObjects({});
+      _setLoading(false);
+      expect(usePaperboxStore.getState().loading).toBe(false);
+    });
 
-      expect(getAllObjects()).toHaveLength(0);
+    it('_setError should update error state', () => {
+      const { _setError } = usePaperboxStore.getState();
+
+      _setError('Something went wrong');
+      expect(usePaperboxStore.getState().error).toBe('Something went wrong');
+
+      _setError(null);
+      expect(usePaperboxStore.getState().error).toBeNull();
     });
   });
 
   describe('Utility Functions', () => {
     it('getObjectById should return object when exists', () => {
-      const { addObject, getObjectById } = usePaperboxStore.getState();
+      const { _addObject, getObjectById } = usePaperboxStore.getState();
 
-      const rect: CanvasObject = {
+      const obj: CanvasObject = {
         id: 'rect-1',
         type: 'rectangle',
         x: 100,
         y: 100,
-        width: 50,
-        height: 50,
+        width: 200,
+        height: 150,
         rotation: 0,
         opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
         type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
       };
 
-      addObject(rect);
+      _addObject(obj);
 
       const result = getObjectById('rect-1');
-      expect(result).toEqual(rect);
+      expect(result).toEqual(obj);
     });
 
     it('getObjectById should return undefined when not exists', () => {
@@ -612,48 +657,42 @@ describe('canvasSlice - Canvas Object Management', () => {
     });
 
     it('getAllObjects should return array of all objects', () => {
-      const { addObject, getAllObjects } = usePaperboxStore.getState();
+      const { _addObject, getAllObjects } = usePaperboxStore.getState();
 
-      const rect: CanvasObject = {
+      const obj1: CanvasObject = {
         id: 'rect-1',
         type: 'rectangle',
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        fill_color: '#ff0000',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {},
-      };
-
-      const circle: CanvasObject = {
-        id: 'circle-1',
-        type: 'circle',
         x: 100,
         y: 100,
-        width: 80,
-        height: 80,
+        width: 200,
+        height: 150,
         rotation: 0,
         opacity: 1,
-        fill_color: '#00ff00',
-        stroke_color: '#000000',
-        stroke_width: 1,
-        type_properties: {
-          radius: 40,
-        },
+        fill: '#ff0000',
+        stroke: '#000000',
+        stroke_width: 2,
+        type_properties: {},
+        style_properties: {},
+        metadata: {},
+        created_by: 'user-123',
+        created_at: '2025-01-01T00:00:00Z',
+        updated_at: '2025-01-01T00:00:00Z',
+        group_id: null,
+        z_index: 0,
+        locked_by: null,
+        lock_acquired_at: null,
       };
 
-      addObject(rect);
-      addObject(circle);
+      const obj2: CanvasObject = { ...obj1, id: 'circle-1', type: 'circle' };
+
+      _addObject(obj1);
+      _addObject(obj2);
 
       const all = getAllObjects();
       expect(all).toBeInstanceOf(Array);
       expect(all).toHaveLength(2);
-      expect(all).toContainEqual(rect);
-      expect(all).toContainEqual(circle);
+      expect(all).toContainEqual(obj1);
+      expect(all).toContainEqual(obj2);
     });
 
     it('getAllObjects should return empty array for empty store', () => {
