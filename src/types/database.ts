@@ -174,6 +174,38 @@ export type Database = {
         }
         Relationships: []
       }
+      user_canvas_viewports: {
+        Row: {
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+          viewport_state: Json
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+          viewport_state?: Json
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+          viewport_state?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_canvas_viewports_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

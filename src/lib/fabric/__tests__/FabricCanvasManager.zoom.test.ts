@@ -231,7 +231,7 @@ describe('FabricCanvasManager - Mousewheel Zoom', () => {
       expect(zoomedOut).toBeLessThan(zoomedIn);
     });
 
-    it('should sync viewport to Zustand after zoom', () => {
+    it('should sync viewport to Zustand after zoom', async () => {
       const syncCallback = vi.fn();
       manager.setViewportSyncCallback(syncCallback);
       manager.setupMousewheelZoom();
@@ -246,6 +246,9 @@ describe('FabricCanvasManager - Mousewheel Zoom', () => {
       canvas.fire('mouse:wheel', {
         e: wheelEvent,
       });
+
+      // Wait for RAF-throttled callback
+      await new Promise((resolve) => requestAnimationFrame(resolve));
 
       // Callback should be called with new viewport
       expect(syncCallback).toHaveBeenCalled();

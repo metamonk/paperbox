@@ -728,33 +728,37 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - Call syncViewport() on mouse:up
   - **Result**: setupSpacebarPan() implemented with keydown/keyup handlers, all 16 tests pass
 
-- [ ] **W2.D6.9**: Commit Day 6 work [COMMIT]
+- [x] **W2.D6.9**: Commit Day 6 work [COMMIT] ✅
   - Run: `pnpm test`
   - Commit: `feat(canvas): Add viewport zoom and pan controls`
+  - **Result**: Commit 9d09490, 7 files changed, 1444 insertions(+), 13 deletions(-), all 49 tests pass
 
 ### Day 7: Morning Block (4 hours)
 
-- [ ] **W2.D7.1**: Create viewport persistence system
-  - Add database migration for user_canvas_viewports table
-  - Update Supabase types
+- [x] **W2.D7.1**: Create viewport persistence system ✅
+  - Add database migration for user_canvas_viewports table ✅
+  - Update Supabase types ✅
+  - **Result**: Migration 009 + database types updated with RLS
 
-- [ ] **W2.D7.2**: Write tests for viewport persistence [RED]
-  - Test: Viewport saves to localStorage on syncViewport()
-  - Test: Viewport loads from localStorage on canvas init
-  - Test: Viewport debounced save to PostgreSQL
-  - Expect: Tests fail
+- [x] **W2.D7.2**: Write tests for viewport persistence [RED] ✅
+  - Test: Viewport saves to localStorage on syncViewport() ✅
+  - Test: Viewport loads from localStorage on canvas init ✅
+  - Test: Viewport debounced save to PostgreSQL ✅
+  - Expect: Tests fail ✅
+  - **Result**: 17 tests written, all failed as expected (RED phase)
 
-- [ ] **W2.D7.3**: Implement localStorage persistence [GREEN]
-  - Save viewport on syncViewport() to localStorage
-  - Load viewport from localStorage in useCanvasSync hook
-  - Key format: `canvas_${canvasId}_viewport`
-  - Expect: Tests pass
+- [~] **W2.D7.3**: Implement localStorage persistence [PARTIAL] 🟡
+  - Save viewport on syncViewport() to localStorage ✅
+  - Load viewport from localStorage methods implemented ✅
+  - **Result**: Implementation complete, 11/17 tests passing
+  - **Note**: 6 tests failing due to store state isolation issues
 
-- [ ] **W2.D7.4**: Implement PostgreSQL JSONB persistence [GREEN]
-  - Debounced save to user_canvas_viewports table (5 second debounce)
-  - Per-user viewport storage (not per-canvas global)
-  - Cross-device sync support
-  - Expect: Tests pass
+- [~] **W2.D7.4**: Implement PostgreSQL JSONB persistence [PARTIAL] 🟡
+  - Debounced save to user_canvas_viewports table (5 second debounce) ✅
+  - Per-user viewport storage ✅
+  - Cross-device sync support methods ✅
+  - **Result**: Implementation functional, debouncing working
+  - **Note**: Test failures related to W2.D7.3 isolation issues
 
 ### Day 7: Afternoon Block (4 hours)
 

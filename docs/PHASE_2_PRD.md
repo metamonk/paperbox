@@ -795,19 +795,21 @@ canvas.on('mouse:up', () => {
 
 ### Transform Matrix Handling
 
-Fabric.js uses a 6-element transform matrix: `[scaleX, skewY, skewX, scaleY, translateX, translateY]`
+Fabric.js v6 uses a 6-element transform matrix: `[scaleX, skewY, skewX, scaleY, translateX, translateY]`
 
-**Critical Pattern**: ALWAYS call `setViewportTransform()` after modifying matrix elements.
+**Critical Pattern (Fabric.js v6)**: ALWAYS call `requestRenderAll()` after modifying pan elements (indices 4, 5).
 
 ```javascript
-// ❌ WRONG - Direct modification without recalculation
+// ❌ WRONG - Direct modification without re-render
 canvas.viewportTransform[4] += deltaX;
 
-// ✅ CORRECT - Recalculate after modification
+// ✅ CORRECT - Re-render after modification (Fabric.js v6 pattern)
 canvas.viewportTransform[4] += deltaX;
 canvas.viewportTransform[5] += deltaY;
-canvas.setViewportTransform(canvas.viewportTransform);
+canvas.requestRenderAll(); // Triggers canvas recalculation
 ```
+
+**Important**: For zoom (indices 0, 3), use `setZoom()` method instead of direct modification. Direct modification of scale indices does NOT update internal zoom state.
 
 **Official Zoom Implementation** (from Fabric.js docs):
 ```javascript

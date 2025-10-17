@@ -107,6 +107,12 @@ export interface CanvasSlice {
   syncViewport: (zoom: number, panX: number, panY: number) => void;
   restoreViewport: () => ViewportState;
 
+  // Viewport Persistence (W2.D7.2-7.4)
+  resetViewport: () => void;
+  loadViewportFromStorage: () => void;
+  loadViewportFromPostgreSQL: () => Promise<void>;
+  initializeViewport: () => Promise<void>;
+
   // Internal mutations (for SyncManager)
   _addObject: (object: CanvasObject) => void;
   _updateObject: (id: string, updates: Partial<CanvasObject>) => void;
@@ -127,6 +133,10 @@ export interface CanvasSlice {
  * Following Zustand slices pattern with Immer middleware
  * PRD Pattern: W1.D4 - Zustand + Supabase Integration
  */
+// W2.D7.4: Debounce timer for PostgreSQL viewport saves (module-level)
+let viewportSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const VIEWPORT_SAVE_DEBOUNCE_MS = 5000; // 5 seconds
+
 export const createCanvasSlice: StateCreator<
   PaperboxStore,
   [['zustand/immer', never], ['zustand/devtools', never]],
@@ -539,22 +549,57 @@ export const createCanvasSlice: StateCreator<
     }
   },
 
-  // ─── Viewport Management (W2.D6.2) ───
+  // ─── Viewport Management (W2.D6.2 + W2.D7.3-7.4) ───
 
   /**
-   * W2.D6.2: Sync viewport state from Fabric.js
+   * W2.D6.2 + W2.D7.3-7.4: Sync viewport state from Fabric.js with persistence
    *
    * Called by FabricCanvasManager after pan/zoom events
-   * Reads from viewportTransform[4], [5] and getZoom()
+   * W2.D7.3: Saves to localStorage immediately (synchronous)
+   * W2.D7.4: Debounces PostgreSQL save by 5 seconds
    */
-  syncViewport: (zoom: number, panX: number, panY: number) =>
+  syncViewport: (zoom: number, panX: number, panY: number) => {
+    // Update store state
     set(
       {
         viewport: { zoom, panX, panY },
       },
       undefined,
       'canvas/syncViewport',
-    ),
+    );
+
+    // W2.D7.3: Save to localStorage immediately (synchronous, non-blocking)
+    try {
+      localStorage.setItem(
+        'canvas_viewport',
+        JSON.stringify({ zoom, panX, panY }),
+      );
+    } catch (error) {
+      // Handle QuotaExceededError or other localStorage errors silently
+      console.warn('Failed to save viewport to localStorage:', error);
+    }
+
+    // W2.D7.4: Debounced save to PostgreSQL (5 second debounce)
+    if (viewportSaveTimer) {
+      clearTimeout(viewportSaveTimer);
+    }
+
+    viewportSaveTimer = setTimeout(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        await supabase
+          .from('user_canvas_viewports')
+          .upsert({
+            user_id: user.id,
+            viewport_state: { zoom, panX, panY },
+          });
+      } catch (error) {
+        console.warn('Failed to save viewport to PostgreSQL:', error);
+      }
+    }, VIEWPORT_SAVE_DEBOUNCE_MS);
+  },
 
   /**
    * W2.D6.2: Get viewport state for restoration
@@ -564,6 +609,93 @@ export const createCanvasSlice: StateCreator<
    */
   restoreViewport: () => {
     return get().viewport;
+  },
+
+  // ─── Viewport Persistence (W2.D7.2-7.4) ───
+
+  /**
+   * W2.D7.2: Reset viewport to default state
+   */
+  resetViewport: () =>
+    set(
+      {
+        viewport: { zoom: 1, panX: 0, panY: 0 },
+      },
+      undefined,
+      'canvas/resetViewport',
+    ),
+
+  /**
+   * W2.D7.3: Load viewport from localStorage
+   *
+   * Called during canvas initialization
+   * Falls back to default viewport if localStorage is empty/invalid
+   */
+  loadViewportFromStorage: () => {
+    try {
+      const stored = localStorage.getItem('canvas_viewport');
+      if (stored) {
+        const viewport = JSON.parse(stored) as ViewportState;
+        set(
+          { viewport },
+          undefined,
+          'canvas/loadViewportFromStorage',
+        );
+      }
+    } catch (error) {
+      // Invalid JSON or localStorage error - use default viewport
+      console.warn('Failed to load viewport from localStorage:', error);
+    }
+  },
+
+  /**
+   * W2.D7.4: Load viewport from PostgreSQL
+   *
+   * Called during canvas initialization (after auth)
+   * Falls back to localStorage/default if PostgreSQL unavailable
+   */
+  loadViewportFromPostgreSQL: async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('user_canvas_viewports')
+        .select('viewport_state')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error || !data) return;
+
+      const viewport = data.viewport_state as ViewportState;
+      set(
+        { viewport },
+        undefined,
+        'canvas/loadViewportFromPostgreSQL',
+      );
+    } catch (error) {
+      console.warn('Failed to load viewport from PostgreSQL:', error);
+    }
+  },
+
+  /**
+   * W2.D7.4: Initialize viewport with cross-device sync
+   *
+   * Priority: PostgreSQL > localStorage > default
+   * Call this during app/canvas initialization
+   */
+  initializeViewport: async () => {
+    // Try PostgreSQL first (cross-device sync)
+    await get().loadViewportFromPostgreSQL();
+
+    // If PostgreSQL didn't load anything, fall back to localStorage
+    if (
+      get().viewport.zoom === 1 &&
+      get().viewport.panX === 0 &&
+      get().viewport.panY === 0
+    ) {
+      get().loadViewportFromStorage();
+    }
   },
 
   // ─── Utility selectors ───

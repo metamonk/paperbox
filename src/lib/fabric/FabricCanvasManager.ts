@@ -95,6 +95,10 @@ export class FabricCanvasManager {
   private cursorObjects: FabricObject[] = []; // W1.D6: Track cursor overlay objects
   private viewportSyncCallback: ((zoom: number, panX: number, panY: number) => void) | null = null; // W2.D6.6: Viewport sync callback
 
+  // W2.D7.7: Performance optimization - RAF throttling
+  private rafId: number | null = null; // requestAnimationFrame ID for throttling
+  private pendingViewportSync: boolean = false; // Flag for pending sync
+
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -585,8 +589,45 @@ export class FabricCanvasManager {
    *
    * @param callback - Function to call with (zoom, panX, panY) values
    */
-  setViewportSyncCallback(callback: (zoom: number, panX: number, panY: number) => void): void {
+  setViewportSyncCallback(callback: (zoom: number, panX, panY: number) => void): void {
     this.viewportSyncCallback = callback;
+  }
+
+  /**
+   * W2.D7.7: Throttled viewport sync using requestAnimationFrame
+   *
+   * Ensures viewport updates are batched to animation frames (~60fps)
+   * to prevent excessive state updates during rapid zoom/pan operations.
+   *
+   * Pattern: RAF-based throttling
+   * - Only one RAF callback pending at a time
+   * - Always executes with latest viewport state
+   * - Automatically debounces rapid updates to next frame
+   */
+  private requestViewportSync(): void {
+    // If RAF already scheduled, just mark pending
+    if (this.rafId !== null) {
+      this.pendingViewportSync = true;
+      return;
+    }
+
+    // Schedule RAF callback
+    this.rafId = requestAnimationFrame(() => {
+      // Execute sync with current viewport state
+      if (this.viewportSyncCallback && this.canvas) {
+        const viewport = this.getViewport();
+        this.viewportSyncCallback(viewport.zoom, viewport.panX, viewport.panY);
+      }
+
+      // Clear RAF ID
+      this.rafId = null;
+
+      // If another sync was requested during this frame, schedule next
+      if (this.pendingViewportSync) {
+        this.pendingViewportSync = false;
+        this.requestViewportSync();
+      }
+    });
   }
 
   /**
@@ -622,11 +663,8 @@ export class FabricCanvasManager {
       opt.e.preventDefault();
       opt.e.stopPropagation();
 
-      // Sync viewport to Zustand
-      if (this.viewportSyncCallback) {
-        const viewport = this.getViewport();
-        this.viewportSyncCallback(viewport.zoom, viewport.panX, viewport.panY);
-      }
+      // Sync viewport to Zustand (throttled via RAF)
+      this.requestViewportSync();
     });
   }
 
@@ -691,11 +729,12 @@ export class FabricCanvasManager {
         const deltaY = currentY - lastPosY;
 
         // Update viewport using relativePan
+        // W2.D7.6: CRITICAL - Always call requestRenderAll() after modifying matrix
+        // Fabric.js v6 pattern: Direct matrix modification + requestRenderAll()
         const vpt = this.canvas.viewportTransform;
         vpt[4] += deltaX;
         vpt[5] += deltaY;
-
-        this.canvas.requestRenderAll();
+        this.canvas.requestRenderAll(); // Triggers recalculation
 
         // Update last position
         lastPosX = currentX;
@@ -708,11 +747,8 @@ export class FabricCanvasManager {
       if (isPanning && this.canvas) {
         isPanning = false;
 
-        // Sync viewport to Zustand
-        if (this.viewportSyncCallback) {
-          const viewport = this.getViewport();
-          this.viewportSyncCallback(viewport.zoom, viewport.panX, viewport.panY);
-        }
+        // Sync viewport to Zustand (throttled via RAF)
+        this.requestViewportSync();
       }
     });
 
@@ -779,6 +815,13 @@ export class FabricCanvasManager {
    * Dispose of the canvas and clean up resources
    */
   dispose(): void {
+    // W2.D7.7: Cancel pending RAF callback to prevent memory leaks
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    this.pendingViewportSync = false;
+
     if (this.canvas) {
       // Clean up spacebar pan event listeners
       const handlers = (this.canvas as any).__spacebarHandlers;
@@ -792,5 +835,6 @@ export class FabricCanvasManager {
     }
     this.eventHandlers = {};
     this.cursorObjects = [];
+    this.viewportSyncCallback = null;
   }
 }
