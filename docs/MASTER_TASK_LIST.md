@@ -165,10 +165,10 @@
   - Verify Fabric.js state consistency
   - Visual verification in browser
 
-- [→] **W1.D2.10**: Commit Day 2 work [COMMIT]
+- [✓] **W1.D2.10**: Commit Day 2 work [COMMIT]
   - Run: `pnpm test`
   - Run: `pnpm typecheck`
-  - Commit: `feat(fabric): Add object serialization and lifecycle management`
+  - Commit: `docs: mark W1.D2 (Fabric.js Object Serialization) as complete`
 
 ---
 
