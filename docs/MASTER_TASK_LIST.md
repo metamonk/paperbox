@@ -879,17 +879,26 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
 
 (Moved from original W2.D6-D8)
 
-### Day 9: Component Architecture
-- [ ] **W2.D9.1-10**: Component structure refactoring
-  - Extract Canvas logic into smaller components
-  - Improve separation of concerns
-  - Optimize re-rendering patterns
+### Day 9: Component Architecture ✅ COMPLETE
 
-### Day 10: Code Splitting
-- [ ] **W2.D10.1-10**: Code splitting and lazy loading
-  - Split feature modules
-  - Implement lazy loading for heavy components
-  - Optimize bundle size
+- [✓] **W2.D9.1-10**: Component structure refactoring ✅
+  - ✅ Extracted CanvasLoadingOverlay component (52 lines)
+  - ✅ Extracted useShapeCreation hook (106 lines)
+  - ✅ Extracted useSidebarState hook (77 lines)
+  - ✅ Optimized CursorOverlay with React.memo and custom comparison
+  - ✅ Canvas.tsx reduced by ~120 lines, improved maintainability
+  - ✅ All refactoring tested and verified with dev server
+  - Result: Better separation of concerns, improved code organization
+
+### Day 10: Code Splitting ✅ COMPLETE
+- [✓] **W2.D10.1-10**: Code splitting and lazy loading
+  - ✅ Implemented React.lazy() for route components (Login, Signup, CanvasPage)
+  - ✅ Added Suspense boundary with RouteLoadingFallback component
+  - ✅ Route-level code splitting reduces initial bundle size
+  - ✅ Loading indicators provide better UX during chunk loading
+  - ✅ Dev server verified working with code splitting
+  - Commit: `09e3c9d feat(routing): Implement code splitting with React.lazy for route components (W2.D10)`
+  - Result: Optimized bundle size with on-demand route loading
 
 ### Day 11: Test Organization
 - [ ] **W2.D11.1-10**: Test suite reorganization
@@ -981,33 +990,135 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
 
 ---
 
-## ─── Week 4: Layers & Hierarchy ───
+## ─── Week 4: Design System & Layers ───
 
-- [ ] **W4.D1.1-5**: Layers panel UI component [RED/GREEN/REFACTOR]
-- [ ] **W4.D1.6-10**: Drag-drop layer reordering
+**Design System Strategy**: [UI_MINIMAL_SYSTEM_STRATEGY.md](../claudedocs/UI_MINIMAL_SYSTEM_STRATEGY.md)
+**Stack Decision**: shadcn/ui + Kibo UI (minimal dependencies)
+**Estimated Effort**: 28-40 hours
+**ROI**: 150 hours saved vs manual (~$30k)
 
-- [ ] **W4.D2.1-5**: Z-index management [RED/GREEN/REFACTOR]
+### Day 0: Design System Foundation (3-4h)
+
+- [ ] **W4.D0.1**: Initialize shadcn/ui
+  - `npx shadcn@latest init`
+  - Configure Tailwind CSS v4 with design tokens
+  - Set up component directory structure
+
+- [ ] **W4.D0.2**: Install core shadcn components
+  - `npx shadcn@latest add button dialog form select popover`
+  - Test component compatibility
+  - Verify theme configuration
+
+- [ ] **W4.D0.3**: Install Kibo UI extensions
+  - `npx kibo-ui add tree color-picker`
+  - Test shadcn + Kibo compatibility
+  - Create basic component documentation
+
+### Day 1: Base UI Migration (4-6h)
+
+- [ ] **W4.D1.1-3**: Migrate Toolbar to shadcn components
+  - Replace buttons with shadcn Button
+  - Add ToggleGroup for tool selection
+  - Add Tooltips for all tools
+
+- [ ] **W4.D1.4-6**: Update Sidebar with shadcn components
+  - Use shadcn Sheet/Dialog patterns
+  - Apply consistent spacing and colors
+
+- [ ] **W4.D1.7-8**: Replace custom Toast with shadcn Toast
+  - Remove [Toast.tsx](../src/components/ui/Toast.tsx) (140 lines)
+  - Install shadcn Toast or Sonner
+  - Update toast usage across app
+
+- [ ] **W4.D1.9-10**: Set up CSS variables for theme
+  - Configure Tailwind design tokens
+  - Test light/dark mode switching
+
+### Day 2: Property Panels (5-7h)
+
+- [ ] **W4.D2.1-3**: Create PropertyPanel template
+  - Use shadcn Collapsible + Form
+  - Build reusable property input patterns
+
+- [ ] **W4.D2.4-6**: Integrate Kibo ColorPicker
+  - Create ColorProperty component
+  - Wire to object styling state
+
+- [ ] **W4.D2.7-9**: Add Slider components for properties
+  - Opacity slider
+  - Size sliders
+  - Spacing controls
+
+- [ ] **W4.D2.10**: Test property panel interactions
+
+### Day 3: Layers Panel (6-9h)
+
+- [ ] **W4.D3.1-3**: Implement Kibo Tree for layers panel
+  - Build LayersPanel component
+  - Wire to layersSlice state
+  - Add basic layer operations
+
+- [ ] **W4.D3.4-6**: Add drag-drop functionality
+  - Use Kibo Tree built-in drag-drop
+  - Update z-index on reorder
+  - Test layer hierarchy
+
+- [ ] **W4.D3.7-8**: Build LayerItem component
+  - Visibility toggle
+  - Lock toggle
+  - Rename functionality
+
+- [ ] **W4.D3.9-10**: Add context menu integration
+  - Use shadcn ContextMenu
+  - Layer operations (duplicate, delete, group)
+
+### Day 4: Advanced UI Components (4-6h)
+
+- [ ] **W4.D4.1-3**: Enhanced toolbar with tooltips
+  - shadcn Tooltip on all buttons
+  - Keyboard shortcut badges (shadcn Kbd)
+
+- [ ] **W4.D4.4-6**: Build component library browser (optional)
+  - Use Kibo Tree for component palette
+  - Drag-drop components to canvas
+
+- [ ] **W4.D4.7-10**: Z-index management commands
   - Bring to front
   - Send to back
-  - Bring forward
-  - Send backward
-- [ ] **W4.D2.6-10**: Z-index commands
+  - Bring forward / Send backward
+  - Wire to layersSlice
 
-- [ ] **W4.D3.1-5**: Grouping system [RED/GREEN/REFACTOR]
-  - Create group
-  - Ungroup
-  - Nested groups
-- [ ] **W4.D3.6-10**: Group transform behavior
+### Day 5: Testing & Polish (6-8h)
 
-- [ ] **W4.D4.1-5**: Layer visibility & locking [RED/GREEN/REFACTOR]
-- [ ] **W4.D4.6-10**: Layer naming and organization
+- [ ] **W4.D5.1-3**: Accessibility testing
+  - Run jest-axe on all components
+  - Fix accessibility violations
+  - Test screen reader compatibility
 
-- [ ] **W4.D5.1-7**: Week 4 integration testing
+- [ ] **W4.D5.4-6**: Keyboard navigation validation
+  - Test all keyboard shortcuts
+  - Tab navigation through UI
+  - Focus management
+
+- [ ] **W4.D5.7**: Theme consistency check
+  - Verify CSS variables applied correctly
+  - Test light/dark mode switching
+  - Visual regression tests
+
 - [ ] **W4.D5.8**: Milestone 2 Validation - /sc:test + benchmarks [VALIDATE]
   - Target: >55% coverage
   - All core features working
-- [ ] **W4.D5.9-10**: Week 4 commit
-  - Tag: `milestone-2-core-features-complete`
+  - Design system integrated
+
+- [ ] **W4.D5.9**: Component documentation
+  - Usage examples for team
+  - Theme customization guide
+  - Component API documentation
+
+- [ ] **W4.D5.10**: Week 4 commit [COMMIT]
+  - Run: `pnpm validate`
+  - Commit: `feat(ui): Add shadcn/ui + Kibo UI design system`
+  - Tag: `milestone-2-design-system-complete`
 
 ---
 
