@@ -1048,6 +1048,183 @@ export class FabricCanvasManager {
   }
 
   /**
+   * W2.D11: Batch add multiple objects to canvas
+   *
+   * Optimized batch operation that adds multiple objects with a single render call.
+   * Temporarily disables auto-rendering during additions for performance.
+   *
+   * @param canvasObjects - Array of CanvasObjects to add
+   * @returns Array of created Fabric.js objects (null entries for failed creations)
+   */
+  batchAddObjects(canvasObjects: CanvasObject[]): (FabricObject | null)[] {
+    if (!this.canvas) {
+      return [];
+    }
+
+    // Temporarily disable auto-rendering for performance
+    const originalRenderOnAddRemove = this.canvas.renderOnAddRemove;
+    this.canvas.renderOnAddRemove = false;
+
+    const fabricObjects: (FabricObject | null)[] = [];
+
+    for (const canvasObject of canvasObjects) {
+      const fabricObject = this.createFabricObject(canvasObject);
+
+      if (fabricObject) {
+        this.canvas.add(fabricObject);
+        fabricObjects.push(fabricObject);
+      } else {
+        fabricObjects.push(null);
+      }
+    }
+
+    // Restore auto-rendering and trigger single render
+    this.canvas.renderOnAddRemove = originalRenderOnAddRemove;
+    this.canvas.requestRenderAll();
+
+    return fabricObjects;
+  }
+
+  /**
+   * W2.D11: Batch remove multiple objects from canvas
+   *
+   * Optimized batch operation that removes multiple objects with a single render call.
+   * Temporarily disables auto-rendering during removals for performance.
+   *
+   * @param ids - Array of database IDs to remove
+   * @returns Number of objects successfully removed
+   */
+  batchRemoveObjects(ids: string[]): number {
+    if (!this.canvas) {
+      return 0;
+    }
+
+    // Temporarily disable auto-rendering for performance
+    const originalRenderOnAddRemove = this.canvas.renderOnAddRemove;
+    this.canvas.renderOnAddRemove = false;
+
+    let removedCount = 0;
+
+    for (const id of ids) {
+      const fabricObject = this.findObjectById(id);
+      if (fabricObject) {
+        this.canvas.remove(fabricObject);
+        removedCount++;
+      }
+    }
+
+    // Restore auto-rendering and trigger single render
+    this.canvas.renderOnAddRemove = originalRenderOnAddRemove;
+    this.canvas.requestRenderAll();
+
+    return removedCount;
+  }
+
+  /**
+   * W2.D11: Save canvas state to JSON
+   *
+   * Serializes the entire canvas state including all objects, viewport, and configuration.
+   * Can be used for state persistence, undo/redo, or canvas snapshots.
+   *
+   * @returns Canvas state as JSON object
+   */
+  saveState(): {
+    objects: CanvasObject[];
+    backgroundColor: string;
+    width: number;
+    height: number;
+    zoom: number;
+    panX: number;
+    panY: number;
+  } {
+    if (!this.canvas) {
+      return {
+        objects: [],
+        backgroundColor: this.config.backgroundColor,
+        width: this.config.width,
+        height: this.config.height,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+      };
+    }
+
+    // Serialize all canvas objects to CanvasObject format
+    const fabricObjects = this.canvas.getObjects().filter(obj => obj.data?.id);
+    const canvasObjects: CanvasObject[] = fabricObjects
+      .map(obj => this.toCanvasObject(obj))
+      .filter((obj): obj is CanvasObject => obj !== null);
+
+    // Get viewport state
+    const vpt = this.canvas.viewportTransform;
+    const zoom = this.canvas.getZoom();
+
+    return {
+      objects: canvasObjects,
+      backgroundColor: this.canvas.backgroundColor as string || this.config.backgroundColor,
+      width: this.canvas.getWidth(),
+      height: this.canvas.getHeight(),
+      zoom,
+      panX: vpt[4],
+      panY: vpt[5],
+    };
+  }
+
+  /**
+   * W2.D11: Load canvas state from JSON
+   *
+   * Restores canvas state from a previously saved state object.
+   * Clears current canvas and recreates all objects from the saved state.
+   *
+   * @param state - Previously saved canvas state
+   */
+  loadState(state: {
+    objects?: CanvasObject[];
+    backgroundColor?: string;
+    width?: number;
+    height?: number;
+    zoom?: number;
+    panX?: number;
+    panY?: number;
+  }): void {
+    if (!this.canvas) {
+      return;
+    }
+
+    // Clear current canvas
+    this.canvas.clear();
+
+    // Restore configuration
+    if (state.backgroundColor) {
+      this.canvas.backgroundColor = state.backgroundColor;
+    }
+    if (state.width && state.height) {
+      this.canvas.setDimensions({ width: state.width, height: state.height });
+    }
+
+    // Restore objects
+    if (state.objects && state.objects.length > 0) {
+      this.batchAddObjects(state.objects);
+    }
+
+    // Restore viewport
+    if (state.zoom !== undefined && state.panX !== undefined && state.panY !== undefined) {
+      const vpt: [number, number, number, number, number, number] = [
+        state.zoom,     // scaleX
+        0,              // skewY
+        0,              // skewX
+        state.zoom,     // scaleY
+        state.panX,     // translateX
+        state.panY      // translateY
+      ];
+      this.canvas.setViewportTransform(vpt);
+    }
+
+    // Render restored canvas
+    this.canvas.requestRenderAll();
+  }
+
+  /**
    * Dispose of the canvas and clean up resources
    */
   dispose(): void {

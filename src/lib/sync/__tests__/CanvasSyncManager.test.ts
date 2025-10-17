@@ -17,6 +17,8 @@ const createMockFabricManager = () => ({
   addObject: vi.fn(),
   removeObject: vi.fn(),
   findObjectById: vi.fn(),
+  setupMousewheelZoom: vi.fn(), // W2.D11: Added for CanvasSyncManager compatibility
+  setupSpacebarPan: vi.fn(),    // W2.D11: Added for CanvasSyncManager compatibility
 });
 
 // Mock PaperboxStore
