@@ -167,11 +167,71 @@ vi.mock('fabric', () => {
     }
   }
 
+  // W1.D6: MockPath for cursor icon rendering
+  class MockPath {
+    public type = 'path';
+    public left: number;
+    public top: number;
+    public fill: string;
+    public stroke?: string;
+    public strokeWidth?: number;
+    public selectable: boolean;
+    public evented: boolean;
+    public hoverCursor: string;
+    public data?: any;
+    private pathData: string;
+
+    constructor(pathData: string, config: any = {}) {
+      this.pathData = pathData;
+      this.left = config.left || 0;
+      this.top = config.top || 0;
+      this.fill = config.fill || '#000000';
+      this.stroke = config.stroke;
+      this.strokeWidth = config.strokeWidth;
+      this.selectable = config.selectable !== false;
+      this.evented = config.evented !== false;
+      this.hoverCursor = config.hoverCursor || 'move';
+      this.data = config.data;
+    }
+  }
+
+  // W1.D6: MockText for cursor name labels
+  class MockText {
+    public type = 'text';
+    public left: number;
+    public top: number;
+    public text: string;
+    public fontSize: number;
+    public fill: string;
+    public backgroundColor?: string;
+    public padding?: number;
+    public selectable: boolean;
+    public evented: boolean;
+    public hoverCursor: string;
+    public data?: any;
+
+    constructor(text: string, config: any = {}) {
+      this.text = text;
+      this.left = config.left || 0;
+      this.top = config.top || 0;
+      this.fontSize = config.fontSize || 16;
+      this.fill = config.fill || '#000000';
+      this.backgroundColor = config.backgroundColor;
+      this.padding = config.padding;
+      this.selectable = config.selectable !== false;
+      this.evented = config.evented !== false;
+      this.hoverCursor = config.hoverCursor || 'text';
+      this.data = config.data;
+    }
+  }
+
   return {
     Canvas: MockCanvas,
     Rect: MockRect,
     Circle: MockCircle,
     Textbox: MockTextbox,
+    Path: MockPath,
+    Text: MockText,
   };
 });
 

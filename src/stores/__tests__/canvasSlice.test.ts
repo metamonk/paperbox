@@ -28,6 +28,12 @@ vi.mock('@/lib/supabase', () => ({
         in: vi.fn(() => Promise.resolve({ error: null })),
       })),
     })),
+    channel: vi.fn(() => ({
+      on: vi.fn(() => ({
+        subscribe: vi.fn(),
+      })),
+      unsubscribe: vi.fn(),
+    })),
   },
 }));
 
@@ -700,6 +706,334 @@ describe('canvasSlice - W1.D4 Supabase Integration', () => {
 
       const result = getAllObjects();
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('Realtime Subscriptions (W1.D4.7-4.9)', () => {
+    let mockChannel: any;
+    let mockSubscribe: any;
+    let mockOn: any;
+    let mockUnsubscribe: any;
+    let capturedEventHandler: any;
+
+    beforeEach(() => {
+      // Create mock Realtime channel
+      mockUnsubscribe = vi.fn();
+      mockSubscribe = vi.fn(() => mockChannel);
+      mockOn = vi.fn((eventType, config, handler) => {
+        // Capture the handler for manual event triggering
+        capturedEventHandler = handler;
+        return { subscribe: mockSubscribe };
+      });
+
+      mockChannel = {
+        on: mockOn,
+        subscribe: mockSubscribe,
+        unsubscribe: mockUnsubscribe,
+      };
+
+      // Mock supabase.channel()
+      vi.spyOn(supabase as any, 'channel').mockReturnValue(mockChannel);
+    });
+
+    describe('setupRealtimeSubscription()', () => {
+      it('should create channel with correct name', () => {
+        const { setupRealtimeSubscription } = usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+
+        expect((supabase as any).channel).toHaveBeenCalledWith('canvas-changes');
+      });
+
+      it('should subscribe to postgres_changes with correct config', () => {
+        const { setupRealtimeSubscription } = usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+
+        expect(mockOn).toHaveBeenCalledWith(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'canvas_objects',
+            filter: 'created_by=eq.user-123',
+          },
+          expect.any(Function),
+        );
+      });
+
+      it('should call subscribe() on channel', () => {
+        const { setupRealtimeSubscription } = usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+
+        expect(mockSubscribe).toHaveBeenCalled();
+      });
+
+      it('should store channel reference in state', () => {
+        const { setupRealtimeSubscription } = usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+
+        const { realtimeChannel } = usePaperboxStore.getState();
+        expect(realtimeChannel).toBe(mockChannel);
+      });
+
+      it('should cleanup existing subscription before creating new one', () => {
+        const { setupRealtimeSubscription } = usePaperboxStore.getState();
+
+        // Setup first subscription
+        setupRealtimeSubscription('user-123');
+        const firstChannel = usePaperboxStore.getState().realtimeChannel;
+
+        // Setup second subscription
+        setupRealtimeSubscription('user-456');
+
+        // First channel should have been unsubscribed
+        expect(mockUnsubscribe).toHaveBeenCalled();
+      });
+    });
+
+    describe('Realtime Event Handling - INSERT', () => {
+      it('should add new object to state on INSERT event', () => {
+        const { setupRealtimeSubscription, getObjectById } = usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+
+        // Simulate INSERT event from Supabase
+        const insertPayload = {
+          eventType: 'INSERT',
+          new: {
+            id: 'rect-new',
+            type: 'rectangle',
+            x: 50,
+            y: 50,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            group_id: null,
+            z_index: 0,
+            fill: '#ff0000',
+            stroke: '#000000',
+            stroke_width: 2,
+            opacity: 1,
+            type_properties: {},
+            style_properties: {},
+            metadata: {},
+            created_by: 'user-123',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            locked_by: null,
+            lock_acquired_at: null,
+          },
+          old: {},
+          schema: 'public',
+          table: 'canvas_objects',
+        };
+
+        // Trigger the event
+        capturedEventHandler(insertPayload);
+
+        // Verify object was added to state
+        const obj = getObjectById('rect-new');
+        expect(obj).toBeDefined();
+        expect(obj?.type).toBe('rectangle');
+        expect(obj?.x).toBe(50);
+        expect(obj?.fill).toBe('#ff0000');
+      });
+    });
+
+    describe('Realtime Event Handling - UPDATE', () => {
+      it('should update existing object on UPDATE event', () => {
+        const { setupRealtimeSubscription, _addObject, getObjectById } = usePaperboxStore.getState();
+
+        // Add initial object
+        const initialObj: CanvasObject = {
+          id: 'rect-1',
+          type: 'rectangle',
+          x: 100,
+          y: 100,
+          width: 200,
+          height: 150,
+          rotation: 0,
+          group_id: null,
+          z_index: 0,
+          fill: '#ffffff',
+          stroke: '#000000',
+          stroke_width: 2,
+          opacity: 1,
+          type_properties: {},
+          style_properties: {},
+          metadata: {},
+          created_by: 'user-123',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          locked_by: null,
+          lock_acquired_at: null,
+        };
+        _addObject(initialObj);
+
+        setupRealtimeSubscription('user-123');
+
+        // Simulate UPDATE event
+        const updatePayload = {
+          eventType: 'UPDATE',
+          new: {
+            id: 'rect-1',
+            type: 'rectangle',
+            x: 200, // Changed
+            y: 150, // Changed
+            width: 200,
+            height: 150,
+            rotation: 45, // Changed
+            group_id: null,
+            z_index: 0,
+            fill: '#00ff00', // Changed
+            stroke: '#000000',
+            stroke_width: 2,
+            opacity: 0.5, // Changed
+            type_properties: {},
+            style_properties: {},
+            metadata: {},
+            created_by: 'user-123',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            locked_by: null,
+            lock_acquired_at: null,
+          },
+          old: {
+            id: 'rect-1',
+            x: 100,
+            y: 100,
+            rotation: 0,
+            opacity: 1,
+            fill: '#ffffff',
+          },
+          schema: 'public',
+          table: 'canvas_objects',
+        };
+
+        capturedEventHandler(updatePayload);
+
+        const updated = getObjectById('rect-1');
+        expect(updated?.x).toBe(200);
+        expect(updated?.y).toBe(150);
+        expect(updated?.rotation).toBe(45);
+        expect(updated?.opacity).toBe(0.5);
+        expect(updated?.fill).toBe('#00ff00');
+      });
+    });
+
+    describe('Realtime Event Handling - DELETE', () => {
+      it('should remove object from state on DELETE event', () => {
+        const { setupRealtimeSubscription, _addObject, getObjectById } = usePaperboxStore.getState();
+
+        // Add object to delete
+        const objToDelete: CanvasObject = {
+          id: 'rect-delete',
+          type: 'rectangle',
+          x: 100,
+          y: 100,
+          width: 200,
+          height: 150,
+          rotation: 0,
+          group_id: null,
+          z_index: 0,
+          fill: '#ffffff',
+          stroke: '#000000',
+          stroke_width: 2,
+          opacity: 1,
+          type_properties: {},
+          style_properties: {},
+          metadata: {},
+          created_by: 'user-123',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          locked_by: null,
+          lock_acquired_at: null,
+        };
+        _addObject(objToDelete);
+
+        expect(getObjectById('rect-delete')).toBeDefined();
+
+        setupRealtimeSubscription('user-123');
+
+        // Simulate DELETE event
+        const deletePayload = {
+          eventType: 'DELETE',
+          new: {},
+          old: {
+            id: 'rect-delete',
+            type: 'rectangle',
+          },
+          schema: 'public',
+          table: 'canvas_objects',
+        };
+
+        capturedEventHandler(deletePayload);
+
+        // Verify object was removed
+        expect(getObjectById('rect-delete')).toBeUndefined();
+      });
+    });
+
+    describe('cleanupRealtimeSubscription()', () => {
+      it('should unsubscribe from channel', () => {
+        const { setupRealtimeSubscription, cleanupRealtimeSubscription } =
+          usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+        cleanupRealtimeSubscription();
+
+        expect(mockUnsubscribe).toHaveBeenCalled();
+      });
+
+      it('should clear channel reference from state', () => {
+        const { setupRealtimeSubscription, cleanupRealtimeSubscription } =
+          usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+        expect(usePaperboxStore.getState().realtimeChannel).toBe(mockChannel);
+
+        cleanupRealtimeSubscription();
+        expect(usePaperboxStore.getState().realtimeChannel).toBeNull();
+      });
+
+      it('should handle cleanup when no subscription exists', () => {
+        const { cleanupRealtimeSubscription } = usePaperboxStore.getState();
+
+        // Should not throw error
+        expect(() => cleanupRealtimeSubscription()).not.toThrow();
+      });
+    });
+
+    describe('Integration with initialize() and cleanup()', () => {
+      it('should setup realtime subscription after initialize()', async () => {
+        const { initialize } = usePaperboxStore.getState();
+
+        // Mock Supabase data fetch
+        vi.mocked(supabase.from).mockReturnValue({
+          select: vi.fn(() => ({
+            eq: vi.fn(() => Promise.resolve({ data: [], error: null })),
+          })),
+        } as any);
+
+        await initialize('user-123');
+
+        // Should have setup realtime subscription
+        expect((supabase as any).channel).toHaveBeenCalledWith('canvas-changes');
+        expect(mockSubscribe).toHaveBeenCalled();
+      });
+
+      it('should cleanup subscription on cleanup()', () => {
+        const { setupRealtimeSubscription, cleanup } = usePaperboxStore.getState();
+
+        setupRealtimeSubscription('user-123');
+        cleanup();
+
+        expect(mockUnsubscribe).toHaveBeenCalled();
+        expect(usePaperboxStore.getState().realtimeChannel).toBeNull();
+      });
     });
   });
 });

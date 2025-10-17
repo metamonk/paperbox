@@ -13,8 +13,9 @@
  * @see docs/PHASE_2_PRD.md for architecture details
  */
 
-import { Canvas as FabricCanvas, FabricObject, Rect, Circle, Textbox } from 'fabric';
+import { Canvas as FabricCanvas, FabricObject, Rect, Circle, Textbox, Path, Text } from 'fabric';
 import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
+import type { CursorPosition, UserPresence } from '@/stores/slices/collaborationSlice';
 
 /**
  * Configuration options for FabricCanvasManager
@@ -91,6 +92,7 @@ export class FabricCanvasManager {
   private canvas: FabricCanvas | null = null;
   private config: Required<FabricCanvasConfig>;
   private eventHandlers: FabricCanvasEventHandlers = {};
+  private cursorObjects: FabricObject[] = []; // W1.D6: Track cursor overlay objects
 
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -508,6 +510,70 @@ export class FabricCanvasManager {
   }
 
   /**
+   * W1.D6: Render remote collaborator cursors on the canvas
+   *
+   * Displays cursor icons and user name labels for all active collaborators.
+   * Clears previous cursor overlays before rendering new ones.
+   *
+   * @param cursors - Map of userId -> cursor position
+   * @param presence - Map of userId -> user presence data
+   */
+  renderRemoteCursors(
+    cursors: Record<string, CursorPosition>,
+    presence: Record<string, UserPresence>
+  ): void {
+    if (!this.canvas) {
+      return;
+    }
+
+    // Clear previous cursor objects from canvas
+    this.cursorObjects.forEach((obj) => {
+      this.canvas?.remove(obj);
+    });
+    this.cursorObjects = [];
+
+    // Render cursor for each user
+    Object.entries(cursors).forEach(([userId, cursor]) => {
+      const user = presence[userId];
+
+      // Skip if presence data is missing
+      if (!user) {
+        return;
+      }
+
+      // Create cursor icon (SVG path for pointer shape)
+      const cursorIcon = new Path('M0,0 L0,20 L5,15 L10,22 L14,20 L9,13 L17,13 Z', {
+        fill: user.userColor,
+        left: cursor.x,
+        top: cursor.y,
+        selectable: false,
+        evented: false, // Don't interfere with canvas events
+        hoverCursor: 'default',
+      });
+
+      // Create user name label
+      const nameLabel = new Text(user.userName, {
+        left: cursor.x + 20, // Offset 20px to the right of cursor
+        top: cursor.y,
+        fontSize: 12,
+        fill: user.userColor,
+        backgroundColor: 'white',
+        padding: 2,
+        selectable: false,
+        evented: false,
+        hoverCursor: 'default',
+      });
+
+      // Add to canvas and track for cleanup
+      this.canvas.add(cursorIcon, nameLabel);
+      this.cursorObjects.push(cursorIcon, nameLabel);
+    });
+
+    // Render all cursor objects
+    this.canvas.renderAll();
+  }
+
+  /**
    * Dispose of the canvas and clean up resources
    */
   dispose(): void {
@@ -516,5 +582,6 @@ export class FabricCanvasManager {
       this.canvas = null;
     }
     this.eventHandlers = {};
+    this.cursorObjects = [];
   }
 }

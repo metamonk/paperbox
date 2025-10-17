@@ -4,6 +4,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { CanvasPage } from './pages/CanvasPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastProvider } from './components/ui/Toast';
 
 /**
  * Protected route wrapper
@@ -58,45 +59,48 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 /**
  * Main App component with routing
  * Wrapped in ErrorBoundary for graceful error handling
+ * Wrapped in ToastProvider for user notifications (W1.D8)
  */
 function App() {
   return (
     <ErrorBoundary>
-      <Routes>
-        {/* Public Routes - redirect to canvas if authenticated */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/signup"
-          element={
-            <PublicRoute>
-              <Signup />
-            </PublicRoute>
-          }
-        />
+      <ToastProvider>
+        <Routes>
+          {/* Public Routes - redirect to canvas if authenticated */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/signup"
+            element={
+              <PublicRoute>
+                <Signup />
+              </PublicRoute>
+            }
+          />
 
-        {/* Protected Routes - require authentication */}
-        <Route
-          path="/canvas"
-          element={
-            <ProtectedRoute>
-              <CanvasPage />
-            </ProtectedRoute>
-          }
-        />
+          {/* Protected Routes - require authentication */}
+          <Route
+            path="/canvas"
+            element={
+              <ProtectedRoute>
+                <CanvasPage />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Default Route - redirect to canvas or login */}
-        <Route path="/" element={<Navigate to="/canvas" replace />} />
+          {/* Default Route - redirect to canvas or login */}
+          <Route path="/" element={<Navigate to="/canvas" replace />} />
 
-        {/* 404 - redirect to home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* 404 - redirect to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ToastProvider>
     </ErrorBoundary>
   );
 }

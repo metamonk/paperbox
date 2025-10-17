@@ -5,14 +5,41 @@
  * Covers user presence, cursor positions, object locks, and connection state
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { usePaperboxStore } from '../index';
-import type { UserPresence, CursorPosition, ObjectLock } from '../slices/collaborationSlice';
+import type { UserPresence, ObjectLock } from '../slices/collaborationSlice';
+import { supabase } from '@/lib/supabase'; // W1.D7: For database locking tests
+
+// Mock Supabase client with presence channel support
+// Create a shared mock channel that all calls will return
+const mockChannel = {
+  on: vi.fn(function (this: any) {
+    return this;
+  }),
+  track: vi.fn(() => Promise.resolve()),
+  untrack: vi.fn(() => Promise.resolve()),
+  subscribe: vi.fn(function (this: any) {
+    return this;
+  }),
+  unsubscribe: vi.fn(() => Promise.resolve()),
+  presenceState: vi.fn(() => ({})),
+};
+
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    channel: vi.fn(() => mockChannel),
+    from: vi.fn(), // W1.D7: For database operations (will be mocked per-test)
+  },
+}));
 
 describe('collaborationSlice - Real-time Collaboration Management', () => {
   beforeEach(() => {
+    // Reset mock calls
+    vi.clearAllMocks();
+
     // Reset collaboration state before each test
     const store = usePaperboxStore.getState();
+    store.cleanupPresenceChannel(); // W1.D6: Clean up presence channel
     store.clearAllPresence();
     store.clearAllCursors();
     store.releaseAllLocks();
@@ -760,6 +787,689 @@ describe('collaborationSlice - Real-time Collaboration Management', () => {
       expect(cursors['user-2']).toBeUndefined();
       expect(locks['obj-1']).toBeUndefined();
       expect(locks['obj-2']).toBeUndefined();
+    });
+  });
+
+  // ─── Supabase Presence Integration (W1.D5) ───
+
+  describe('Supabase Presence Integration (W1.D5)', () => {
+    describe('setupPresenceChannel()', () => {
+      it('should create presence channel with room-specific name', async () => {
+        const { supabase } = await import('@/lib/supabase');
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        expect(supabase.channel).toHaveBeenCalledWith('presence-room-123', {
+          config: {
+            presence: {
+              key: 'user-1',
+            },
+          },
+        });
+      });
+
+      it('should track current user presence on channel', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        expect(mockChannel.track).toHaveBeenCalledWith({
+          userId: 'user-1',
+          userName: 'Alice',
+          userColor: '#FF0000',
+          isActive: true,
+          lastSeen: expect.any(Number),
+        });
+      });
+
+      it('should subscribe to presence events', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // Verify on() was called for presence events
+        expect(mockChannel.on).toHaveBeenCalledWith('presence', { event: 'sync' }, expect.any(Function));
+        expect(mockChannel.on).toHaveBeenCalledWith('presence', { event: 'join' }, expect.any(Function));
+        expect(mockChannel.on).toHaveBeenCalledWith('presence', { event: 'leave' }, expect.any(Function));
+        expect(mockChannel.subscribe).toHaveBeenCalled();
+      });
+
+      it('should store presence channel reference in state', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        const { presenceChannel } = usePaperboxStore.getState();
+        expect(presenceChannel).toBeDefined();
+      });
+
+      it('should cleanup existing presence channel before creating new one', () => {
+        const store = usePaperboxStore.getState();
+
+        // Setup first channel
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // Reset mock counts
+        mockChannel.untrack.mockClear();
+        mockChannel.unsubscribe.mockClear();
+
+        // Setup second channel (should cleanup first)
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // First channel should have been cleaned up
+        expect(mockChannel.untrack).toHaveBeenCalled();
+        expect(mockChannel.unsubscribe).toHaveBeenCalled();
+      });
+    });
+
+    describe('cleanupPresenceChannel()', () => {
+      it('should untrack current user', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+        store.cleanupPresenceChannel();
+
+        expect(mockChannel.untrack).toHaveBeenCalled();
+      });
+
+      it('should unsubscribe from presence channel', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+        store.cleanupPresenceChannel();
+
+        expect(mockChannel.unsubscribe).toHaveBeenCalled();
+      });
+
+      it('should clear presence channel reference from state', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+        store.cleanupPresenceChannel();
+
+        const { presenceChannel } = usePaperboxStore.getState();
+        expect(presenceChannel).toBeNull();
+      });
+
+      it('should handle cleanup when no presence channel exists', () => {
+        const store = usePaperboxStore.getState();
+
+        // Should not throw even if no channel exists
+        expect(() => {
+          store.cleanupPresenceChannel();
+        }).not.toThrow();
+      });
+    });
+
+    describe('Integration with collaboration lifecycle', () => {
+      it('should setup presence when connecting to room', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setCurrentUser('user-1', 'Alice', '#FF0000');
+        store.setRoomId('room-123');
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        const { presenceChannel, currentUserId, roomId } = usePaperboxStore.getState();
+        expect(presenceChannel).toBeDefined();
+        expect(currentUserId).toBe('user-1');
+        expect(roomId).toBe('room-123');
+      });
+
+      it('should cleanup presence when disconnecting from room', () => {
+        const store = usePaperboxStore.getState();
+
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+        store.cleanupPresenceChannel();
+        store.setRoomId(null);
+
+        const { presenceChannel, roomId } = usePaperboxStore.getState();
+        expect(presenceChannel).toBeNull();
+        expect(roomId).toBeNull();
+      });
+    });
+  });
+
+  // ========================================================================
+  // W1.D6: Live Cursor Tracking Tests
+  // ========================================================================
+  describe('W1.D6: Live Cursor Tracking', () => {
+    describe('broadcastCursor()', () => {
+      it('should update presence channel with cursor position', () => {
+        const store = usePaperboxStore.getState();
+
+        // Setup current user and presence channel first
+        store.setCurrentUser('user-1', 'Alice', '#FF0000');
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // Clear setup track call
+        mockChannel.track.mockClear();
+
+        // Broadcast cursor position
+        store.broadcastCursor(100, 200);
+
+        // Verify channel.track() was called with cursor data
+        expect(mockChannel.track).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cursor: expect.objectContaining({
+              x: 100,
+              y: 200,
+              timestamp: expect.any(Number),
+            }),
+          })
+        );
+      });
+
+      it('should throttle cursor broadcasts to 60fps (16.67ms)', async () => {
+        const store = usePaperboxStore.getState();
+        store.setCurrentUser('user-1', 'Alice', '#FF0000');
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        mockChannel.track.mockClear();
+
+        // First broadcast should go through and set lastCursorBroadcast
+        store.broadcastCursor(100, 200);
+        expect(usePaperboxStore.getState().lastCursorBroadcast).not.toBeNull();
+        const firstBroadcastTime = usePaperboxStore.getState().lastCursorBroadcast!;
+
+        // Immediate second broadcast should be throttled
+        store.broadcastCursor(110, 210);
+        expect(usePaperboxStore.getState().lastCursorBroadcast).toBe(firstBroadcastTime); // Timestamp unchanged (throttled)
+
+        // Wait for throttle period to expire
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        // Third broadcast should go through
+        store.broadcastCursor(120, 220);
+        expect(usePaperboxStore.getState().lastCursorBroadcast).toBeGreaterThan(firstBroadcastTime); // Timestamp updated
+      });
+
+      it('should handle null presence channel gracefully', () => {
+        const store = usePaperboxStore.getState();
+
+        // No presence channel setup
+        expect(() => {
+          store.broadcastCursor(100, 200);
+        }).not.toThrow();
+
+        expect(mockChannel.track).not.toHaveBeenCalled();
+      });
+
+      it('should update lastCursorBroadcast timestamp', () => {
+        const store = usePaperboxStore.getState();
+        store.setCurrentUser('user-1', 'Alice', '#FF0000');
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // Clear setup track call
+        mockChannel.track.mockClear();
+
+        store.broadcastCursor(100, 200);
+
+        const { lastCursorBroadcast } = usePaperboxStore.getState();
+        expect(lastCursorBroadcast).toBeDefined();
+        expect(lastCursorBroadcast).toBeGreaterThan(0);
+      });
+
+      it('should include all presence data when broadcasting cursor', () => {
+        const store = usePaperboxStore.getState();
+        store.setCurrentUser('user-1', 'Alice', '#FF0000');
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // Clear mocks to isolate broadcastCursor call
+        mockChannel.track.mockClear();
+
+        // Reset lastCursorBroadcast to allow immediate broadcast
+        usePaperboxStore.setState((state) => {
+          state.lastCursorBroadcast = null;
+        });
+
+        store.broadcastCursor(150, 250);
+
+        // Verify track was called with cursor data
+        expect(mockChannel.track).toHaveBeenCalledWith(
+          expect.objectContaining({
+            userId: 'user-1',
+            userName: 'Alice',
+            userColor: '#FF0000',
+            isActive: true,
+            cursor: expect.objectContaining({
+              x: 150,
+              y: 250,
+              timestamp: expect.any(Number),
+            }),
+          })
+        );
+      });
+    });
+
+    describe('Cursor state synchronization', () => {
+      it('should update cursor state when presence sync event includes cursor data', () => {
+        const store = usePaperboxStore.getState();
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // Manually update cursor via updateCursor
+        store.updateCursor('user-2', 300, 400);
+
+        const { cursors } = usePaperboxStore.getState();
+        expect(cursors['user-2']).toEqual(
+          expect.objectContaining({
+            userId: 'user-2',
+            x: 300,
+            y: 400,
+          })
+        );
+      });
+
+      it('should remove cursor when user leaves', () => {
+        const store = usePaperboxStore.getState();
+
+        store.updateCursor('user-2', 100, 200);
+        expect(usePaperboxStore.getState().cursors['user-2']).toBeDefined();
+
+        store.removeCursor('user-2');
+        expect(usePaperboxStore.getState().cursors['user-2']).toBeUndefined();
+      });
+
+      it('should clear all cursors when leaving room', () => {
+        const store = usePaperboxStore.getState();
+
+        store.updateCursor('user-2', 100, 200);
+        store.updateCursor('user-3', 300, 400);
+        expect(Object.keys(usePaperboxStore.getState().cursors)).toHaveLength(2);
+
+        store.clearAllCursors();
+        expect(Object.keys(usePaperboxStore.getState().cursors)).toHaveLength(0);
+      });
+    });
+
+    describe('Integration with Presence events', () => {
+      it('should extract cursor data from presence state on sync', () => {
+        const store = usePaperboxStore.getState();
+        store.setupPresenceChannel('user-1', 'Alice', '#FF0000', 'room-123');
+
+        // Simulate presence state with cursor data
+        const mockPresenceState = {
+          'user-2': [{
+            userId: 'user-2',
+            userName: 'Bob',
+            userColor: '#00FF00',
+            isActive: true,
+            lastSeen: Date.now(),
+            cursor: { x: 500, y: 600, timestamp: Date.now() },
+          }],
+        };
+
+        mockChannel.presenceState.mockReturnValue(mockPresenceState);
+
+        // Get the sync handler that was registered
+        const syncHandler = mockChannel.on.mock.calls.find(
+          call => call[0] === 'presence' && call[1].event === 'sync'
+        )?.[2];
+
+        // Trigger sync event
+        if (syncHandler) syncHandler();
+
+        const { cursors } = usePaperboxStore.getState();
+        expect(cursors['user-2']).toEqual(
+          expect.objectContaining({
+            userId: 'user-2',
+            x: 500,
+            y: 600,
+          })
+        );
+      });
+    });
+  });
+
+  // ============================================================
+  // W1.D7: Object Locking - Async Database Integration
+  // ============================================================
+
+  describe('W1.D7: Async Object Locking', () => {
+    beforeEach(() => {
+      usePaperboxStore.getState().setCurrentUser('user-1', 'Alice', '#FF0000');
+    });
+
+    describe('requestLock()', () => {
+      it('should successfully acquire lock for unlocked object', async () => {
+        const objectId = 'object-123';
+
+        // Mock successful database lock acquisition
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: objectId,
+                    locked_by: 'user-1',
+                    lock_acquired_at: new Date().toISOString(),
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        const result = await store.requestLock(objectId);
+
+        expect(result).toBe(true);
+
+        // Get fresh state after async operation
+        const updatedStore = usePaperboxStore.getState();
+        expect(updatedStore.locks[objectId]).toBeDefined();
+        expect(updatedStore.locks[objectId].userId).toBe('user-1');
+        expect(updatedStore.locks[objectId].userName).toBe('Alice');
+      });
+
+      it('should fail to acquire lock if already locked by another user', async () => {
+        const objectId = 'object-123';
+
+        // Mock failed lock acquisition (no data returned)
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: { message: 'Object already locked' },
+                }),
+              }),
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        const result = await store.requestLock(objectId);
+
+        expect(result).toBe(false);
+        expect(store.locks[objectId]).toBeUndefined();
+      });
+
+      it('should update local state on successful lock acquisition', async () => {
+        const objectId = 'object-456';
+
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: objectId,
+                    locked_by: 'user-1',
+                    lock_acquired_at: new Date().toISOString(),
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        await store.requestLock(objectId);
+
+        const lock = store.getLock(objectId);
+        expect(lock).toBeDefined();
+        expect(lock?.objectId).toBe(objectId);
+        expect(lock?.userId).toBe('user-1');
+        expect(lock?.userName).toBe('Alice');
+        expect(lock?.acquiredAt).toBeGreaterThan(0);
+      });
+
+      it('should handle database errors gracefully', async () => {
+        const objectId = 'object-789';
+
+        // Mock database error
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: { message: 'Database connection failed' },
+                }),
+              }),
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        const result = await store.requestLock(objectId);
+
+        expect(result).toBe(false);
+        expect(store.locks[objectId]).toBeUndefined();
+      });
+    });
+
+    describe('releaseLock()', () => {
+      it('should release lock owned by current user', async () => {
+        const objectId = 'object-123';
+
+        // First acquire the lock locally
+        usePaperboxStore.getState().acquireLock(objectId, 'user-1', 'Alice');
+
+        // Mock successful database release
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({
+              error: null,
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        await store.releaseDbLock(objectId);
+
+        // Get fresh state after async operation
+        const updatedStore = usePaperboxStore.getState();
+        expect(updatedStore.locks[objectId]).toBeUndefined();
+      });
+
+      it('should not release lock owned by another user', async () => {
+        const objectId = 'object-123';
+
+        // Lock is owned by user-2
+        usePaperboxStore.getState().acquireLock(objectId, 'user-2', 'Bob');
+
+        // Mock database update (won't match eq condition)
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({
+              error: null,
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        await store.releaseDbLock(objectId);
+
+        // Lock should still exist (database didn't update it since user-1 doesn't own it)
+        expect(store.locks[objectId]).toBeDefined();
+        expect(store.locks[objectId].userId).toBe('user-2');
+      });
+
+      it('should clear local state on successful release', async () => {
+        const objectId = 'object-456';
+
+        usePaperboxStore.getState().acquireLock(objectId, 'user-1', 'Alice');
+
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({
+              error: null,
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        expect(store.isObjectLocked(objectId)).toBe(true);
+
+        await store.releaseDbLock(objectId);
+
+        expect(store.isObjectLocked(objectId)).toBe(false);
+      });
+
+      it('should handle database errors gracefully', async () => {
+        const objectId = 'object-789';
+
+        usePaperboxStore.getState().acquireLock(objectId, 'user-1', 'Alice');
+
+        // Mock database error
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({
+              error: { message: 'Database connection failed' },
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        await store.releaseDbLock(objectId);
+
+        // Lock should remain if database update failed
+        expect(store.locks[objectId]).toBeDefined();
+      });
+    });
+
+    describe('Lock utilities with async operations', () => {
+      it('isObjectLocked() should return true for locked objects', async () => {
+        const objectId = 'object-123';
+
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: objectId,
+                    locked_by: 'user-1',
+                    lock_acquired_at: new Date().toISOString(),
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        await store.requestLock(objectId);
+
+        expect(store.isObjectLocked(objectId)).toBe(true);
+      });
+
+      it('isObjectLockedByCurrentUser() should identify user locks', async () => {
+        const objectId = 'object-123';
+
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: objectId,
+                    locked_by: 'user-1',
+                    lock_acquired_at: new Date().toISOString(),
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        await store.requestLock(objectId);
+
+        expect(store.isObjectLockedByCurrentUser(objectId)).toBe(true);
+      });
+
+      it('isObjectLockedByOther() should identify other user locks', async () => {
+        const objectId = 'object-123';
+
+        // Lock is owned by user-2
+        usePaperboxStore.getState().acquireLock(objectId, 'user-2', 'Bob');
+
+        const store = usePaperboxStore.getState();
+        expect(store.isObjectLockedByOther(objectId)).toBe(true);
+      });
+
+      it('getLock() should return lock metadata', async () => {
+        const objectId = 'object-123';
+
+        const mockUpdate = vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: {
+                    id: objectId,
+                    locked_by: 'user-1',
+                    lock_acquired_at: new Date().toISOString(),
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        });
+
+        vi.spyOn(supabase, 'from').mockReturnValue({
+          update: mockUpdate,
+        } as any);
+
+        const store = usePaperboxStore.getState();
+        await store.requestLock(objectId);
+
+        const lock = store.getLock(objectId);
+        expect(lock).toBeDefined();
+        expect(lock?.objectId).toBe(objectId);
+        expect(lock?.userId).toBe('user-1');
+        expect(lock?.userName).toBe('Alice');
+      });
     });
   });
 });

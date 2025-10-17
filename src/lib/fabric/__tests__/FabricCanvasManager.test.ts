@@ -1311,3 +1311,290 @@ describe('FabricCanvasManager - Integration: Full Object Lifecycle', () => {
     expect(manager.findObjectById('multi-text-1')).toBe(fabricText);
   });
 });
+
+// ========================================================================
+// W1.D6: Live Cursor Tracking - Cursor Rendering Tests
+// ========================================================================
+describe('FabricCanvasManager - W1.D6: Cursor Rendering', () => {
+  let manager: FabricCanvasManager;
+  let canvasElement: HTMLCanvasElement;
+
+  beforeEach(() => {
+    canvasElement = document.createElement('canvas');
+    canvasElement.id = 'cursor-test-canvas';
+    canvasElement.width = 800;
+    canvasElement.height = 600;
+    document.body.appendChild(canvasElement);
+
+    manager = new FabricCanvasManager();
+    manager.initialize(canvasElement);
+  });
+
+  afterEach(() => {
+    manager.dispose();
+    document.body.removeChild(canvasElement);
+  });
+
+  describe('renderRemoteCursors()', () => {
+    it('should render cursor at specified position', () => {
+      // Arrange
+      const cursors = {
+        'user-1': {
+          userId: 'user-1',
+          x: 100,
+          y: 150,
+          timestamp: Date.now(),
+        },
+      };
+
+      const presence = {
+        'user-1': {
+          userId: 'user-1',
+          userName: 'Alice',
+          userColor: '#FF0000',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+      };
+
+      // Act
+      manager.renderRemoteCursors(cursors, presence);
+
+      // Assert
+      const canvas = manager.getCanvas();
+      const objects = canvas?.getObjects() || [];
+
+      // Should have cursor icon and name label
+      expect(objects.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should render cursor with user color', () => {
+      // Arrange
+      const cursors = {
+        'user-2': {
+          userId: 'user-2',
+          x: 200,
+          y: 250,
+          timestamp: Date.now(),
+        },
+      };
+
+      const presence = {
+        'user-2': {
+          userId: 'user-2',
+          userName: 'Bob',
+          userColor: '#00FF00',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+      };
+
+      // Act
+      manager.renderRemoteCursors(cursors, presence);
+
+      // Assert
+      const canvas = manager.getCanvas();
+      const objects = canvas?.getObjects() || [];
+
+      // Find cursor icon (should be a Path with user color)
+      const cursorIcon = objects.find((obj) => obj.fill === '#00FF00');
+      expect(cursorIcon).toBeDefined();
+    });
+
+    it('should render user name label with cursor', () => {
+      // Arrange
+      const cursors = {
+        'user-3': {
+          userId: 'user-3',
+          x: 300,
+          y: 350,
+          timestamp: Date.now(),
+        },
+      };
+
+      const presence = {
+        'user-3': {
+          userId: 'user-3',
+          userName: 'Charlie',
+          userColor: '#0000FF',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+      };
+
+      // Act
+      manager.renderRemoteCursors(cursors, presence);
+
+      // Assert
+      const canvas = manager.getCanvas();
+      const objects = canvas?.getObjects() || [];
+
+      // Find text object with user name
+      const nameLabel = objects.find(
+        (obj) => obj.type === 'text' && (obj as any).text === 'Charlie'
+      );
+      expect(nameLabel).toBeDefined();
+    });
+
+    it('should handle multiple cursors simultaneously', () => {
+      // Arrange
+      const cursors = {
+        'user-1': { userId: 'user-1', x: 100, y: 100, timestamp: Date.now() },
+        'user-2': { userId: 'user-2', x: 200, y: 200, timestamp: Date.now() },
+        'user-3': { userId: 'user-3', x: 300, y: 300, timestamp: Date.now() },
+      };
+
+      const presence = {
+        'user-1': {
+          userId: 'user-1',
+          userName: 'Alice',
+          userColor: '#FF0000',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+        'user-2': {
+          userId: 'user-2',
+          userName: 'Bob',
+          userColor: '#00FF00',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+        'user-3': {
+          userId: 'user-3',
+          userName: 'Charlie',
+          userColor: '#0000FF',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+      };
+
+      // Act
+      manager.renderRemoteCursors(cursors, presence);
+
+      // Assert
+      const canvas = manager.getCanvas();
+      const objects = canvas?.getObjects() || [];
+
+      // Should have cursor icon + label for each user (3 users × 2 objects = 6 objects)
+      expect(objects.length).toBeGreaterThanOrEqual(6);
+    });
+
+    it('should clear previous cursors before rendering new ones', () => {
+      // Arrange
+      const initialCursors = {
+        'user-1': { userId: 'user-1', x: 100, y: 100, timestamp: Date.now() },
+      };
+
+      const initialPresence = {
+        'user-1': {
+          userId: 'user-1',
+          userName: 'Alice',
+          userColor: '#FF0000',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+      };
+
+      const updatedCursors = {
+        'user-2': { userId: 'user-2', x: 200, y: 200, timestamp: Date.now() },
+      };
+
+      const updatedPresence = {
+        'user-2': {
+          userId: 'user-2',
+          userName: 'Bob',
+          userColor: '#00FF00',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+      };
+
+      // Act
+      manager.renderRemoteCursors(initialCursors, initialPresence);
+      const initialCount = manager.getCanvas()?.getObjects().length || 0;
+
+      manager.renderRemoteCursors(updatedCursors, updatedPresence);
+      const updatedCount = manager.getCanvas()?.getObjects().length || 0;
+
+      // Assert
+      // Should have same count (old cursors cleared, new ones added)
+      expect(updatedCount).toBe(initialCount);
+    });
+
+    it('should skip cursor rendering if presence data is missing', () => {
+      // Arrange
+      const cursors = {
+        'user-1': { userId: 'user-1', x: 100, y: 100, timestamp: Date.now() },
+        'user-2': { userId: 'user-2', x: 200, y: 200, timestamp: Date.now() },
+      };
+
+      const presence = {
+        'user-1': {
+          userId: 'user-1',
+          userName: 'Alice',
+          userColor: '#FF0000',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+        // user-2 missing from presence
+      };
+
+      // Act
+      manager.renderRemoteCursors(cursors, presence);
+
+      // Assert
+      const canvas = manager.getCanvas();
+      const objects = canvas?.getObjects() || [];
+
+      // Should only render cursor for user-1 (2 objects: icon + label)
+      expect(objects.length).toBe(2);
+    });
+
+    it('should handle empty cursor map gracefully', () => {
+      // Arrange
+      const cursors = {};
+      const presence = {};
+
+      // Act
+      manager.renderRemoteCursors(cursors, presence);
+
+      // Assert
+      const canvas = manager.getCanvas();
+      const objects = canvas?.getObjects() || [];
+
+      // Should have no cursor objects
+      expect(objects.length).toBe(0);
+    });
+
+    it('should position name label offset from cursor icon', () => {
+      // Arrange
+      const cursors = {
+        'user-1': { userId: 'user-1', x: 100, y: 150, timestamp: Date.now() },
+      };
+
+      const presence = {
+        'user-1': {
+          userId: 'user-1',
+          userName: 'Alice',
+          userColor: '#FF0000',
+          isActive: true,
+          lastSeen: Date.now(),
+        },
+      };
+
+      // Act
+      manager.renderRemoteCursors(cursors, presence);
+
+      // Assert
+      const canvas = manager.getCanvas();
+      const objects = canvas?.getObjects() || [];
+
+      const nameLabel = objects.find(
+        (obj) => obj.type === 'text' && (obj as any).text === 'Alice'
+      );
+
+      // Name label should be offset from cursor position
+      expect(nameLabel?.left).toBeGreaterThan(100);
+    });
+  });
+});

@@ -17,6 +17,7 @@
 import type { StateCreator } from 'zustand';
 import { nanoid } from 'nanoid';
 import { supabase } from '../../lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type {
   CanvasObject,
   RectangleObject,
@@ -76,6 +77,7 @@ export interface CanvasSlice {
   objects: Record<string, CanvasObject>;
   loading: boolean;
   error: string | null;
+  realtimeChannel: RealtimeChannel | null;
 
   // Lifecycle
   initialize: (userId: string) => Promise<void>;
@@ -85,6 +87,10 @@ export interface CanvasSlice {
   createObject: (object: Partial<CanvasObject>, userId: string) => Promise<string>;
   updateObject: (id: string, updates: Partial<CanvasObject>) => Promise<void>;
   deleteObjects: (ids: string[]) => Promise<void>;
+
+  // Realtime Subscriptions (W1.D4.7-4.9)
+  setupRealtimeSubscription: (userId: string) => void;
+  cleanupRealtimeSubscription: () => void;
 
   // Internal mutations (for SyncManager)
   _addObject: (object: CanvasObject) => void;
@@ -116,6 +122,7 @@ export const createCanvasSlice: StateCreator<
   objects: {},
   loading: false,
   error: null,
+  realtimeChannel: null,
 
   // ─── Lifecycle ───
 
@@ -123,6 +130,7 @@ export const createCanvasSlice: StateCreator<
    * W1.D4.2-3: Initialize canvas store from Supabase
    *
    * Fetches all canvas_objects from database and populates store
+   * W1.D4.8: Setup realtime subscription after data load
    */
   initialize: async (userId: string) => {
     set({ loading: true, error: null }, undefined, 'canvas/initialize');
@@ -146,6 +154,9 @@ export const createCanvasSlice: StateCreator<
       );
 
       set({ objects: objectsMap, loading: false }, undefined, 'canvas/initializeSuccess');
+
+      // Setup realtime subscription after successful load
+      get().setupRealtimeSubscription(userId);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load canvas objects';
       set({ error: errorMessage, loading: false }, undefined, 'canvas/initializeError');
@@ -155,8 +166,10 @@ export const createCanvasSlice: StateCreator<
 
   /**
    * Cleanup (for unmount)
+   * W1.D4.8: Cleanup realtime subscription
    */
   cleanup: () => {
+    get().cleanupRealtimeSubscription();
     set({ objects: {}, loading: false, error: null }, undefined, 'canvas/cleanup');
   },
 
@@ -442,6 +455,73 @@ export const createCanvasSlice: StateCreator<
    */
   _setError: (error: string | null) =>
     set({ error }, undefined, 'canvas/_setError'),
+
+  // ─── Realtime Subscriptions (W1.D4.7-4.9) ───
+
+  /**
+   * W1.D4.8: Setup realtime subscription for postgres_changes
+   *
+   * Subscribes to INSERT, UPDATE, DELETE events on canvas_objects table
+   * Filters by created_by = userId for multi-user support
+   */
+  setupRealtimeSubscription: (userId: string) => {
+    // Cleanup existing subscription first
+    get().cleanupRealtimeSubscription();
+
+    // Create channel with postgres_changes subscription
+    const channel = supabase
+      .channel('canvas-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'canvas_objects',
+          filter: `created_by=eq.${userId}`,
+        },
+        (payload) => {
+          const { eventType, new: newRecord, old: oldRecord } = payload;
+
+          switch (eventType) {
+            case 'INSERT': {
+              // Add new object to state
+              const insertedObj = dbToCanvasObject(newRecord as DbCanvasObject);
+              get()._addObject(insertedObj);
+              break;
+            }
+
+            case 'UPDATE': {
+              // Update existing object
+              const updatedObj = dbToCanvasObject(newRecord as DbCanvasObject);
+              get()._updateObject(updatedObj.id, updatedObj);
+              break;
+            }
+
+            case 'DELETE': {
+              // Remove object from state
+              get()._removeObject((oldRecord as { id: string }).id);
+              break;
+            }
+          }
+        },
+      )
+      .subscribe();
+
+    set({ realtimeChannel: channel }, undefined, 'canvas/setupRealtime');
+  },
+
+  /**
+   * W1.D4.8: Cleanup realtime subscription
+   *
+   * Unsubscribes from channel and clears reference
+   */
+  cleanupRealtimeSubscription: () => {
+    const channel = get().realtimeChannel;
+    if (channel) {
+      channel.unsubscribe();
+      set({ realtimeChannel: null }, undefined, 'canvas/cleanupRealtime');
+    }
+  },
 
   // ─── Utility selectors ───
 
