@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { useCanvas } from '../../hooks/useCanvas';
+import { useCanvasSync } from '../../hooks/useCanvasSync';
 import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
 import { usePresence } from '../../hooks/usePresence';
 import { useAuth } from '../../hooks/useAuth';
@@ -18,6 +19,9 @@ import { Sidebar } from '../layout/Sidebar';
 import { screenToCanvas } from '../../utils/canvas-helpers';
 
 export function Canvas() {
+  // W1.D4.8: Initialize canvas state and realtime sync
+  const { initialized: canvasInitialized, error: syncError } = useCanvasSync();
+
   const {
     stageRef,
     transformerRef,
@@ -133,7 +137,8 @@ export function Canvas() {
   };
 
   // Loading state with skeleton UI
-  if (loading) {
+  // Show loading while either canvas is loading OR sync is initializing
+  if (loading || !canvasInitialized) {
     return (
       <div className="flex flex-col h-screen bg-gray-50">
         {/* Header skeleton */}
@@ -149,7 +154,9 @@ export function Canvas() {
             <div className="text-center">
               <div className="mb-4 h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent mx-auto" />
               <p className="text-gray-700 text-lg font-medium">Loading canvas...</p>
-              <p className="text-gray-500 text-sm mt-2">Fetching objects from database</p>
+              <p className="text-gray-500 text-sm mt-2">
+                {!canvasInitialized ? 'Initializing realtime sync...' : 'Fetching objects from database'}
+              </p>
             </div>
           </div>
 
@@ -198,12 +205,12 @@ export function Canvas() {
           onMouseLeave={handleMouseLeave}
         >
           {/* Error banner - only shown for critical errors */}
-          {error && (
+          {(error || syncError) && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
-              <span>{error}</span>
+              <span>{syncError || error}</span>
             </div>
           )}
           

@@ -1,147 +1,314 @@
-/**
- * Supabase database types
- * Updated for hybrid schema with JSONB properties
- * 
- * Note: JSONB columns (type_properties, style_properties, metadata) use `any`
- * because their schemas are dynamic and shape-specific
- */
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
+  }
   public: {
     Tables: {
-      profiles: {
-        Row: {
-          id: string;
-          display_name: string;
-          created_at: string;
-        };
-        Insert: {
-          id: string;
-          display_name: string;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          display_name?: string;
-          created_at?: string;
-        };
-      };
-      canvas_objects: {
-        Row: {
-          // Identity & Type
-          id: string;
-          type: 'rectangle' | 'circle' | 'text';
-          
-          // Core Geometry
-          x: number;
-          y: number;
-          width: number;
-          height: number;
-          rotation: number;
-          
-          // Hierarchy & Organization
-          group_id: string | null;
-          z_index: number;
-          
-          // Common Style Properties
-          fill: string;
-          stroke: string | null;
-          stroke_width: number | null;
-          opacity: number;
-          
-          // Flexible Properties (JSONB)
-          type_properties: Record<string, any>;
-          style_properties: Record<string, any>;
-          metadata: Record<string, any>;
-          
-          // Collaboration
-          created_by: string;
-          created_at: string;
-          updated_at: string;
-          locked_by: string | null;
-          lock_acquired_at: string | null;
-        };
-        Insert: {
-          id?: string;
-          type: 'rectangle' | 'circle' | 'text';
-          x: number;
-          y: number;
-          width?: number;
-          height?: number;
-          rotation?: number;
-          group_id?: string | null;
-          z_index?: number;
-          fill?: string;
-          stroke?: string | null;
-          stroke_width?: number | null;
-          opacity?: number;
-          type_properties?: Record<string, any>;
-          style_properties?: Record<string, any>;
-          metadata?: Record<string, any>;
-          created_by: string;
-          created_at?: string;
-          updated_at?: string;
-          locked_by?: string | null;
-          lock_acquired_at?: string | null;
-        };
-        Update: {
-          id?: string;
-          type?: 'rectangle' | 'circle' | 'text';
-          x?: number;
-          y?: number;
-          width?: number;
-          height?: number;
-          rotation?: number;
-          group_id?: string | null;
-          z_index?: number;
-          fill?: string;
-          stroke?: string | null;
-          stroke_width?: number | null;
-          opacity?: number;
-          type_properties?: Record<string, any>;
-          style_properties?: Record<string, any>;
-          metadata?: Record<string, any>;
-          created_by?: string;
-          created_at?: string;
-          updated_at?: string;
-          locked_by?: string | null;
-          lock_acquired_at?: string | null;
-        };
-      };
       canvas_groups: {
         Row: {
-          id: string;
-          name: string;
-          parent_group_id: string | null;
-          locked: boolean;
-          z_index: number;
-          created_by: string;
-          created_at: string;
-          updated_at: string;
-        };
+          created_at: string | null
+          created_by: string | null
+          id: string
+          locked: boolean | null
+          name: string
+          parent_group_id: string | null
+          updated_at: string | null
+          z_index: number | null
+        }
         Insert: {
-          id?: string;
-          name: string;
-          parent_group_id?: string | null;
-          locked?: boolean;
-          z_index?: number;
-          created_by: string;
-          created_at?: string;
-          updated_at?: string;
-        };
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          locked?: boolean | null
+          name: string
+          parent_group_id?: string | null
+          updated_at?: string | null
+          z_index?: number | null
+        }
         Update: {
-          id?: string;
-          name?: string;
-          parent_group_id?: string | null;
-          locked?: boolean;
-          z_index?: number;
-          created_by?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
-    };
-  };
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          locked?: boolean | null
+          name?: string
+          parent_group_id?: string | null
+          updated_at?: string | null
+          z_index?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canvas_groups_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canvas_groups_parent_group_id_fkey"
+            columns: ["parent_group_id"]
+            isOneToOne: false
+            referencedRelation: "canvas_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      canvas_objects: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          fill: string
+          group_id: string | null
+          height: number
+          id: string
+          lock_acquired_at: string | null
+          locked_by: string | null
+          metadata: Json | null
+          opacity: number | null
+          rotation: number | null
+          stroke: string | null
+          stroke_width: number | null
+          style_properties: Json | null
+          type: string
+          type_properties: Json | null
+          updated_at: string | null
+          width: number
+          x: number
+          y: number
+          z_index: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          fill?: string
+          group_id?: string | null
+          height?: number
+          id?: string
+          lock_acquired_at?: string | null
+          locked_by?: string | null
+          metadata?: Json | null
+          opacity?: number | null
+          rotation?: number | null
+          stroke?: string | null
+          stroke_width?: number | null
+          style_properties?: Json | null
+          type: string
+          type_properties?: Json | null
+          updated_at?: string | null
+          width?: number
+          x: number
+          y: number
+          z_index?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          fill?: string
+          group_id?: string | null
+          height?: number
+          id?: string
+          lock_acquired_at?: string | null
+          locked_by?: string | null
+          metadata?: Json | null
+          opacity?: number | null
+          rotation?: number | null
+          stroke?: string | null
+          stroke_width?: number | null
+          style_properties?: Json | null
+          type?: string
+          type_properties?: Json | null
+          updated_at?: string | null
+          width?: number
+          x?: number
+          y?: number
+          z_index?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canvas_objects_new_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canvas_objects_new_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "canvas_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "canvas_objects_new_locked_by_fkey"
+            columns: ["locked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          display_name: string
+          id: string
+        }
+        Insert: {
+          created_at?: string | null
+          display_name: string
+          id: string
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
