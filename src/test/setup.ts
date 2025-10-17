@@ -35,6 +35,10 @@ vi.mock('fabric', () => {
     remove(...objs: any[]) {
       this.objects = this.objects.filter(o => !objs.includes(o));
     }
+    clear() {
+      this.objects = [];
+      this.backgroundColor = '#ffffff';
+    }
     getObjects() { return this.objects; }
     getActiveObjects() { return []; }
     discardActiveObject() {}
@@ -122,6 +126,8 @@ vi.mock('fabric', () => {
     public text: string;
     public fontSize: number;
     public fill: string;
+    public stroke?: string;
+    public strokeWidth?: number;
     public angle?: number;
     public opacity?: number;
     public data?: any;
@@ -132,6 +138,8 @@ vi.mock('fabric', () => {
       this.top = config.top || 0;
       this.fontSize = config.fontSize || 16;
       this.fill = config.fill || '#000000';
+      this.stroke = config.stroke;
+      this.strokeWidth = config.strokeWidth;
       this.angle = config.angle;
       this.opacity = config.opacity;
       this.data = config.data;
