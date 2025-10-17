@@ -243,7 +243,7 @@ export function Canvas() {
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas area */}
         <div
-          className="relative flex-1 overflow-hidden bg-gray-100"
+          className="relative flex-1 overflow-hidden bg-white"
           onMouseMove={handleMouseMove}
         >
           {/* Error banner */}

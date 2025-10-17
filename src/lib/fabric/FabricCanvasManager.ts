@@ -76,7 +76,7 @@ export interface FabricCanvasEventHandlers {
  * Default canvas configuration
  */
 const DEFAULT_CONFIG: Required<FabricCanvasConfig> = {
-  backgroundColor: '#ffffff',
+  backgroundColor: '#f5f5f5', // Light gray background (Figma-style) for white object contrast
   width: 800,
   height: 600,
   selection: true,
@@ -99,6 +99,14 @@ export class FabricCanvasManager {
   private rafId: number | null = null; // requestAnimationFrame ID for throttling
   private pendingViewportSync: boolean = false; // Flag for pending sync
 
+  // W2.D8.4-5: Pixel grid visualization
+  private pixelGridInitialized: boolean = false;
+  private pixelGridPattern: FabricObject[] = []; // Grid lines
+  private readonly PIXEL_GRID_THRESHOLD = 8; // Show grid when zoom > 8x
+
+  // W2.D8.7: Canvas boundary limits (Figma-style)
+  private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
+
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -119,14 +127,30 @@ export class FabricCanvasManager {
       this.config = { ...this.config, ...config };
     }
 
-    // Create Fabric.js canvas instance
+    // Get the actual canvas element
+    const element = typeof canvasElement === 'string'
+      ? document.getElementById(canvasElement) as HTMLCanvasElement
+      : canvasElement;
+
+    if (!element) {
+      throw new Error('Canvas element not found');
+    }
+
+    // Calculate dimensions from parent container for full viewport sizing
+    const parent = element.parentElement;
+    const width = parent ? parent.clientWidth : this.config.width;
+    const height = parent ? parent.clientHeight : this.config.height;
+
+    // Create Fabric.js canvas instance with dynamic dimensions
     this.canvas = new FabricCanvas(canvasElement, {
       backgroundColor: this.config.backgroundColor,
-      width: this.config.width,
-      height: this.config.height,
+      width,
+      height,
       selection: this.config.selection,
       renderOnAddRemove: this.config.renderOnAddRemove,
     });
+
+    console.log(`[FabricCanvasManager] Canvas initialized with dimensions: ${width}x${height}`);
 
     return this.canvas;
   }
@@ -670,10 +694,12 @@ export class FabricCanvasManager {
 
   /**
    * W2.D6.8: Setup spacebar + drag panning controls
+   * W2.D8.9: Add cursor visual feedback for pan mode
    *
    * Pattern: Spacebar activates pan mode, mouse drag pans canvas
    * - Spacebar key detection via document keydown/keyup
    * - Pan mode disables canvas selection during pan
+   * - Cursor changes: default → grab → grabbing → default
    * - Mouse drag updates viewport via relativePan()
    * - Syncs viewport to Zustand on mouse:up
    */
@@ -693,6 +719,10 @@ export class FabricCanvasManager {
         isSpacePressed = true;
         if (this.canvas) {
           this.canvas.selection = false; // Disable selection during pan
+          // W2.D8.9: Change cursor to grab (hand open)
+          this.canvas.defaultCursor = 'grab';
+          // Fabric.js v6: Use setCursor() to immediately apply cursor change
+          this.canvas.setCursor('grab');
         }
       }
     };
@@ -704,6 +734,10 @@ export class FabricCanvasManager {
         isPanning = false;
         if (this.canvas) {
           this.canvas.selection = true; // Re-enable selection
+          // W2.D8.9: Restore default cursor
+          this.canvas.defaultCursor = 'default';
+          // Fabric.js v6: Use setCursor() to immediately apply cursor change
+          this.canvas.setCursor('default');
         }
       }
     };
@@ -714,6 +748,10 @@ export class FabricCanvasManager {
         isPanning = true;
         lastPosX = opt.e.clientX || 0;
         lastPosY = opt.e.clientY || 0;
+        // W2.D8.9: Change cursor to grabbing (hand closed)
+        this.canvas.defaultCursor = 'grabbing';
+        // Fabric.js v6: Use setCursor() to immediately apply cursor change
+        this.canvas.setCursor('grabbing');
       }
     });
 
@@ -732,8 +770,21 @@ export class FabricCanvasManager {
         // W2.D7.6: CRITICAL - Always call requestRenderAll() after modifying matrix
         // Fabric.js v6 pattern: Direct matrix modification + requestRenderAll()
         const vpt = this.canvas.viewportTransform;
-        vpt[4] += deltaX;
-        vpt[5] += deltaY;
+        const zoom = this.canvas.getZoom();
+
+        // W2.D8.7: Calculate new pan position with boundary enforcement
+        let newPanX = vpt[4] + deltaX;
+        let newPanY = vpt[5] + deltaY;
+
+        // Clamp pan to canvas boundaries (±50,000 pixels from origin)
+        const maxPan = this.CANVAS_BOUNDARY * zoom;
+        const minPan = -this.CANVAS_BOUNDARY * zoom;
+
+        newPanX = Math.max(minPan, Math.min(maxPan, newPanX));
+        newPanY = Math.max(minPan, Math.min(maxPan, newPanY));
+
+        vpt[4] = newPanX;
+        vpt[5] = newPanY;
         this.canvas.requestRenderAll(); // Triggers recalculation
 
         // Update last position
@@ -746,9 +797,16 @@ export class FabricCanvasManager {
     this.canvas.on('mouse:up', () => {
       if (isPanning && this.canvas) {
         isPanning = false;
+        // W2.D8.9: Return cursor to grab (ready to pan again)
+        this.canvas.defaultCursor = 'grab';
+        // Fabric.js v6: Use setCursor() to immediately apply cursor change
+        this.canvas.setCursor('grab');
 
         // Sync viewport to Zustand (throttled via RAF)
         this.requestViewportSync();
+
+        // Update pixel grid after panning
+        this.updatePixelGridVisibility();
       }
     });
 
@@ -811,6 +869,184 @@ export class FabricCanvasManager {
     this.canvas.renderAll();
   }
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // Pixel Grid Visualization (W2.D8.4-5)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * W2.D8.4: Setup pixel grid visualization system
+   *
+   * Initializes the pixel grid system that shows/hides grid lines based on zoom level.
+   * Grid appears when zoom > 8x for precision design work (like Figma).
+   *
+   * Pattern:
+   * - Grid lines are rendered as Fabric.js Line objects
+   * - Lines are non-selectable and non-evented (don't interfere with canvas)
+   * - Grid visibility is controlled by zoom event listener
+   * - Grid spacing = zoom level (1:1 pixel ratio)
+   */
+  setupPixelGrid(): void {
+    if (!this.canvas) {
+      throw new Error('Canvas not initialized');
+    }
+
+    // Prevent multiple initializations
+    if (this.pixelGridInitialized) {
+      return;
+    }
+
+    // Register zoom event listener to update grid visibility
+    this.canvas.on('mouse:wheel', () => {
+      this.updatePixelGridVisibility();
+    });
+
+    // Mark as initialized
+    this.pixelGridInitialized = true;
+
+    console.log('[FabricCanvasManager] Pixel grid system initialized');
+  }
+
+  /**
+   * W2.D8.4: Check if pixel grid is currently visible
+   *
+   * Grid is visible when zoom > 8x threshold.
+   *
+   * @returns true if grid should be visible, false otherwise
+   */
+  isPixelGridVisible(): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    const zoom = this.canvas.getZoom();
+    return zoom > this.PIXEL_GRID_THRESHOLD;
+  }
+
+  /**
+   * W2.D8.5: Get pixel grid styling properties
+   *
+   * Returns styling configuration for grid lines.
+   * Uses subtle gray color with low opacity for minimal distraction.
+   *
+   * @returns Object with stroke, opacity, and strokeWidth
+   */
+  getPixelGridStyle(): { stroke: string; opacity: number; strokeWidth: number } {
+    return {
+      stroke: '#dddddd', // Light gray
+      opacity: 0.5, // Subtle opacity (0.3-0.6 range)
+      strokeWidth: 1, // Thin 1px lines
+    };
+  }
+
+  /**
+   * W2.D8.5: Get pixel grid spacing
+   *
+   * Grid spacing equals zoom level, maintaining 1:1 pixel ratio.
+   * At 10x zoom, grid spacing = 10px (representing 1 source pixel).
+   * At 20x zoom, grid spacing = 20px (representing 1 source pixel).
+   *
+   * @returns Grid spacing in canvas pixels
+   */
+  getPixelGridSpacing(): number {
+    if (!this.canvas) {
+      return 0;
+    }
+
+    const zoom = this.canvas.getZoom();
+    return zoom; // 1:1 ratio
+  }
+
+  /**
+   * W2.D8.4: Check if pixel grid system is initialized
+   *
+   * @returns true if setupPixelGrid() has been called
+   */
+  isPixelGridInitialized(): boolean {
+    return this.pixelGridInitialized;
+  }
+
+  /**
+   * W2.D8.4: Update pixel grid visibility based on current zoom
+   *
+   * Called automatically on zoom events.
+   * Shows grid when zoom > 8x, hides when zoom <= 8x.
+   *
+   * Pattern:
+   * - Removes old grid lines
+   * - Calculates new grid lines if zoom > threshold
+   * - Renders grid with subtle styling
+   */
+  private updatePixelGridVisibility(): void {
+    if (!this.canvas) {
+      return;
+    }
+
+    // Clear existing grid lines
+    this.pixelGridPattern.forEach((line) => {
+      this.canvas?.remove(line);
+    });
+    this.pixelGridPattern = [];
+
+    // Check if grid should be visible
+    if (!this.isPixelGridVisible()) {
+      this.canvas.requestRenderAll();
+      return;
+    }
+
+    // Generate grid lines
+    const spacing = this.getPixelGridSpacing();
+    const style = this.getPixelGridStyle();
+    const width = this.canvas.getWidth();
+    const height = this.canvas.getHeight();
+
+    // Calculate viewport bounds
+    const vpt = this.canvas.viewportTransform;
+    const zoom = this.canvas.getZoom();
+    const viewportLeft = -vpt[4] / zoom;
+    const viewportTop = -vpt[5] / zoom;
+    const viewportRight = viewportLeft + width / zoom;
+    const viewportBottom = viewportTop + height / zoom;
+
+    // Generate vertical lines
+    const startX = Math.floor(viewportLeft / spacing) * spacing;
+    const endX = Math.ceil(viewportRight / spacing) * spacing;
+
+    for (let x = startX; x <= endX; x += spacing) {
+      const line = new Path(`M ${x} ${viewportTop} L ${x} ${viewportBottom}`, {
+        stroke: style.stroke,
+        strokeWidth: style.strokeWidth / zoom, // Scale stroke with zoom
+        opacity: style.opacity,
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+      });
+
+      this.canvas.add(line);
+      this.pixelGridPattern.push(line);
+    }
+
+    // Generate horizontal lines
+    const startY = Math.floor(viewportTop / spacing) * spacing;
+    const endY = Math.ceil(viewportBottom / spacing) * spacing;
+
+    for (let y = startY; y <= endY; y += spacing) {
+      const line = new Path(`M ${viewportLeft} ${y} L ${viewportRight} ${y}`, {
+        stroke: style.stroke,
+        strokeWidth: style.strokeWidth / zoom, // Scale stroke with zoom
+        opacity: style.opacity,
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+      });
+
+      this.canvas.add(line);
+      this.pixelGridPattern.push(line);
+    }
+
+    // Render grid
+    this.canvas.requestRenderAll();
+  }
+
   /**
    * Dispose of the canvas and clean up resources
    */
@@ -821,6 +1057,13 @@ export class FabricCanvasManager {
       this.rafId = null;
     }
     this.pendingViewportSync = false;
+
+    // W2.D8.4: Clean up pixel grid
+    this.pixelGridPattern.forEach((line) => {
+      this.canvas?.remove(line);
+    });
+    this.pixelGridPattern = [];
+    this.pixelGridInitialized = false;
 
     if (this.canvas) {
       // Clean up spacebar pan event listeners

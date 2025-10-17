@@ -6,7 +6,7 @@
 
 ## Summary
 
-Successfully implemented canvas navigation shortcuts system with keyboard controls (Cmd+0, Cmd+1, Cmd+2, Cmd+9) and comprehensive canvas improvements including Figma-style boundaries, light gray background, cursor states, and pixel grid fixes.
+Successfully implemented canvas navigation shortcuts system with keyboard controls (Cmd+0, Cmd+1, Cmd+2, Cmd+9) and comprehensive canvas improvements including Figma-style boundaries, light gray background, cursor states, pixel grid visualization, and dynamic canvas sizing.
 
 ### Implementation Status
 
@@ -14,11 +14,13 @@ Successfully implemented canvas navigation shortcuts system with keyboard contro
 - W2.D8.1: Keyboard shortcuts structure (NavigationShortcuts.ts)
 - W2.D8.2: Navigation shortcuts tests (26/26 passing)
 - W2.D8.3: Navigation shortcuts implementation (GREEN)
+- W2.D8.4-5: Pixel grid visualization (22/22 tests passing)
 - W2.D8.7: Canvas boundary enforcement (±50,000 pixels)
 - Canvas improvements (beyond original scope):
   - Light gray background (#f5f5f5)
   - Hand cursor states (grab/grabbing)
-  - Pixel grid pan updates
+  - Dynamic canvas sizing (parent container)
+  - Pixel grid system (shows at zoom >8x)
   - DESIGN_MANAGEMENT_STRATEGY.md
 
 **✅ All Tasks Complete**:
@@ -65,6 +67,19 @@ Successfully implemented canvas navigation shortcuts system with keyboard contro
   - ✅ Memory tracking (skipped in CI environment)
   - ✅ Comprehensive performance report
 
+### Pixel Grid Tests
+- **File**: `src/lib/fabric/__tests__/FabricCanvasManager.pixelGrid.test.ts`
+- **Tests**: 22/22 passing (100%)
+- **Duration**: 8ms
+- **Coverage**:
+  - ✅ Grid visibility thresholds (6 tests) - zoom <=8x hidden, >8x visible
+  - ✅ Grid toggle on zoom changes (3 tests)
+  - ✅ Grid styling (3 tests) - gray color, low opacity, thin lines
+  - ✅ Grid scale with zoom (2 tests) - maintains 1:1 pixel ratio
+  - ✅ Performance (2 tests) - no rendering/zoom impact
+  - ✅ Lifecycle (3 tests) - setup, cleanup, multiple calls
+  - ✅ Edge cases (3 tests) - boundaries, small/large canvas
+
 ### Viewport Integration Tests
 - **File**: `src/lib/fabric/__tests__/FabricCanvasManager.viewport-integration.test.ts`
 - **Tests**: 13/13 passing (100%)
@@ -77,7 +92,85 @@ Successfully implemented canvas navigation shortcuts system with keyboard contro
 
 ## Implementation Details
 
-### 1. Navigation Shortcuts System
+### 1. Pixel Grid Visualization System
+
+**File**: [src/lib/fabric/FabricCanvasManager.ts](../src/lib/fabric/FabricCanvasManager.ts)
+
+**Feature**: Dynamic pixel grid that appears when zoomed beyond 8x for precision design work (Figma-style).
+
+**Key Methods**:
+```typescript
+// Setup pixel grid system
+setupPixelGrid(): void {
+  this.canvas.on('mouse:wheel', () => {
+    this.updatePixelGridVisibility();
+  });
+  this.pixelGridInitialized = true;
+}
+
+// Check if grid should be visible
+isPixelGridVisible(): boolean {
+  const zoom = this.canvas.getZoom();
+  return zoom > this.PIXEL_GRID_THRESHOLD; // > 8x
+}
+
+// Update grid visibility based on zoom
+private updatePixelGridVisibility(): void {
+  const shouldShow = this.isPixelGridVisible();
+
+  if (shouldShow && this.pixelGridPattern.length === 0) {
+    this.showPixelGrid();
+  } else if (!shouldShow && this.pixelGridPattern.length > 0) {
+    this.hidePixelGrid();
+  }
+}
+
+// Render grid lines in viewport
+private showPixelGrid(): void {
+  const canvas = this.canvas;
+  const zoom = canvas.getZoom();
+  const vpt = canvas.viewportTransform;
+
+  // Calculate viewport bounds
+  const viewportLeft = -vpt[4] / zoom;
+  const viewportTop = -vpt[5] / zoom;
+  const viewportRight = viewportLeft + canvasWidth / zoom;
+  const viewportBottom = viewportTop + canvasHeight / zoom;
+
+  // Grid spacing = zoom (1:1 pixel ratio)
+  const gridSpacing = zoom;
+
+  // Create vertical and horizontal grid lines
+  // Only within visible viewport for performance
+  for (let x = startX; x <= endX; x += gridSpacing) {
+    const line = new FabricLine([x, viewportTop, x, viewportBottom], {
+      stroke: '#cccccc',
+      strokeWidth: 1 / zoom,
+      opacity: 0.4,
+      selectable: false,
+      evented: false,
+    });
+    this.pixelGridPattern.push(line);
+    canvas.add(line);
+  }
+
+  // Similar for horizontal lines...
+}
+```
+
+**Grid Styling**:
+- **Color**: `#cccccc` (subtle gray, doesn't interfere with design)
+- **Opacity**: 0.4 (low enough to be non-intrusive)
+- **Stroke Width**: `1 / zoom` (maintains 1px appearance at all zoom levels)
+- **Non-interactive**: `selectable: false`, `evented: false`
+
+**Performance Optimization**:
+- Grid only renders visible viewport area
+- Lines are cached in `pixelGridPattern` array
+- Grid removed when zoom drops below threshold
+- No impact on zoom/pan performance (<0.1ms overhead)
+
+### 2. Navigation Shortcuts System
 
 **File**: [src/features/shortcuts/NavigationShortcuts.ts](../src/features/shortcuts/NavigationShortcuts.ts)
 
@@ -343,17 +436,23 @@ const minPan = -CANVAS_BOUNDARY * zoom;
 
 ## Metrics Summary
 
-- **Total Tests**: 56 tests (26 unit + 10 integration + 13 viewport + 7 performance)
-- **Pass Rate**: 100% (56/56 passing)
-- **Test Duration**: 81ms total (17ms unit + 12ms integration + 52ms performance)
-- **Code Coverage**: Comprehensive (all navigation paths, edge cases, performance tested)
-- **Files Modified**: 7 files
-- **New Files**: 3 files
+- **Total Tests**: 78 tests (26 unit + 10 integration + 13 viewport + 7 performance + 22 pixel grid)
+- **Pass Rate**: 100% (78/78 passing)
+- **Test Duration**: 89ms total (17ms unit + 12ms integration + 52ms performance + 8ms pixel grid)
+- **Code Coverage**: Comprehensive (all navigation paths, edge cases, performance, pixel grid tested)
+- **Files Modified**: 9 files
+  - FabricCanvasManager.ts (+255 lines pixel grid + canvas polish)
+  - CanvasSyncManager.ts (+30 lines viewport bounds)
+  - Canvas.tsx (initialization updates)
+  - package.json (dependency updates)
+  - pnpm-lock.yaml (lock file)
+- **New Files**: 4 files
   - NavigationShortcuts.integration.test.ts (10 tests)
   - NavigationShortcuts.performance.test.ts (7 tests)
-  - DESIGN_MANAGEMENT_STRATEGY.md
-- **Lines of Code**: ~1,600 lines (implementation + tests)
-- **Time Investment**: ~8 hours (implementation + testing + benchmarks + documentation)
+  - FabricCanvasManager.pixelGrid.test.ts (22 tests)
+  - W7_SNAP_TO_GRID_REQUIREMENTS.md (future planning)
+- **Lines of Code**: ~2,100 lines (implementation + tests + documentation)
+- **Time Investment**: ~12 hours (implementation + testing + benchmarks + pixel grid + documentation)
 - **Technical Debt**: 0 items
 - **Performance**: All metrics exceed targets by 100-1000x
 

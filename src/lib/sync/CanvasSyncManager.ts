@@ -42,6 +42,36 @@ export class CanvasSyncManager {
   initialize(): void {
     this.setupCanvasToStateSync();
     this.setupStateToCanvasSync();
+    this.setupViewportSync(); // W2.D6-D7: Initialize viewport controls
+  }
+
+  /**
+   * W2.D6-D7: Setup viewport controls and sync
+   *
+   * Initializes:
+   * - Mousewheel zoom
+   * - Spacebar + drag panning
+   * - Viewport→Zustand sync callback
+   * - Viewport persistence
+   * - W2.D8.4-5: Pixel grid visualization
+   */
+  private setupViewportSync(): void {
+    // Setup mousewheel zoom
+    this.fabricManager.setupMousewheelZoom();
+
+    // Setup spacebar + drag panning
+    this.fabricManager.setupSpacebarPan();
+
+    // W2.D8.4-5: Setup pixel grid visualization (shows when zoom > 8x)
+    this.fabricManager.setupPixelGrid();
+
+    // Setup viewport→Zustand sync callback
+    this.fabricManager.setViewportSyncCallback((zoom, panX, panY) => {
+      // Sync viewport state to Zustand (which persists to localStorage + PostgreSQL)
+      this.store.getState().syncViewport(zoom, panX, panY);
+    });
+
+    console.log('[CanvasSyncManager] Viewport controls initialized (zoom + pan + pixel grid)');
   }
 
   /**
