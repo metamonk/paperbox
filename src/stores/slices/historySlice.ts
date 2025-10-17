@@ -13,17 +13,7 @@
 
 import type { StateCreator } from 'zustand';
 import type { PaperboxStore } from '../index';
-
-/**
- * Command interface (placeholder for Week 1 Day 5)
- */
-export interface Command {
-  id: string;
-  type: string;
-  execute: () => void;
-  undo: () => void;
-  timestamp: number;
-}
+import type { Command } from '../../lib/commands/Command';
 
 /**
  * History slice state interface
@@ -67,14 +57,14 @@ export const createHistorySlice: StateCreator<
 
   /**
    * Execute command and add to history
-   *
-   * TODO Week 1 Day 5: Implement full command pattern
    */
   executeCommand: (command: Command) =>
     set(
       (state) => {
-        // Execute the command
-        command.execute();
+        // Execute the command (async, fire and forget)
+        Promise.resolve(command.execute()).catch((error) => {
+          console.error('[History] Command execution failed:', error);
+        });
 
         // Add to undo stack
         state.undoStack.push(command);
@@ -97,8 +87,6 @@ export const createHistorySlice: StateCreator<
 
   /**
    * Undo last command
-   *
-   * TODO Week 1 Day 5: Implement
    */
   undo: () =>
     set(
@@ -107,7 +95,9 @@ export const createHistorySlice: StateCreator<
 
         const command = state.undoStack.pop();
         if (command) {
-          command.undo();
+          Promise.resolve(command.undo()).catch((error) => {
+            console.error('[History] Command undo failed:', error);
+          });
           state.redoStack.push(command);
 
           state.canUndo = state.undoStack.length > 0;
@@ -120,8 +110,6 @@ export const createHistorySlice: StateCreator<
 
   /**
    * Redo last undone command
-   *
-   * TODO Week 1 Day 5: Implement
    */
   redo: () =>
     set(
@@ -130,7 +118,11 @@ export const createHistorySlice: StateCreator<
 
         const command = state.redoStack.pop();
         if (command) {
-          command.execute();
+          // Use redo() if available, otherwise fallback to execute()
+          const redoFn = command.redo ? command.redo() : command.execute();
+          Promise.resolve(redoFn).catch((error) => {
+            console.error('[History] Command redo failed:', error);
+          });
           state.undoStack.push(command);
 
           state.canUndo = true;

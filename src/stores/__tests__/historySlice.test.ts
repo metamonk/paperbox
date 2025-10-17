@@ -7,7 +7,47 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { usePaperboxStore } from '../index';
-import type { Command } from '../slices/historySlice';
+import type { Command, CommandMetadata, CommandType } from '../../lib/commands/Command';
+
+/**
+ * Test Command implementation
+ */
+class TestCommand implements Command {
+  public executeCalled = 0;
+  public undoCalled = 0;
+  public redoCalled = 0;
+
+  constructor(
+    public id: string,
+    public type: CommandType = 'CREATE_RECTANGLE'
+  ) {}
+
+  async execute(): Promise<void> {
+    this.executeCalled++;
+  }
+
+  async undo(): Promise<void> {
+    this.undoCalled++;
+  }
+
+  async redo(): Promise<void> {
+    this.redoCalled++;
+    await this.execute();
+  }
+
+  getDescription(): string {
+    return `Test Command ${this.id}`;
+  }
+
+  getMetadata(): CommandMetadata {
+    return {
+      type: this.type,
+      objectIds: [this.id],
+      parameters: {},
+      timestamp: Date.now(),
+    };
+  }
+}
 
 describe('historySlice - Command History Management', () => {
   beforeEach(() => {
@@ -35,51 +75,34 @@ describe('historySlice - Command History Management', () => {
   });
 
   describe('executeCommand()', () => {
-    it('should execute command and add to undo stack', () => {
-      const executeFn = vi.fn();
-      const undoFn = vi.fn();
-
-      const command: Command = {
-        id: 'cmd-1',
-        type: 'test',
-        execute: executeFn,
-        undo: undoFn,
-        timestamp: Date.now(),
-      };
+    it('should execute command and add to undo stack', async () => {
+      const command = new TestCommand('cmd-1');
 
       usePaperboxStore.getState().executeCommand(command);
 
-      expect(executeFn).toHaveBeenCalledTimes(1);
+      // Wait for async execution
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(command.executeCalled).toBe(1);
 
       const { undoStack, canUndo, canRedo } = usePaperboxStore.getState();
       expect(undoStack).toHaveLength(1);
-      expect(undoStack[0].id).toBe('cmd-1');
+      expect(undoStack[0].getMetadata().objectIds[0]).toBe('cmd-1');
       expect(canUndo).toBe(true);
       expect(canRedo).toBe(false);
     });
 
-    it('should clear redo stack when new command is executed', () => {
-      const cmd1: Command = {
-        id: 'cmd-1',
-        type: 'test',
-        execute: vi.fn(),
-        undo: vi.fn(),
-        timestamp: Date.now(),
-      };
-
-      const cmd2: Command = {
-        id: 'cmd-2',
-        type: 'test',
-        execute: vi.fn(),
-        undo: vi.fn(),
-        timestamp: Date.now(),
-      };
+    it('should clear redo stack when new command is executed', async () => {
+      const cmd1 = new TestCommand('cmd-1');
+      const cmd2 = new TestCommand('cmd-2');
 
       const store = usePaperboxStore.getState();
 
       // Execute cmd1, then undo it
       store.executeCommand(cmd1);
+      await new Promise((resolve) => setTimeout(resolve, 10));
       store.undo();
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Verify we have something in redo stack
       expect(usePaperboxStore.getState().redoStack).toHaveLength(1);
@@ -93,7 +116,7 @@ describe('historySlice - Command History Management', () => {
       expect(canRedo).toBe(false);
     });
 
-    it('should enforce max history size', () => {
+    it('should enforce max history size', async () => {
       const store = usePaperboxStore.getState();
 
       // Set small max size
@@ -101,43 +124,33 @@ describe('historySlice - Command History Management', () => {
 
       // Execute 5 commands
       for (let i = 0; i < 5; i++) {
-        const cmd: Command = {
-          id: `cmd-${i}`,
-          type: 'test',
-          execute: vi.fn(),
-          undo: vi.fn(),
-          timestamp: Date.now(),
-        };
+        const cmd = new TestCommand(`cmd-${i}`);
         store.executeCommand(cmd);
+        await new Promise((resolve) => setTimeout(resolve, 5));
       }
 
       const { undoStack } = usePaperboxStore.getState();
 
       // Should only keep last 3
       expect(undoStack).toHaveLength(3);
-      expect(undoStack[0].id).toBe('cmd-2'); // Oldest should be cmd-2 (cmd-0 and cmd-1 removed)
-      expect(undoStack[2].id).toBe('cmd-4'); // Newest should be cmd-4
+      expect(undoStack[0].getMetadata().objectIds[0]).toBe('cmd-2'); // Oldest should be cmd-2 (cmd-0 and cmd-1 removed)
+      expect(undoStack[2].getMetadata().objectIds[0]).toBe('cmd-4'); // Newest should be cmd-4
     });
 
-    it('should execute multiple commands sequentially', () => {
+    it('should execute multiple commands sequentially', async () => {
       const store = usePaperboxStore.getState();
 
-      const commands: Command[] = [];
+      const commands: TestCommand[] = [];
       for (let i = 0; i < 3; i++) {
-        const cmd: Command = {
-          id: `cmd-${i}`,
-          type: 'test',
-          execute: vi.fn(),
-          undo: vi.fn(),
-          timestamp: Date.now(),
-        };
+        const cmd = new TestCommand(`cmd-${i}`);
         commands.push(cmd);
         store.executeCommand(cmd);
+        await new Promise((resolve) => setTimeout(resolve, 5));
       }
 
       // All execute functions should have been called
       commands.forEach((cmd) => {
-        expect(cmd.execute).toHaveBeenCalledTimes(1);
+        expect(cmd.executeCalled).toBe(1);
       });
 
       // Stack should have all commands
