@@ -1,15 +1,19 @@
 /**
  * Supabase Sync Layer
  *
- * Synchronizes Zustand store with Supabase database
- * Handles CRUD operations and real-time subscriptions
+ * Bridge between Zustand store and Supabase database
+ * Handles type conversions and real-time subscriptions
  *
- * W1.D4 Integration layer between Zustand and Supabase
+ * Features:
+ * - CRUD operations for canvas objects
+ * - Type conversion: Zustand CanvasObject ↔ Supabase Row
+ * - Real-time subscriptions with callbacks
+ * - Batch z-index updates for layer management
  */
 
-import { supabase } from './client';
+import { supabase } from '../supabase';
 import type { CanvasObject } from '@/types/canvas';
-import type { Database } from './types';
+import type { Database } from '@/types/database';
 
 type DbCanvasObject =
   Database['public']['Tables']['canvas_objects']['Row'];
@@ -30,58 +34,51 @@ export function dbToCanvasObject(dbObject: DbCanvasObject): CanvasObject {
     height: Number(dbObject.height),
     rotation: Number(dbObject.rotation),
     opacity: Number(dbObject.opacity),
-    fill_color: dbObject.fill_color,
-    stroke_color: dbObject.stroke_color || undefined,
-    stroke_width: Number(dbObject.stroke_width),
+    fill: dbObject.fill,
+    stroke: dbObject.stroke || undefined,
+    stroke_width: dbObject.stroke_width ? Number(dbObject.stroke_width) : 0,
+    group_id: dbObject.group_id || null,
+    z_index: dbObject.z_index,
+    type_properties: dbObject.type_properties || {},
+    style_properties: dbObject.style_properties || {},
+    metadata: dbObject.metadata || {},
+    created_by: dbObject.created_by,
+    created_at: dbObject.created_at,
+    updated_at: dbObject.updated_at,
+    locked_by: dbObject.locked_by,
+    lock_acquired_at: dbObject.lock_acquired_at,
   };
 
-  // Type-specific properties
-  const typeProperties = dbObject.type_properties as Record<string, unknown>;
-
-  switch (dbObject.type) {
-    case 'rectangle':
-      return {
-        ...baseObject,
-        type: 'rectangle',
-        type_properties: typeProperties as object,
-      };
-
-    case 'circle':
-      return {
-        ...baseObject,
-        type: 'circle',
-        type_properties: {
-          radius: (typeProperties.radius as number) || 50,
-        },
-      };
-
-    case 'text':
-      return {
-        ...baseObject,
-        type: 'text',
-        type_properties: {
-          text_content: (typeProperties.text_content as string) || '',
-          font_size: (typeProperties.font_size as number) || 16,
-          font_family: (typeProperties.font_family as string) || 'Arial',
-        },
-      };
-
-    default:
-      throw new Error(`Unknown object type: ${dbObject.type}`);
+  // Discriminated union based on type
+  if (dbObject.type === 'rectangle') {
+    return {
+      ...baseObject,
+      type: 'rectangle',
+    } as CanvasObject;
+  } else if (dbObject.type === 'circle') {
+    return {
+      ...baseObject,
+      type: 'circle',
+    } as CanvasObject;
+  } else if (dbObject.type === 'text') {
+    return {
+      ...baseObject,
+      type: 'text',
+    } as CanvasObject;
   }
+
+  throw new Error(`Unknown object type: ${dbObject.type}`);
 }
 
 /**
- * Convert CanvasObject to database insert
+ * Convert CanvasObject to database insert payload
  */
 export function canvasObjectToDb(
-  canvasId: string,
   object: CanvasObject,
-  zIndex: number = 0,
+  userId: string,
 ): DbCanvasObjectInsert {
   return {
     id: object.id,
-    canvas_id: canvasId,
     type: object.type,
     x: object.x,
     y: object.y,
@@ -89,25 +86,59 @@ export function canvasObjectToDb(
     height: object.height,
     rotation: object.rotation,
     opacity: object.opacity,
-    fill_color: object.fill_color,
-    stroke_color: object.stroke_color || null,
-    stroke_width: object.stroke_width,
-    type_properties: object.type_properties as unknown as
-      | Database['public']['Tables']['canvas_objects']['Row']['type_properties'],
-    z_index: zIndex,
+    fill: object.fill,
+    stroke: object.stroke || null,
+    stroke_width: object.stroke_width || null,
+    group_id: object.group_id,
+    z_index: object.z_index || 0,
+    type_properties: object.type_properties || {},
+    style_properties: object.style_properties || {},
+    metadata: object.metadata || {},
+    created_by: userId,
   };
 }
 
 /**
- * Fetch all canvas objects for a canvas
+ * Convert CanvasObject to database update payload
  */
-export async function fetchCanvasObjects(
-  canvasId: string,
-): Promise<CanvasObject[]> {
+export function canvasObjectToDbUpdate(
+  object: Partial<CanvasObject>,
+): DbCanvasObjectUpdate {
+  const update: DbCanvasObjectUpdate = {};
+
+  if (object.type !== undefined) update.type = object.type;
+  if (object.x !== undefined) update.x = object.x;
+  if (object.y !== undefined) update.y = object.y;
+  if (object.width !== undefined) update.width = object.width;
+  if (object.height !== undefined) update.height = object.height;
+  if (object.rotation !== undefined) update.rotation = object.rotation;
+  if (object.opacity !== undefined) update.opacity = object.opacity;
+  if (object.fill !== undefined) update.fill = object.fill;
+  if (object.stroke !== undefined) update.stroke = object.stroke || null;
+  if (object.stroke_width !== undefined)
+    update.stroke_width = object.stroke_width || null;
+  if (object.group_id !== undefined) update.group_id = object.group_id;
+  if (object.z_index !== undefined) update.z_index = object.z_index;
+  if (object.type_properties !== undefined)
+    update.type_properties = object.type_properties;
+  if (object.style_properties !== undefined)
+    update.style_properties = object.style_properties;
+  if (object.metadata !== undefined) update.metadata = object.metadata;
+
+  return update;
+}
+
+// ============================================================================
+// CRUD Operations
+// ============================================================================
+
+/**
+ * Fetch all canvas objects from database
+ */
+export async function fetchCanvasObjects(): Promise<CanvasObject[]> {
   const { data, error } = await supabase
     .from('canvas_objects')
     .select('*')
-    .eq('canvas_id', canvasId)
     .order('z_index', { ascending: true });
 
   if (error) {
@@ -115,18 +146,17 @@ export async function fetchCanvasObjects(
     throw error;
   }
 
-  return (data || []).map(dbToCanvasObject);
+  return data.map(dbToCanvasObject);
 }
 
 /**
- * Insert a new canvas object
+ * Insert single canvas object
  */
 export async function insertCanvasObject(
-  canvasId: string,
   object: CanvasObject,
-  zIndex: number = 0,
+  userId: string,
 ): Promise<CanvasObject> {
-  const dbObject = canvasObjectToDb(canvasId, object, zIndex);
+  const dbObject = canvasObjectToDb(object, userId);
 
   const { data, error } = await supabase
     .from('canvas_objects')
@@ -143,36 +173,18 @@ export async function insertCanvasObject(
 }
 
 /**
- * Update a canvas object
+ * Update single canvas object
  */
 export async function updateCanvasObject(
-  objectId: string,
+  id: string,
   updates: Partial<CanvasObject>,
 ): Promise<CanvasObject> {
-  const dbUpdates: DbCanvasObjectUpdate = {};
-
-  // Map CanvasObject fields to database fields
-  if (updates.x !== undefined) dbUpdates.x = updates.x;
-  if (updates.y !== undefined) dbUpdates.y = updates.y;
-  if (updates.width !== undefined) dbUpdates.width = updates.width;
-  if (updates.height !== undefined) dbUpdates.height = updates.height;
-  if (updates.rotation !== undefined) dbUpdates.rotation = updates.rotation;
-  if (updates.opacity !== undefined) dbUpdates.opacity = updates.opacity;
-  if (updates.fill_color !== undefined)
-    dbUpdates.fill_color = updates.fill_color;
-  if (updates.stroke_color !== undefined)
-    dbUpdates.stroke_color = updates.stroke_color || null;
-  if (updates.stroke_width !== undefined)
-    dbUpdates.stroke_width = updates.stroke_width;
-  if (updates.type_properties !== undefined) {
-    dbUpdates.type_properties = updates.type_properties as unknown as
-      | Database['public']['Tables']['canvas_objects']['Row']['type_properties'];
-  }
+  const dbUpdate = canvasObjectToDbUpdate(updates);
 
   const { data, error } = await supabase
     .from('canvas_objects')
-    .update(dbUpdates)
-    .eq('id', objectId)
+    .update(dbUpdate)
+    .eq('id', id)
     .select()
     .single();
 
@@ -185,13 +197,10 @@ export async function updateCanvasObject(
 }
 
 /**
- * Delete a canvas object
+ * Delete single canvas object
  */
-export async function deleteCanvasObject(objectId: string): Promise<void> {
-  const { error } = await supabase
-    .from('canvas_objects')
-    .delete()
-    .eq('id', objectId);
+export async function deleteCanvasObject(id: string): Promise<void> {
+  const { error } = await supabase.from('canvas_objects').delete().eq('id', id);
 
   if (error) {
     console.error('Error deleting canvas object:', error);
@@ -202,13 +211,11 @@ export async function deleteCanvasObject(objectId: string): Promise<void> {
 /**
  * Delete multiple canvas objects
  */
-export async function deleteCanvasObjects(objectIds: string[]): Promise<void> {
-  if (objectIds.length === 0) return;
-
+export async function deleteCanvasObjects(ids: string[]): Promise<void> {
   const { error } = await supabase
     .from('canvas_objects')
     .delete()
-    .in('id', objectIds);
+    .in('id', ids);
 
   if (error) {
     console.error('Error deleting canvas objects:', error);
@@ -217,27 +224,50 @@ export async function deleteCanvasObjects(objectIds: string[]): Promise<void> {
 }
 
 /**
- * Subscribe to real-time canvas object changes
- *
- * Returns unsubscribe function
+ * Batch update z-index for multiple objects
  */
-export function subscribeToCanvasObjects(
-  canvasId: string,
-  callbacks: {
-    onInsert?: (object: CanvasObject) => void;
-    onUpdate?: (object: CanvasObject) => void;
-    onDelete?: (objectId: string) => void;
-  },
-) {
+export async function updateZIndexes(
+  updates: Array<{ id: string; z_index: number }>,
+): Promise<void> {
+  // Supabase doesn't support batch updates directly
+  // Use Promise.all for parallel updates
+  const promises = updates.map(({ id, z_index }) =>
+    supabase.from('canvas_objects').update({ z_index }).eq('id', id),
+  );
+
+  const results = await Promise.all(promises);
+
+  // Check for errors
+  const errors = results.filter((r) => r.error);
+  if (errors.length > 0) {
+    console.error('Error updating z-indexes:', errors);
+    throw errors[0].error;
+  }
+}
+
+// ============================================================================
+// Real-time Subscriptions
+// ============================================================================
+
+/**
+ * Subscribe to canvas objects changes
+ *
+ * @param callbacks - Event handlers for INSERT, UPDATE, DELETE
+ * @returns Unsubscribe function
+ */
+export function subscribeToCanvasObjects(callbacks: {
+  onInsert?: (object: CanvasObject) => void;
+  onUpdate?: (object: CanvasObject) => void;
+  onDelete?: (objectId: string) => void;
+}) {
   const channel = supabase
-    .channel(`canvas-${canvasId}`)
+    .channel('canvas-objects-changes')
     .on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'canvas_objects',
-        filter: `canvas_id=eq.${canvasId}`,
       },
       (payload) => {
         if (callbacks.onInsert) {
@@ -252,7 +282,6 @@ export function subscribeToCanvasObjects(
         event: 'UPDATE',
         schema: 'public',
         table: 'canvas_objects',
-        filter: `canvas_id=eq.${canvasId}`,
       },
       (payload) => {
         if (callbacks.onUpdate) {
@@ -267,7 +296,6 @@ export function subscribeToCanvasObjects(
         event: 'DELETE',
         schema: 'public',
         table: 'canvas_objects',
-        filter: `canvas_id=eq.${canvasId}`,
       },
       (payload) => {
         if (callbacks.onDelete) {
@@ -284,22 +312,40 @@ export function subscribeToCanvasObjects(
 }
 
 /**
- * Batch update z-indexes for layer reordering
+ * Subscribe to presence for real-time collaboration
+ * (Placeholder for Phase II collaboration features)
  */
-export async function updateZIndexes(
-  updates: Array<{ id: string; zIndex: number }>,
-): Promise<void> {
-  // Supabase doesn't have a native batch update, so we'll do them sequentially
-  // In production, consider using a PostgreSQL function for better performance
-  for (const update of updates) {
-    const { error } = await supabase
-      .from('canvas_objects')
-      .update({ z_index: update.zIndex })
-      .eq('id', update.id);
+export function subscribeToPresence(
+  roomId: string,
+  callbacks: {
+    onUserJoin?: (userId: string, metadata: unknown) => void;
+    onUserLeave?: (userId: string) => void;
+    onCursorMove?: (userId: string, x: number, y: number) => void;
+  },
+) {
+  const channel = supabase.channel(`presence-${roomId}`, {
+    config: {
+      presence: {
+        key: 'user-presence',
+      },
+    },
+  });
 
-    if (error) {
-      console.error(`Error updating z-index for ${update.id}:`, error);
-      throw error;
-    }
-  }
+  channel
+    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+      if (callbacks.onUserJoin && newPresences.length > 0) {
+        const presence = newPresences[0];
+        callbacks.onUserJoin(key, presence);
+      }
+    })
+    .on('presence', { event: 'leave' }, ({ key }) => {
+      if (callbacks.onUserLeave) {
+        callbacks.onUserLeave(key);
+      }
+    })
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
