@@ -15,12 +15,18 @@ import type { StateCreator } from 'zustand';
 import type { PaperboxStore } from '../index';
 
 /**
+ * Selection mode types
+ */
+export type SelectionMode = 'single' | 'multi' | 'lasso' | 'drag';
+
+/**
  * Selection slice state interface
  */
 export interface SelectionSlice {
   // State
   selectedIds: string[];
   activeObjectId: string | null;
+  selectionMode: SelectionMode;
 
   // Actions
   selectObject: (id: string) => void;
@@ -29,6 +35,7 @@ export interface SelectionSlice {
   deselectAll: () => void;
   toggleSelection: (id: string) => void;
   setActiveObject: (id: string | null) => void;
+  setSelectionMode: (mode: SelectionMode) => void;
 
   // Utilities
   isSelected: (id: string) => boolean;
@@ -48,6 +55,7 @@ export const createSelectionSlice: StateCreator<
   // Initial state
   selectedIds: [],
   activeObjectId: null,
+  selectionMode: 'single',
 
   // Actions
 
@@ -136,6 +144,37 @@ export const createSelectionSlice: StateCreator<
       },
       undefined,
       'selection/setActiveObject',
+    ),
+
+  /**
+   * Set selection mode
+   * - Switching FROM 'multi' TO 'single' → clears selection
+   * - Switching FROM 'single' TO 'multi' → preserves selection
+   * - Switching TO 'lasso' or 'drag' → clears selection
+   */
+  setSelectionMode: (mode: SelectionMode) =>
+    set(
+      (state) => {
+        const previousMode = state.selectionMode;
+        state.selectionMode = mode;
+
+        // Clear selection when switching from multi to single
+        if (previousMode === 'multi' && mode === 'single') {
+          state.selectedIds = [];
+          state.activeObjectId = null;
+        }
+
+        // Clear selection when switching to lasso or drag mode
+        if (mode === 'lasso' || mode === 'drag') {
+          state.selectedIds = [];
+          state.activeObjectId = null;
+        }
+
+        // Preserve selection when switching from single to multi
+        // (no action needed, just keep existing selection)
+      },
+      undefined,
+      'selection/setSelectionMode',
     ),
 
   /**
