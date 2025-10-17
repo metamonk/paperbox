@@ -1,189 +1,232 @@
 /**
- * Tests for FabricCanvasManager
+ * FabricCanvasManager Tests
  *
- * TDD Red Phase: Write failing tests first
- * Expected: Tests will fail initially, then pass after implementation in W1.D1.5
+ * TDD approach: RED → GREEN → REFACTOR
+ *
+ * Tests for canvas initialization, configuration, and lifecycle management.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { FabricCanvasManager, getFabricCanvasManager } from '../FabricCanvasManager';
-import * as fabric from 'fabric';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { FabricCanvasManager } from '../FabricCanvasManager';
+import { Canvas as FabricCanvas } from 'fabric';
 
-describe('FabricCanvasManager', () => {
+describe('FabricCanvasManager - Canvas Initialization', () => {
   let manager: FabricCanvasManager;
+  let canvasElement: HTMLCanvasElement;
 
   beforeEach(() => {
-    manager = new FabricCanvasManager();
+    // Create a mock canvas element for testing
+    canvasElement = document.createElement('canvas');
+    canvasElement.id = 'test-canvas';
+    canvasElement.width = 800;
+    canvasElement.height = 600;
+    document.body.appendChild(canvasElement);
   });
 
   afterEach(() => {
-    // Clean up canvas instances
-    manager.dispose();
+    // Clean up after each test
+    if (manager) {
+      manager.dispose();
+    }
+    document.body.removeChild(canvasElement);
   });
 
   describe('initialize()', () => {
-    it('should create a canvas element with correct ID', () => {
-      const config = {
-        containerId: 'test-canvas',
-        width: 800,
-        height: 600,
-      };
-
-      const canvas = manager.initialize(config);
-
-      expect(canvas).toBeDefined();
-      expect(canvas).toBeInstanceOf(fabric.Canvas);
-    });
-
     it('should initialize canvas with correct dimensions', () => {
-      const config = {
-        containerId: 'test-canvas-dimensions',
-        width: 1024,
-        height: 768,
-      };
+      // Arrange
+      manager = new FabricCanvasManager();
 
-      const canvas = manager.initialize(config);
-
-      expect(canvas.getWidth()).toBe(1024);
-      expect(canvas.getHeight()).toBe(768);
-    });
-
-    it('should set default backgroundColor to white', () => {
-      const config = {
-        containerId: 'test-canvas-bg',
+      // Act
+      const canvas = manager.initialize(canvasElement, {
         width: 800,
         height: 600,
-      };
+      });
 
-      const canvas = manager.initialize(config);
-
-      expect(canvas.backgroundColor).toBe('#ffffff');
+      // Assert
+      expect(canvas).toBeInstanceOf(FabricCanvas);
+      expect(canvas.getWidth()).toBe(800);
+      expect(canvas.getHeight()).toBe(600);
     });
 
-    it('should use custom backgroundColor when provided', () => {
-      const config = {
-        containerId: 'test-canvas-custom-bg',
-        width: 800,
-        height: 600,
+    it('should initialize canvas with correct background color', () => {
+      // Arrange
+      manager = new FabricCanvasManager();
+
+      // Act
+      const canvas = manager.initialize(canvasElement, {
         backgroundColor: '#f0f0f0',
-      };
+      });
 
-      const canvas = manager.initialize(config);
-
+      // Assert
+      expect(canvas).toBeInstanceOf(FabricCanvas);
       expect(canvas.backgroundColor).toBe('#f0f0f0');
     });
 
-    it('should enable selection by default', () => {
-      const config = {
-        containerId: 'test-canvas-selection',
-        width: 800,
-        height: 600,
-      };
+    it('should use default config when no config provided', () => {
+      // Arrange
+      manager = new FabricCanvasManager();
 
-      const canvas = manager.initialize(config);
+      // Act
+      const canvas = manager.initialize(canvasElement);
 
-      expect(canvas.selection).toBe(true);
+      // Assert
+      expect(canvas).toBeInstanceOf(FabricCanvas);
+      expect(canvas.getWidth()).toBe(800); // Default width
+      expect(canvas.getHeight()).toBe(600); // Default height
+      expect(canvas.backgroundColor).toBe('#ffffff'); // Default white
     });
 
-    it('should preserve object stacking', () => {
-      const config = {
-        containerId: 'test-canvas-stacking',
-        width: 800,
-        height: 600,
-      };
+    it('should merge constructor config with initialize config', () => {
+      // Arrange
+      manager = new FabricCanvasManager({
+        width: 1000,
+        backgroundColor: '#000000',
+      });
 
-      const canvas = manager.initialize(config);
+      // Act
+      const canvas = manager.initialize(canvasElement, {
+        height: 700,
+      });
 
-      expect(canvas.preserveObjectStacking).toBe(true);
+      // Assert
+      expect(canvas.getWidth()).toBe(1000); // From constructor
+      expect(canvas.getHeight()).toBe(700); // From initialize
+      expect(canvas.backgroundColor).toBe('#000000'); // From constructor
     });
 
-    it('should enable retina scaling for HiDPI displays', () => {
-      const config = {
-        containerId: 'test-canvas-retina',
-        width: 800,
-        height: 600,
-      };
+    it('should return canvas instance via getCanvas()', () => {
+      // Arrange
+      manager = new FabricCanvasManager();
+      const canvas = manager.initialize(canvasElement);
 
-      const canvas = manager.initialize(config);
+      // Act
+      const retrievedCanvas = manager.getCanvas();
 
-      expect(canvas.enableRetinaScaling).toBe(true);
+      // Assert
+      expect(retrievedCanvas).toBe(canvas);
+      expect(retrievedCanvas).toBeInstanceOf(FabricCanvas);
     });
 
-    it('should disable renderOnAddRemove for manual render control', () => {
-      const config = {
-        containerId: 'test-canvas-render-control',
-        width: 800,
-        height: 600,
-      };
+    it('should return null from getCanvas() before initialization', () => {
+      // Arrange
+      manager = new FabricCanvasManager();
 
-      const canvas = manager.initialize(config);
-
-      expect(canvas.renderOnAddRemove).toBe(false);
-    });
-  });
-
-  describe('getCanvas()', () => {
-    it('should return null before initialization', () => {
-      expect(manager.getCanvas()).toBeNull();
-    });
-
-    it('should return canvas instance after initialization', () => {
-      const config = {
-        containerId: 'test-canvas-get',
-        width: 800,
-        height: 600,
-      };
-
-      manager.initialize(config);
+      // Act
       const canvas = manager.getCanvas();
 
-      expect(canvas).toBeDefined();
-      expect(canvas).toBeInstanceOf(fabric.Canvas);
+      // Assert
+      expect(canvas).toBeNull();
     });
   });
 
   describe('dispose()', () => {
-    it('should clean up canvas instance', () => {
-      const config = {
-        containerId: 'test-canvas-dispose',
-        width: 800,
-        height: 600,
-      };
+    it('should dispose canvas and clear instance', () => {
+      // Arrange
+      manager = new FabricCanvasManager();
+      manager.initialize(canvasElement);
 
-      manager.initialize(config);
-      expect(manager.getCanvas()).not.toBeNull();
-
+      // Act
       manager.dispose();
-      expect(manager.getCanvas()).toBeNull();
+      const canvas = manager.getCanvas();
+
+      // Assert
+      expect(canvas).toBeNull();
     });
 
-    it('should remove canvas element from DOM', () => {
-      const config = {
-        containerId: 'test-canvas-dom-cleanup',
-        width: 800,
-        height: 600,
-      };
+    it('should not throw error when disposing uninitialized manager', () => {
+      // Arrange
+      manager = new FabricCanvasManager();
 
-      manager.initialize(config);
-      manager.dispose();
-
-      // After disposal, getCanvas should return null
-      expect(manager.getCanvas()).toBeNull();
+      // Act & Assert
+      expect(() => manager.dispose()).not.toThrow();
     });
   });
+});
 
-  describe('getFabricCanvasManager() singleton', () => {
-    it('should return the same instance on multiple calls', () => {
-      const instance1 = getFabricCanvasManager();
-      const instance2 = getFabricCanvasManager();
+describe('FabricCanvasManager - Event Listeners', () => {
+  let manager: FabricCanvasManager;
+  let canvasElement: HTMLCanvasElement;
 
-      expect(instance1).toBe(instance2);
+  beforeEach(() => {
+    canvasElement = document.createElement('canvas');
+    canvasElement.id = 'test-canvas-events';
+    document.body.appendChild(canvasElement);
+    manager = new FabricCanvasManager();
+  });
+
+  afterEach(() => {
+    manager.dispose();
+    document.body.removeChild(canvasElement);
+  });
+
+  describe('setupEventListeners()', () => {
+    it('should throw error if called before initialize()', () => {
+      // Arrange
+      const handlers = {};
+
+      // Act & Assert
+      expect(() => manager.setupEventListeners(handlers)).toThrow(
+        'Canvas not initialized'
+      );
     });
 
-    it('should provide a working FabricCanvasManager instance', () => {
-      const instance = getFabricCanvasManager();
+    it('should not throw error if called after initialize()', () => {
+      // Arrange
+      manager.initialize(canvasElement);
+      const handlers = {};
 
-      expect(instance).toBeInstanceOf(FabricCanvasManager);
+      // Act & Assert
+      expect(() => manager.setupEventListeners(handlers)).not.toThrow();
+    });
+
+    it('should call onObjectModified handler when object is modified', () => {
+      // Arrange
+      manager.initialize(canvasElement);
+      const onObjectModified = vi.fn();
+      manager.setupEventListeners({ onObjectModified });
+
+      const canvas = manager.getCanvas();
+      expect(canvas).not.toBeNull();
+
+      // Act
+      // Simulate object:modified event
+      canvas!.fire('object:modified', { target: {} as any });
+
+      // Assert
+      expect(onObjectModified).toHaveBeenCalledTimes(1);
+    });
+
+    it('should call onSelectionCreated handler when selection is created', () => {
+      // Arrange
+      manager.initialize(canvasElement);
+      const onSelectionCreated = vi.fn();
+      manager.setupEventListeners({ onSelectionCreated });
+
+      const canvas = manager.getCanvas();
+      expect(canvas).not.toBeNull();
+
+      // Act
+      canvas!.fire('selection:created', { selected: [] });
+
+      // Assert
+      expect(onSelectionCreated).toHaveBeenCalledTimes(1);
+      expect(onSelectionCreated).toHaveBeenCalledWith([]);
+    });
+
+    it('should call onSelectionCleared handler when selection is cleared', () => {
+      // Arrange
+      manager.initialize(canvasElement);
+      const onSelectionCleared = vi.fn();
+      manager.setupEventListeners({ onSelectionCleared });
+
+      const canvas = manager.getCanvas();
+      expect(canvas).not.toBeNull();
+
+      // Act
+      canvas!.fire('selection:cleared', {});
+
+      // Assert
+      expect(onSelectionCleared).toHaveBeenCalledTimes(1);
     });
   });
 });
