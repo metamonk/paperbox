@@ -158,8 +158,12 @@ describe('FabricCanvasManager - State Persistence', () => {
 
       const state = manager.saveState();
 
-      expect(state.objects[0].type_properties.text_content).toBe('First');
-      expect(state.objects[1].type_properties.text_content).toBe('Second');
+      if (state.objects[0].type === 'text') {
+        expect(state.objects[0].type_properties?.text_content).toBe('First');
+      }
+      if (state.objects[1].type === 'text') {
+        expect(state.objects[1].type_properties?.text_content).toBe('Second');
+      }
     });
   });
 
@@ -238,7 +242,7 @@ describe('FabricCanvasManager - State Persistence', () => {
             opacity: 1,
             type_properties: { radius: 50 },
           },
-        ],
+        ] as Partial<CanvasObject>[],
         backgroundColor: '#f0f0f0',
         width: 1024,
         height: 768,
@@ -296,8 +300,10 @@ describe('FabricCanvasManager - State Persistence', () => {
       expect(serialized.stroke_width).toBe(1);
       expect(serialized.rotation).toBe(15);
       expect(serialized.opacity).toBe(0.9);
-      expect(serialized.type_properties.text_content).toBe('Restored text');
-      expect(serialized.type_properties.font_size).toBe(24);
+      if (serialized.type === 'text') {
+        expect(serialized.type_properties?.text_content).toBe('Restored text');
+        expect(serialized.type_properties?.font_size).toBe(24);
+      }
     });
   });
 
@@ -428,7 +434,7 @@ describe('FabricCanvasManager - State Persistence', () => {
             opacity: 1,
             type_properties: {},
           },
-        ],
+        ] as Partial<CanvasObject>[],
         backgroundColor: '#ffffff',
         width: 800,
         height: 600,

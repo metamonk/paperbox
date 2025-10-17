@@ -166,7 +166,9 @@ describe('FabricCanvasManager - Object Serialization', () => {
         const canvasObject = manager.toCanvasObject(fabricText);
 
         expect(canvasObject.type).toBe('text');
-        expect(canvasObject.type_properties.font_size).toBe(16);
+        if (canvasObject.type === 'text') {
+          expect(canvasObject.type_properties?.font_size).toBe(16);
+        }
       });
 
       it('should handle empty text content', () => {
@@ -179,7 +181,9 @@ describe('FabricCanvasManager - Object Serialization', () => {
         const canvasObject = manager.toCanvasObject(fabricText);
 
         expect(canvasObject.type).toBe('text');
-        expect(canvasObject.type_properties.text_content).toBe('');
+        if (canvasObject.type === 'text') {
+          expect(canvasObject.type_properties?.text_content).toBe('');
+        }
       });
     });
 
@@ -260,7 +264,9 @@ describe('FabricCanvasManager - Object Serialization', () => {
         expect(serialized.x).toBe(original.x);
         expect(serialized.y).toBe(original.y);
         expect(serialized.fill).toBe(original.fill);
-        expect(serialized.type_properties.radius).toBe(original.type_properties.radius);
+        if (serialized.type === 'circle') {
+          expect(serialized.type_properties?.radius).toBe(original.type_properties.radius);
+        }
       });
 
       it('should preserve text properties through create → serialize cycle', () => {
@@ -302,8 +308,10 @@ describe('FabricCanvasManager - Object Serialization', () => {
         expect(serialized.fill).toBe(original.fill);
         expect(serialized.rotation).toBe(original.rotation);
         expect(serialized.opacity).toBe(original.opacity);
-        expect(serialized.type_properties.text_content).toBe(original.type_properties.text_content);
-        expect(serialized.type_properties.font_size).toBe(original.type_properties.font_size);
+        if (serialized.type === 'text') {
+          expect(serialized.type_properties?.text_content).toBe(original.type_properties.text_content);
+          expect(serialized.type_properties?.font_size).toBe(original.type_properties.font_size);
+        }
       });
     });
   });

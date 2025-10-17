@@ -130,7 +130,9 @@ export class FabricCanvasManager {
    * @param obj - Supabase CanvasObject
    * @returns Fabric.js object instance
    */
-  createFabricObject(obj: CanvasObject): fabric.Object | null {
+  createFabricObject(obj: CanvasObject | Partial<CanvasObject>): fabric.Object | null {
+    if (!obj.type) return null;
+
     // TODO Day 3: Implement object factory pattern
     switch (obj.type) {
       case 'rectangle':
