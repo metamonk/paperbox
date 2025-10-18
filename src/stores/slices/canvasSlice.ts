@@ -177,16 +177,32 @@ export const createCanvasSlice: StateCreator<
         {} as Record<string, CanvasObject>,
       );
 
+      console.log('[canvasSlice] Database query completed:', {
+        rowCount: data?.length || 0,
+        objectCount: Object.keys(objectsMap).length,
+        objectIds: Object.keys(objectsMap),
+        objectTypes: Object.values(objectsMap).map(o => `${o.type}:${o.id.slice(0, 6)}`),
+      });
+
       set({ objects: objectsMap, loading: false }, undefined, 'canvas/initializeSuccess');
+
+      console.log('[canvasSlice] Objects set in store, now adding layers...');
 
       // Add layer metadata for all loaded objects
       Object.values(objectsMap).forEach((obj) => {
+        console.log('[canvasSlice] Adding layer for loaded object:', {
+          id: obj.id.slice(0, 8),
+          type: obj.type,
+          position: `(${obj.x}, ${obj.y})`,
+        });
         get().addLayer(obj.id, {
           name: `${obj.type} ${obj.id.slice(0, 6)}`,
           visible: true,
           locked: false,
         });
       });
+
+      console.log('[canvasSlice] Layer metadata creation complete');
 
       // Setup realtime subscription after successful load
       get().setupRealtimeSubscription(userId);
