@@ -63,6 +63,7 @@ export class CanvasSyncManager {
   initialize(): void {
     this.setupCanvasToStateSync();
     this.setupStateToCanvasSync();
+    this.setupLayersSync(); // W4.D3: Sync layer visibility/lock to Fabric
     this.setupViewportSync(); // W2.D6-D7: Initialize viewport controls
   }
 
@@ -207,6 +208,58 @@ export class CanvasSyncManager {
         } finally {
           this._isSyncingFromStore = false;
         }
+      }
+    );
+  }
+
+  /**
+   * W4.D3: Setup layers visibility/lock sync
+   *
+   * Watches layersSlice.layers and syncs visibility/lock to Fabric.js:
+   * - Visibility changes: Update object.visible property
+   * - Lock changes: Update object.selectable and evented properties
+   */
+  private setupLayersSync(): void {
+    this.store.subscribe(
+      (state) => state.layers,
+      (layers, prevLayers) => {
+        console.log('[CanvasSyncManager] Layers sync triggered', {
+          layerCount: Object.keys(layers).length,
+        });
+
+        // Check each layer for visibility/lock changes
+        Object.entries(layers).forEach(([objectId, layer]) => {
+          const prevLayer = prevLayers[objectId];
+
+          // Skip if layer didn't exist before
+          if (!prevLayer) return;
+
+          const canvas = this.fabricManager.getCanvas();
+          if (!canvas) return;
+
+          // Find the Fabric object
+          const fabricObj = canvas.getObjects().find(
+            (obj: FabricObjectWithData) => obj.data?.id === objectId
+          );
+
+          if (!fabricObj) return;
+
+          // Handle visibility change
+          if (layer.visible !== prevLayer.visible) {
+            console.log(`[CanvasSyncManager] Visibility change for ${objectId}:`, layer.visible);
+            fabricObj.visible = layer.visible;
+          }
+
+          // Handle lock change
+          if (layer.locked !== prevLayer.locked) {
+            console.log(`[CanvasSyncManager] Lock change for ${objectId}:`, layer.locked);
+            fabricObj.selectable = !layer.locked;
+            fabricObj.evented = !layer.locked;
+          }
+        });
+
+        // Request re-render after changes
+        this.fabricManager.getCanvas()?.requestRenderAll();
       }
     );
   }
