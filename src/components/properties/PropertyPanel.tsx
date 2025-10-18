@@ -55,7 +55,15 @@ export function PropertyPanel() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div
+      className="flex-1 overflow-y-auto"
+      onMouseDown={(e) => {
+        // W4.D4 CRITICAL FIX: Prevent Fabric.js from detecting PropertyPanel clicks as "outside canvas"
+        // Fabric.js v6 listens to document mousedown and clears selection when clicking outside canvas
+        // Stopping propagation prevents the event from reaching Fabric's document listener
+        e.stopPropagation();
+      }}
+    >
       <div className="p-4 space-y-4">
         {/* Object Info Header */}
         <div className="pb-3 border-b border-border">

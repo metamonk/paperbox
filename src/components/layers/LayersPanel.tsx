@@ -224,26 +224,29 @@ export function LayersPanel() {
         >
           <div className="space-y-1">
             {layerNodes.map((node) => (
-              <ContextMenu key={node!.id}>
-                <ContextMenuTrigger asChild>
-                  <TreeNode
-                    nodeId={node!.id}
-                    draggable={!node!.locked}
-                    onDragStart={(e) => handleDragStart(e, node!.id)}
-                    onDragOver={(e) => handleDragOver(e, node!.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, node!.id)}
-                    onDragEnd={handleDragEnd}
-                    className={cn(
-                      'group flex items-center gap-2 px-2 py-1.5 rounded text-sm',
-                      'hover:bg-accent transition-colors',
-                      !node!.locked && 'cursor-move',
-                      node!.locked && 'cursor-not-allowed opacity-60',
-                      node!.isSelected && 'bg-accent ring-1 ring-ring',
-                      draggedId === node!.id && 'opacity-40',
-                      dropTargetId === node!.id && 'ring-2 ring-primary'
-                    )}
-                  >
+              <div
+                key={node!.id}
+                draggable={!node!.locked}
+                onDragStart={(e) => handleDragStart(e, node!.id)}
+                onDragOver={(e) => handleDragOver(e, node!.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, node!.id)}
+                onDragEnd={handleDragEnd}
+              >
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    <TreeNode
+                      nodeId={node!.id}
+                      className={cn(
+                        'group flex items-center gap-2 px-2 py-1.5 rounded text-sm',
+                        'hover:bg-accent transition-colors',
+                        !node!.locked && 'cursor-move',
+                        node!.locked && 'cursor-not-allowed opacity-60',
+                        node!.isSelected && 'bg-accent ring-1 ring-ring',
+                        draggedId === node!.id && 'opacity-40',
+                        dropTargetId === node!.id && 'ring-2 ring-primary'
+                      )}
+                    >
                 {/* Layer Type Icon */}
                 <span className="text-xs opacity-70 flex-shrink-0 w-12">
                   {node!.type === 'rectangle' && '▭'}
@@ -358,7 +361,8 @@ export function LayersPanel() {
                     Delete
                   </ContextMenuItem>
                 </ContextMenuContent>
-              </ContextMenu>
+                </ContextMenu>
+              </div>
             ))}
           </div>
         </TreeProvider>

@@ -320,10 +320,20 @@ export const createLayersSlice: StateCreator<
 
   /**
    * Add new layer
+   *
+   * CRITICAL FIX: Prevents duplicate layer entries that cause rendering issues
+   * When setObjects is called multiple times (real-time sync), it would call
+   * addLayer for all objects, creating duplicates in layerOrder array.
    */
   addLayer: (id: string, metadata: Partial<LayerMetadata> = {}) =>
     set(
       (state) => {
+        // PREVENT DUPLICATES: Check if layer already exists
+        if (state.layers[id]) {
+          console.warn(`[layersSlice] Layer ${id} already exists, skipping duplicate add`);
+          return;
+        }
+
         const zIndex = state.layerOrder.length;
 
         state.layers[id] = {
