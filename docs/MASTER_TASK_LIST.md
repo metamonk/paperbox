@@ -1104,11 +1104,12 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ SizeProperty: width, height with aspect ratio lock
   - ✅ PropertyPanel: fill, stroke, stroke_width, opacity
   - ✅ All inputs validated (NaN checks)
-  - ✅ **CRITICAL FIX**: useShapeCreation now uses createObject() for proper DB sync
+  - ✅ **CRITICAL FIX 1**: useShapeCreation now uses createObject() for proper DB sync
+  - ✅ **CRITICAL FIX 2**: Fixed 400 error - pass userId to createObject(object, userId)
   - ✅ Objects now persist to database and sync across users
   - ✅ TypeScript compilation passing
   - ✅ HMR working without errors
-  - ✅ Commit: `362dfec` (property wiring) + `7b2975d` (sync fix)
+  - ✅ Commits: `362dfec` (property wiring) + `7b2975d` (sync fix) + `f2da24b` (userId fix)
 
 ### Day 3: Layers Panel (6-9h)
 
