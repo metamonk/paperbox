@@ -5,7 +5,7 @@
  * W5.D4: URL-based canvas routing with /canvas/:canvasId pattern
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePaperboxStore } from '../stores';
 import { Canvas } from '../components/canvas/Canvas';
@@ -14,6 +14,7 @@ import type { Canvas as CanvasType } from '../types/canvas';
 export function CanvasPage() {
   const { canvasId } = useParams<{ canvasId?: string }>();
   const navigate = useNavigate();
+  const isSettingActiveCanvas = useRef(false);
 
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const canvases = usePaperboxStore((state) => state.canvases);
@@ -63,11 +64,18 @@ export function CanvasPage() {
     }
 
     // Scenario 2: Valid canvasId in URL → Sync store to match URL (URL is source of truth)
-    if (canvasId !== activeCanvasId) {
+    if (canvasId !== activeCanvasId && !isSettingActiveCanvas.current) {
       console.log('[CanvasPage] Syncing store to match URL:', canvasId);
-      setActiveCanvas(canvasId);
-    } else {
+      isSettingActiveCanvas.current = true;
+
+      setActiveCanvas(canvasId).finally(() => {
+        // Reset flag after setActiveCanvas completes
+        isSettingActiveCanvas.current = false;
+      });
+    } else if (canvasId === activeCanvasId) {
       console.log('[CanvasPage] URL and store in sync, no action needed');
+    } else {
+      console.log('[CanvasPage] Skipping setActiveCanvas - already in progress');
     }
   }, [canvasId, activeCanvasId, canvases, canvasesLoading, navigate, setActiveCanvas]);
 
