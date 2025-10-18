@@ -278,6 +278,8 @@ export class FabricCanvasManager {
     const commonProps = {
       left: canvasObject.x,
       top: canvasObject.y,
+      originX: 'center', // W4.D3 FIX: Center object origin for placement
+      originY: 'center', // W4.D3 FIX: Center object origin for placement
       angle: canvasObject.rotation,
       fill: canvasObject.fill,
       stroke: canvasObject.stroke || undefined,
@@ -848,20 +850,19 @@ export class FabricCanvasManager {
       // W2.D12: Check for placement mode first (higher priority than panning)
       // Only trigger placement if clicking empty canvas (no target object)
       if (!opt.target && this.eventHandlers.onPlacementClick) {
-        // W2.D12 FIX: Use ignoreZoom=true to get viewport-relative coordinates
-        // ignoreZoom: true = HTMLElement coordinates (what you see on screen)
-        // ignoreZoom: false = fabric space coordinates (accounting for pan/zoom)
-        // For placement mode, we want screen-relative coords where user clicked
-        const pointer = this.canvas!.getPointer(opt.e, true);
+        // Get fabric space coordinates (accounts for pan/zoom)
+        // ignoreZoom: false = fabric space coordinates (correct for object placement)
+        // This ensures objects are placed at the correct position regardless of zoom level
+        const pointer = this.canvas!.getPointer(opt.e, false);
 
         console.log('[FabricCanvasManager] Placement click detected:', {
-          viewportX: pointer.x,
-          viewportY: pointer.y,
-          windowX: opt.e.clientX,
-          windowY: opt.e.clientY,
+          fabricX: pointer.x,
+          fabricY: pointer.y,
+          zoom: this.canvas!.getZoom(),
+          vpt: this.canvas!.viewportTransform,
         });
 
-        // Trigger placement handler with viewport-relative coordinates
+        // Trigger placement handler with fabric space coordinates
         this.eventHandlers.onPlacementClick(pointer.x, pointer.y);
         return; // Don't process as pan event
       }
