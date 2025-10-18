@@ -16,20 +16,21 @@ export function CanvasPage() {
   const navigate = useNavigate();
   const lastSyncedCanvasId = useRef<string | null>(null);
 
-  const canvases = usePaperboxStore((state) => state.canvases);
   const canvasesLoading = usePaperboxStore((state) => state.canvasesLoading);
-  const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
 
   /**
    * W5.D4: URL-Canvas State Synchronization
    *
-   * Strategy: Only sync when URL (canvasId) changes
-   * - Track last synced canvas ID in ref to prevent loops
-   * - Don't depend on activeCanvasId (it changes when we call setActiveCanvas)
+   * Strategy: Only sync when URL (canvasId) or canvasesLoading changes
+   * - Use getState() inside effect to avoid canvases array reference changes
+   * - Track last synced canvas ID in ref to prevent duplicate syncs
    */
   useEffect(() => {
     // Don't do anything while canvases are loading
     if (canvasesLoading) return;
+
+    // Get current state inside effect to avoid dependency on canvases array
+    const { canvases, setActiveCanvas } = usePaperboxStore.getState();
 
     // Need at least one canvas
     if (canvases.length === 0) return;
@@ -52,7 +53,7 @@ export function CanvasPage() {
       lastSyncedCanvasId.current = canvasId;
       setActiveCanvas(canvasId);
     }
-  }, [canvasId, canvases, canvasesLoading, navigate, setActiveCanvas]);
+  }, [canvasId, canvasesLoading, navigate]); // REMOVED canvases and setActiveCanvas
 
   // Show loading state while canvases load
   if (canvasesLoading) {
