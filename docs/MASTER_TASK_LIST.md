@@ -1106,10 +1106,11 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ All inputs validated (NaN checks)
   - ✅ **CRITICAL FIX 1**: useShapeCreation now uses createObject() for proper DB sync
   - ✅ **CRITICAL FIX 2**: Fixed 400 error - pass userId to createObject(object, userId)
+  - ✅ **CRITICAL FIX 3**: Fixed UUID compatibility - use crypto.randomUUID() instead of nanoid()
   - ✅ Objects now persist to database and sync across users
   - ✅ TypeScript compilation passing
   - ✅ HMR working without errors
-  - ✅ Commits: `362dfec` (property wiring) + `7b2975d` (sync fix) + `f2da24b` (userId fix)
+  - ✅ Commits: `362dfec` (wiring) + `7b2975d` (sync) + `f2da24b` (userId) + `6475f31` (UUID)
 
 ### Day 3: Layers Panel (6-9h)
 
