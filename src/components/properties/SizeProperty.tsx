@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Link2, Link2Off } from 'lucide-react';
+import { usePaperboxStore } from '@/stores';
 import type { CanvasObject } from '@/types/canvas';
 
 interface SizePropertyProps {
@@ -15,26 +16,25 @@ interface SizePropertyProps {
 }
 
 export function SizeProperty({ object }: SizePropertyProps) {
+  const updateObject = usePaperboxStore((state) => state.updateObject);
   const [aspectRatioLocked, setAspectRatioLocked] = useState(false);
   const aspectRatio = object.width / object.height;
 
   const handleWidthChange = (newWidth: number) => {
-    // TODO: Wire to object update action
-    console.log('Width changed:', newWidth);
-
     if (aspectRatioLocked) {
       const newHeight = newWidth / aspectRatio;
-      console.log('Height changed (locked):', newHeight);
+      updateObject(object.id, { width: newWidth, height: newHeight });
+    } else {
+      updateObject(object.id, { width: newWidth });
     }
   };
 
   const handleHeightChange = (newHeight: number) => {
-    // TODO: Wire to object update action
-    console.log('Height changed:', newHeight);
-
     if (aspectRatioLocked) {
       const newWidth = newHeight * aspectRatio;
-      console.log('Width changed (locked):', newWidth);
+      updateObject(object.id, { width: newWidth, height: newHeight });
+    } else {
+      updateObject(object.id, { height: newHeight });
     }
   };
 

@@ -28,6 +28,7 @@ export function PropertyPanel() {
   // Split selectors to avoid creating new objects on every render
   const activeObjectId = usePaperboxStore((state) => state.activeObjectId);
   const objects = usePaperboxStore((state) => state.objects);
+  const updateObject = usePaperboxStore((state) => state.updateObject);
 
   // Get active object
   const activeObject = activeObjectId
@@ -127,8 +128,7 @@ export function PropertyPanel() {
               label="Fill"
               value={activeObject.fill}
               onChange={(color) => {
-                // TODO: Wire to object update action
-                console.log('Fill color changed:', color);
+                updateObject(activeObject.id, { fill: color });
               }}
             />
 
@@ -138,8 +138,7 @@ export function PropertyPanel() {
                 label="Stroke"
                 value={activeObject.stroke}
                 onChange={(color) => {
-                  // TODO: Wire to object update action
-                  console.log('Stroke color changed:', color);
+                  updateObject(activeObject.id, { stroke: color });
                 }}
               />
             )}
@@ -159,8 +158,7 @@ export function PropertyPanel() {
                   max={20}
                   step={1}
                   onValueChange={(values) => {
-                    // TODO: Wire to object update action
-                    console.log('Stroke width changed:', values[0]);
+                    updateObject(activeObject.id, { stroke_width: values[0] });
                   }}
                 />
               </div>
@@ -180,8 +178,7 @@ export function PropertyPanel() {
                 max={100}
                 step={1}
                 onValueChange={(values) => {
-                  // TODO: Wire to object update action
-                  console.log('Opacity changed:', values[0] / 100);
+                  updateObject(activeObject.id, { opacity: values[0] / 100 });
                 }}
               />
             </div>
