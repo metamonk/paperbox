@@ -32,8 +32,16 @@ export function CanvasPage() {
    * 3. /canvas/:canvasId (invalid ID) → Redirect to /canvas/:activeCanvasId or first canvas
    */
   useEffect(() => {
+    console.log('[CanvasPage] useEffect fired:', {
+      canvasId,
+      activeCanvasId,
+      canvasesCount: canvases.length,
+      canvasesLoading,
+    });
+
     // Wait for canvases to load
     if (canvasesLoading || canvases.length === 0) {
+      console.log('[CanvasPage] Waiting for canvases to load...');
       return;
     }
 
@@ -58,6 +66,8 @@ export function CanvasPage() {
     if (canvasId !== activeCanvasId) {
       console.log('[CanvasPage] Syncing store to match URL:', canvasId);
       setActiveCanvas(canvasId);
+    } else {
+      console.log('[CanvasPage] URL and store in sync, no action needed');
     }
   }, [canvasId, activeCanvasId, canvases, canvasesLoading, navigate, setActiveCanvas]);
 
