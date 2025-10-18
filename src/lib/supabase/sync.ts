@@ -28,6 +28,7 @@ type DbCanvasObjectUpdate =
 export function dbToCanvasObject(dbObject: DbCanvasObject): CanvasObject {
   const baseObject = {
     id: dbObject.id,
+    canvas_id: dbObject.canvas_id!, // W5.D2: Multi-canvas - canvas_id is required (NOT NULL after migration 012)
     x: Number(dbObject.x),
     y: Number(dbObject.y),
     width: Number(dbObject.width),
@@ -80,6 +81,7 @@ export function canvasObjectToDb(
   return {
     id: object.id,
     type: object.type,
+    canvas_id: object.canvas_id, // W5.D2: Multi-canvas - canvas_id is required
     x: object.x,
     y: object.y,
     width: object.width,
