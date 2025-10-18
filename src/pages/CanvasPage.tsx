@@ -14,65 +14,45 @@ import type { Canvas as CanvasType } from '../types/canvas';
 export function CanvasPage() {
   const { canvasId } = useParams<{ canvasId?: string }>();
   const navigate = useNavigate();
-  const isSettingActiveCanvas = useRef(false);
+  const lastSyncedCanvasId = useRef<string | null>(null);
 
   const canvases = usePaperboxStore((state) => state.canvases);
   const canvasesLoading = usePaperboxStore((state) => state.canvasesLoading);
   const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
 
   /**
-   * W5.D4: URL-Canvas State Synchronization (SINGLE SOURCE OF TRUTH: URL)
+   * W5.D4: URL-Canvas State Synchronization
    *
-   * Strategy: URL is the source of truth, store follows URL
-   * This prevents circular updates between URL and store
-   *
-   * Scenarios:
-   * 1. /canvas (no ID) → Redirect to /canvas/:activeCanvasId or /canvas/:firstCanvasId
-   * 2. /canvas/:canvasId (valid ID) → Set as active canvas in store (if different)
-   * 3. /canvas/:canvasId (invalid ID) → Redirect to /canvas/:activeCanvasId or first canvas
+   * Strategy: Only sync when URL (canvasId) changes
+   * - Track last synced canvas ID in ref to prevent loops
+   * - Don't depend on activeCanvasId (it changes when we call setActiveCanvas)
    */
   useEffect(() => {
-    console.log('[CanvasPage] useEffect fired:', {
-      canvasId,
-      canvasesCount: canvases.length,
-      canvasesLoading,
-    });
+    // Don't do anything while canvases are loading
+    if (canvasesLoading) return;
 
-    // Wait for canvases to load
-    if (canvasesLoading || canvases.length === 0) {
-      console.log('[CanvasPage] Waiting for canvases to load...');
-      return;
-    }
+    // Need at least one canvas
+    if (canvases.length === 0) return;
 
-    // Scenario 1: No canvasId in URL → Redirect to first canvas
+    // No canvas ID in URL → redirect to first canvas
     if (!canvasId) {
-      const firstCanvas = canvases[0];
-      console.log('[CanvasPage] No canvasId in URL, redirecting to:', firstCanvas.id);
-      navigate(`/canvas/${firstCanvas.id}`, { replace: true });
+      navigate(`/canvas/${canvases[0].id}`, { replace: true });
       return;
     }
 
-    // Scenario 2: Invalid canvasId in URL → Redirect to first canvas
-    const canvasExists = canvases.some((c: CanvasType) => c.id === canvasId);
-    if (!canvasExists) {
-      const firstCanvas = canvases[0];
-      console.log('[CanvasPage] Invalid canvasId in URL, redirecting to:', firstCanvas.id);
-      navigate(`/canvas/${firstCanvas.id}`, { replace: true });
+    // Invalid canvas ID in URL → redirect to first canvas
+    if (!canvases.some((c: CanvasType) => c.id === canvasId)) {
+      navigate(`/canvas/${canvases[0].id}`, { replace: true });
       return;
     }
 
-    // Scenario 3: Valid canvasId in URL → Sync store to match URL
-    // IMPORTANT: Only run once per canvasId change (don't depend on activeCanvasId)
-    if (!isSettingActiveCanvas.current) {
-      console.log('[CanvasPage] Syncing store to match URL:', canvasId);
-      isSettingActiveCanvas.current = true;
-
-      setActiveCanvas(canvasId).finally(() => {
-        // Reset flag after setActiveCanvas completes
-        isSettingActiveCanvas.current = false;
-      });
+    // Valid canvas ID - sync to store if we haven't already
+    if (canvasId !== lastSyncedCanvasId.current) {
+      console.log('[CanvasPage] Syncing canvas from URL:', canvasId);
+      lastSyncedCanvasId.current = canvasId;
+      setActiveCanvas(canvasId);
     }
-  }, [canvasId, canvases, canvasesLoading, navigate, setActiveCanvas]); // REMOVED activeCanvasId
+  }, [canvasId, canvases, canvasesLoading, navigate, setActiveCanvas]);
 
   // Show loading state while canvases load
   if (canvasesLoading) {
