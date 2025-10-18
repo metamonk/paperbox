@@ -1572,10 +1572,18 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ Database persistence + realtime sync
 
 ### Feature: Text Formatting (2 days)
-- [ ] **W6.D2.1**: [Context7] Fetch Fabric.js text editing patterns
-- [ ] **W6.D2.2-4**: Font family selector [RED/GREEN/REFACTOR]
-- [ ] **W6.D2.5-7**: Font size, weight, style
-- [ ] **W6.D2.8-10**: Text alignment and decoration
+- [✅] **W6.D2.1**: [Context7] Fetch Fabric.js text editing patterns
+- [✅] **W6.D2.2-4**: Font family selector [DIRECT IMPLEMENTATION]
+  - ✅ 10 common fonts with live preview in dropdown
+  - ✅ Font size: 8-144px with number input + slider
+- [✅] **W6.D2.5-7**: Font size, weight, style
+  - ✅ 7 font weights (300-900)
+  - ✅ Italic toggle button
+- [✅] **W6.D2.8-10**: Text alignment and decoration
+  - ✅ 4 alignment options (left/center/right/justify)
+  - ✅ Underline and strikethrough toggles
+  - ✅ Commit 5b5e9fb: TextProperty.tsx component (254 lines)
+  - ✅ Real-time Fabric.js sync via Zustand updateObject()
 
 ### Feature: Opacity & Blend Modes (1 day)
 - [✅] **W6.D3.1-3**: Opacity slider [RED/GREEN/REFACTOR]
@@ -1592,7 +1600,8 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
 **Notes**:
 - ✅ Color picker fully implemented in W4.D2 (ahead of schedule)
 - ✅ Opacity slider completed in W4.D2
-- 🎯 Next: Text Formatting (W6.D2) and Blend Modes (W6.D3.4-10)
+- ✅ Text Formatting complete in W6.D2 (Commit 5b5e9fb)
+- 🎯 Next: Blend Modes (W6.D3.4-10)
 
 ---
 
