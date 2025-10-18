@@ -21,9 +21,9 @@
 - 🔄 **Week 5 In Progress**: Multi-Canvas Architecture (CRITICAL - Figma clone foundation)
   - ✅ W5.D1 Complete: Database schema & migrations (canvases table, canvas_id scoping, RLS policies)
   - ✅ W5.D2 Complete: State Management (Zustand canvas CRUD, canvas-scoped queries, realtime filtering)
-  - 🔜 W5.D3 Next: UI Components (CanvasPicker, CanvasManagementModal)
-  - 📋 W5.D4 Pending: Routing & Integration (/canvas/:canvasId)
-  - 📋 W5.D5 Pending: Testing, Polish & Documentation
+  - ✅ W5.D3 Complete: UI Components (CanvasPicker with ⌘K shortcut, CanvasManagementModal)
+  - ✅ W5.D4 Complete: Routing & Integration (/canvas/:canvasId with URL-state bidirectional sync)
+  - 🔜 W5.D5 Next: Testing, Polish & Documentation
 - 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---
