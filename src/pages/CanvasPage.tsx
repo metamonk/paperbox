@@ -16,7 +16,6 @@ export function CanvasPage() {
   const navigate = useNavigate();
   const isSettingActiveCanvas = useRef(false);
 
-  const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const canvases = usePaperboxStore((state) => state.canvases);
   const canvasesLoading = usePaperboxStore((state) => state.canvasesLoading);
   const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
@@ -35,7 +34,6 @@ export function CanvasPage() {
   useEffect(() => {
     console.log('[CanvasPage] useEffect fired:', {
       canvasId,
-      activeCanvasId,
       canvasesCount: canvases.length,
       canvasesLoading,
     });
@@ -46,25 +44,26 @@ export function CanvasPage() {
       return;
     }
 
-    // Scenario 1: No canvasId in URL → Redirect to active or first canvas
+    // Scenario 1: No canvasId in URL → Redirect to first canvas
     if (!canvasId) {
-      const targetCanvas = canvases.find((c: CanvasType) => c.id === activeCanvasId) || canvases[0];
-      console.log('[CanvasPage] No canvasId in URL, redirecting to:', targetCanvas.id);
-      navigate(`/canvas/${targetCanvas.id}`, { replace: true });
+      const firstCanvas = canvases[0];
+      console.log('[CanvasPage] No canvasId in URL, redirecting to:', firstCanvas.id);
+      navigate(`/canvas/${firstCanvas.id}`, { replace: true });
       return;
     }
 
-    // Scenario 3: Invalid canvasId in URL → Redirect to active or first canvas
+    // Scenario 2: Invalid canvasId in URL → Redirect to first canvas
     const canvasExists = canvases.some((c: CanvasType) => c.id === canvasId);
     if (!canvasExists) {
-      const targetCanvas = canvases.find((c: CanvasType) => c.id === activeCanvasId) || canvases[0];
-      console.log('[CanvasPage] Invalid canvasId in URL, redirecting to:', targetCanvas.id);
-      navigate(`/canvas/${targetCanvas.id}`, { replace: true });
+      const firstCanvas = canvases[0];
+      console.log('[CanvasPage] Invalid canvasId in URL, redirecting to:', firstCanvas.id);
+      navigate(`/canvas/${firstCanvas.id}`, { replace: true });
       return;
     }
 
-    // Scenario 2: Valid canvasId in URL → Sync store to match URL (URL is source of truth)
-    if (canvasId !== activeCanvasId && !isSettingActiveCanvas.current) {
+    // Scenario 3: Valid canvasId in URL → Sync store to match URL
+    // IMPORTANT: Only run once per canvasId change (don't depend on activeCanvasId)
+    if (!isSettingActiveCanvas.current) {
       console.log('[CanvasPage] Syncing store to match URL:', canvasId);
       isSettingActiveCanvas.current = true;
 
@@ -72,12 +71,8 @@ export function CanvasPage() {
         // Reset flag after setActiveCanvas completes
         isSettingActiveCanvas.current = false;
       });
-    } else if (canvasId === activeCanvasId) {
-      console.log('[CanvasPage] URL and store in sync, no action needed');
-    } else {
-      console.log('[CanvasPage] Skipping setActiveCanvas - already in progress');
     }
-  }, [canvasId, activeCanvasId, canvases, canvasesLoading, navigate, setActiveCanvas]);
+  }, [canvasId, canvases, canvasesLoading, navigate, setActiveCanvas]); // REMOVED activeCanvasId
 
   // Show loading state while canvases load
   if (canvasesLoading) {
