@@ -1211,7 +1211,8 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
 # WEEK 5: MULTI-CANVAS ARCHITECTURE (CRITICAL FOUNDATION)
 # ═══════════════════════════════════════════════════════
 
-**Status**: 🔜 **NEXT** - Critical Figma clone foundation before AI integration
+**Status**: ✅ **WEEK 5 COMPLETE** - Multi-canvas architecture with URL-driven routing ✅
+**Critical Fix**: Production infinite loop resolved (8 iterations, architectural separation)
 **Rationale**: Multi-canvas architecture MUST be in Phase II to:
   1. Align with PRD goal: "Feature-complete Figma clone" (Figma = multiple design files)
   2. Prevent technical debt (adding after AI requires retrofitting all commands)
@@ -1534,6 +1535,13 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
 - ✅ All W5 critical features implemented and tested
 - ✅ Comprehensive documentation created
 - ✅ AI Integration roadmap updated for Phase III
+- ✅ **CRITICAL BUG FIX**: Production infinite loop resolved (Commit 3497033)
+  - **Issue**: Circular useEffect dependency causing 80K-114K console logs in 5-10s
+  - **Root Cause**: `setActiveCanvas()` changed `activeCanvasId` → triggered useEffect → loop
+  - **Solution**: Architectural separation - CanvasRedirect (routing) + CanvasPage (rendering)
+  - **Files Changed**: CanvasPage.tsx (stripped to wrapper), CanvasRedirect.tsx (new), App.tsx (routing)
+  - **Documentation**: [W5_ROUTING_FIX.md](../claudedocs/W5_ROUTING_FIX.md) (490+ lines, 8 fix attempts)
+  - **Status**: ✅ RESOLVED - Production deployment successful
 - 🎯 Ready for Week 6: Color & Text Styling
 
 ---

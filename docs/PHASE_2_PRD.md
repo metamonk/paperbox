@@ -24,7 +24,11 @@
   - ✅ W5.D3 Complete: UI Components (CanvasPicker with ⌘K shortcut, CanvasManagementModal)
   - ✅ W5.D4 Complete: Routing & Integration (/canvas/:canvasId with URL-state bidirectional sync)
   - ✅ W5.D5 Complete: Testing, Polish & Documentation (W5_MULTI_CANVAS_COMPLETE.md + AI Integration)
-- 🔜 **Week 6 Next**: Color & Text Styling
+  - ✅ **CRITICAL FIX**: Production infinite loop resolved (Commit 3497033)
+    - **Issue**: Circular useEffect dependency causing 80K-114K console logs in 5-10s
+    - **Solution**: Architectural separation - CanvasRedirect (routing) + CanvasPage (rendering)
+    - **Documentation**: [W5_ROUTING_FIX.md](../claudedocs/W5_ROUTING_FIX.md) (8 fix attempts documented)
+- 🔜 **Week 6 In Progress**: Color & Text Styling (Color picker ✅ complete, Text formatting next)
 - 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---
