@@ -179,6 +179,15 @@ export const createCanvasSlice: StateCreator<
 
       set({ objects: objectsMap, loading: false }, undefined, 'canvas/initializeSuccess');
 
+      // Add layer metadata for all loaded objects
+      Object.values(objectsMap).forEach((obj) => {
+        get().addLayer(obj.id, {
+          name: `${obj.type} ${obj.id.slice(0, 6)}`,
+          visible: true,
+          locked: false,
+        });
+      });
+
       // Setup realtime subscription after successful load
       get().setupRealtimeSubscription(userId);
     } catch (error) {
