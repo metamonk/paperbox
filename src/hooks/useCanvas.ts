@@ -1,13 +1,17 @@
 /**
  * Canvas state management hook
  * Handles zoom, pan, canvas transformations, and shape management
+ *
+ * W1.D4: Updated to use Zustand store instead of useRealtimeObjects hook
+ * Follows PRD's 5-layer architecture with middleware sync pattern
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import Konva from 'konva';
 import { DEFAULT_ZOOM, ZOOM_SPEED, SHAPE_DEFAULTS } from '../lib/constants';
 import { clampZoom, getViewportCenter } from '../utils/canvas-helpers';
-import { useRealtimeObjects } from './useRealtimeObjects';
+import { usePaperboxStore } from '../stores';
+import { useAuth } from './useAuth';
 import type { CanvasObject, ShapeType, ToolMode } from '../types/canvas';
 
 export function useCanvas() {
@@ -19,18 +23,40 @@ export function useCanvas() {
   const [toolMode, setToolMode] = useState<ToolMode>('select');
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isCommandPressed, setIsCommandPressed] = useState(false);
-  
-  // Use realtime objects instead of local state
-  const { 
-    objects: shapes, 
-    loading, 
-    error,
-    createObject, 
-    updateObject,
-    deleteObjects,
-    acquireLock,
-    releaseLock 
-  } = useRealtimeObjects();
+
+  // Get user for createObject calls and lock operations
+  const { user } = useAuth();
+
+  // Use Zustand store for canvas state (W1.D4 - PRD architecture)
+  const objectsMap = usePaperboxStore((state) => state.objects);
+  const loading = usePaperboxStore((state) => state.loading);
+  const error = usePaperboxStore((state) => state.error);
+  const createObjectAction = usePaperboxStore((state) => state.createObject);
+  const updateObjectAction = usePaperboxStore((state) => state.updateObject);
+  const deleteObjectsAction = usePaperboxStore((state) => state.deleteObjects);
+  const acquireLockAction = usePaperboxStore((state) => state.acquireLock);
+  const releaseLockAction = usePaperboxStore((state) => state.releaseLock);
+
+  // Convert objects Record to array for rendering (memoized)
+  const shapes = useMemo(() => Object.values(objectsMap), [objectsMap]);
+
+  // Wrapper for acquireLock that provides userId and userName
+  const acquireLock = useCallback(
+    async (objectId: string): Promise<boolean> => {
+      if (!user) return false;
+      const userName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'User';
+      return acquireLockAction(objectId, user.id, userName);
+    },
+    [user, acquireLockAction]
+  );
+
+  // Wrapper for releaseLock to match expected signature
+  const releaseLock = useCallback(
+    async (objectId: string): Promise<void> => {
+      releaseLockAction(objectId);
+    },
+    [releaseLockAction]
+  );
 
   /**
    * Keyboard event handlers for tool switching and delete
@@ -57,7 +83,7 @@ export function useCanvas() {
       // Delete/Backspace key to delete selected shape
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeId) {
         e.preventDefault();
-        deleteObjects([selectedShapeId]);
+        deleteObjectsAction([selectedShapeId]);
         setSelectedShapeId(null);
       }
     };
@@ -80,7 +106,7 @@ export function useCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedShapeId, deleteObjects]);
+  }, [selectedShapeId, deleteObjectsAction]);
 
   /**
    * Determine effective tool mode (considering modifiers)
@@ -155,11 +181,16 @@ export function useCanvas() {
    */
   const addShape = useCallback(
     async (type: ShapeType) => {
+      if (!user?.id) {
+        console.error('Cannot create shape: user not authenticated');
+        return;
+      }
+
       const stage = stageRef.current;
-      
+
       // Get viewport center for new shape position
       // If no stage (during tests), use canvas center
-      const center = stage 
+      const center = stage
         ? getViewportCenter(stage)
         : { x: 2500, y: 2500 }; // Center of 5000x5000 canvas
 
@@ -209,19 +240,22 @@ export function useCanvas() {
           break;
       }
 
-      // Create object in database (will sync via realtime)
-      await createObject(newShape);
+      // Create object via Zustand store (optimistic update + database write)
+      await createObjectAction(newShape, user.id);
     },
-    [createObject]
+    [createObjectAction, user?.id]
   );
 
   /**
    * Update an existing shape
    */
-  const updateShape = useCallback((id: string, updates: Partial<CanvasObject>) => {
-    // Update in database (will sync via realtime)
-    updateObject(id, updates);
-  }, [updateObject]);
+  const updateShape = useCallback(
+    (id: string, updates: Partial<CanvasObject>) => {
+      // Update via Zustand store (optimistic update + database write)
+      updateObjectAction(id, updates);
+    },
+    [updateObjectAction]
+  );
 
   /**
    * Select a shape for transformation
@@ -242,10 +276,10 @@ export function useCanvas() {
    */
   const deleteSelected = useCallback(() => {
     if (selectedShapeId) {
-      deleteObjects([selectedShapeId]);
+      deleteObjectsAction([selectedShapeId]);
       setSelectedShapeId(null);
     }
-  }, [selectedShapeId, deleteObjects]);
+  }, [selectedShapeId, deleteObjectsAction]);
 
   return {
     stageRef,

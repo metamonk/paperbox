@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { CursorPosition } from '../../types/user';
 import { canvasToScreen } from '../../utils/canvas-helpers';
 
@@ -9,11 +10,16 @@ interface CursorOverlayProps {
 
 /**
  * Renders remote user cursors on top of the canvas
+ * W2.D9: Optimized with React.memo to prevent unnecessary re-renders
+ *
  * - Transforms canvas coordinates to screen coordinates
  * - Displays colored cursor with user's name
  * - Smooth CSS transitions for cursor movement
+ *
+ * Performance: Memoized to avoid re-renders when parent updates
+ * but cursor positions haven't changed
  */
-export function CursorOverlay({ cursors, scale, stagePosition }: CursorOverlayProps) {
+function CursorOverlayComponent({ cursors, scale, stagePosition }: CursorOverlayProps) {
   return (
     <div className="absolute inset-0 pointer-events-none z-50">
       {Array.from(cursors.values()).map((cursor) => {
@@ -64,4 +70,27 @@ export function CursorOverlay({ cursors, scale, stagePosition }: CursorOverlayPr
     </div>
   );
 }
+
+/**
+ * Memoized CursorOverlay with custom comparison
+ * Prevents re-renders when cursor Map reference changes but content is the same
+ */
+export const CursorOverlay = memo(CursorOverlayComponent, (prevProps, nextProps) => {
+  // Check if cursors Map has same entries
+  if (prevProps.cursors.size !== nextProps.cursors.size) return false;
+
+  // Check if scale and position unchanged
+  if (prevProps.scale !== nextProps.scale) return false;
+  if (prevProps.stagePosition.x !== nextProps.stagePosition.x) return false;
+  if (prevProps.stagePosition.y !== nextProps.stagePosition.y) return false;
+
+  // Check if cursor positions changed (shallow comparison)
+  for (const [userId, cursor] of prevProps.cursors.entries()) {
+    const nextCursor = nextProps.cursors.get(userId);
+    if (!nextCursor) return false;
+    if (cursor.x !== nextCursor.x || cursor.y !== nextCursor.y) return false;
+  }
+
+  return true; // Props are equal, skip re-render
+});
 

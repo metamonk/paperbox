@@ -17,6 +17,7 @@ import { useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import Konva from 'konva';
 import { useAuth } from '../../../hooks/useAuth';
+import { useToast } from '../../ui/Toast';
 import type { CanvasObject } from '../../../types/canvas';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
@@ -85,8 +86,9 @@ export function BaseShape<T extends CanvasObject>({
   children
 }: BaseShapeProps<T>) {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const shapeRef = useRef<Konva.Node>(null);
-  
+
   // Determine lock state
   const isLockedByOther = Boolean(shape.locked_by && shape.locked_by !== user?.id);
   const isLockedByMe = shape.locked_by === user?.id;
@@ -111,13 +113,19 @@ export function BaseShape<T extends CanvasObject>({
   /**
    * Acquire lock when starting to drag
    * Also updates activity for presence tracking
+   * W1.D8: Added toast notification for lock conflicts
    */
   const handleDragStart = useCallback(async () => {
     onActivity?.();
-    await onAcquireLock(shape.id);
-    // Note: Lock acquisition failure is handled by the lock system
-    // The object will show as locked if acquisition fails
-  }, [shape.id, onAcquireLock, onActivity]);
+    const lockAcquired = await onAcquireLock(shape.id);
+
+    // W1.D8: Notify user if lock acquisition failed
+    if (!lockAcquired && isLockedByOther) {
+      // Get lock owner name from shape if available
+      const lockOwner = shape.locked_by ? 'another user' : 'another user';
+      showToast(`This object is locked by ${lockOwner}`, 'warning', 2000);
+    }
+  }, [shape.id, shape.locked_by, onAcquireLock, onActivity, isLockedByOther, showToast]);
 
   /**
    * Update position and release lock on drag end
