@@ -18,12 +18,12 @@
   - ✅ W4.D3 Complete: Layers Panel with drag-drop reordering, rename, and context menu operations
   - ✅ W4.D4 Complete: Advanced UI components + **CRITICAL collaboration fix** (selection persistence + multi-user object visibility)
   - ✅ W4.D5 Complete: Testing & Polish (accessibility, keyboard nav, final integration)
-- 🔜 **Week 5 Next**: Multi-Canvas Architecture (CRITICAL - Figma clone foundation)
-  - Database: canvases table, canvas_id scoping
-  - State: Canvas selection, CRUD operations
-  - UI: Canvas picker, management modal
-  - Routing: /canvas/:canvasId
-  - Duration: 5 days (W5.D1-D5)
+- 🔄 **Week 5 In Progress**: Multi-Canvas Architecture (CRITICAL - Figma clone foundation)
+  - ✅ W5.D1 Complete: Database schema & migrations (canvases table, canvas_id scoping, RLS policies)
+  - ✅ W5.D2 Complete: State Management (Zustand canvas CRUD, canvas-scoped queries, realtime filtering)
+  - 🔜 W5.D3 Next: UI Components (CanvasPicker, CanvasManagementModal)
+  - 📋 W5.D4 Pending: Routing & Integration (/canvas/:canvasId)
+  - 📋 W5.D5 Pending: Testing, Polish & Documentation
 - 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---
