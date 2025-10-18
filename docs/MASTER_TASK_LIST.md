@@ -1076,7 +1076,7 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - Note: shadcn already provides CSS variables via components.json
   - Light/dark mode can be added later if needed
 
-### Day 2: Property Panels (5-7h)
+### Day 2: Property Panels (5-7h) ✅ COMPLETE
 
 - [✅] **W4.D2.1-3**: Create PropertyPanel template
   - ✅ Installed shadcn Collapsible + Input components
@@ -1099,13 +1099,16 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ Position inputs (X, Y coordinates)
   - ✅ Size inputs with aspect ratio lock
 
-- [🔄] **W4.D2.10**: Test property panel interactions
+- [✅] **W4.D2.10**: Wire property changes to Zustand store
+  - ✅ PositionProperty: X, Y, rotation → updateObject()
+  - ✅ SizeProperty: width, height with aspect ratio lock
+  - ✅ PropertyPanel: fill, stroke, stroke_width, opacity
+  - ✅ All inputs validated (NaN checks)
+  - ✅ **CRITICAL FIX**: useShapeCreation now uses createObject() for proper DB sync
+  - ✅ Objects now persist to database and sync across users
   - ✅ TypeScript compilation passing
   - ✅ HMR working without errors
-  - ✅ Integrated PropertyPanel into Canvas sidebar
-  - ✅ Added Properties toggle button to Header
-  - ⏳ Need to wire property changes to object state
-  - ⏳ Need browser testing with object selection
+  - ✅ Commit: `362dfec` (property wiring) + `7b2975d` (sync fix)
 
 ### Day 3: Layers Panel (6-9h)
 
