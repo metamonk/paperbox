@@ -149,6 +149,12 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         navigationShortcutsRef.current = navShortcuts;
         console.log('[useCanvasSync] NavigationShortcuts initialized');
 
+        // Step 6: Setup scroll pan and zoom (W2.D12+: Figma-style interactions)
+        console.log('[useCanvasSync] Setting up scroll pan and zoom...');
+        fabric.setupSpacebarPan();
+        fabric.setupScrollPanAndZoom();
+        console.log('[useCanvasSync] Scroll pan and zoom initialized');
+
         setInitialized(true);
         setError(null);
         console.log('[useCanvasSync] Complete initialization successful ✅');

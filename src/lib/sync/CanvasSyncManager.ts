@@ -14,23 +14,33 @@
  */
 
 import type { FabricObject } from 'fabric';
+import type { StoreApi } from 'zustand';
 import type { FabricCanvasManager } from '../fabric/FabricCanvasManager';
 import type { PaperboxStore } from '../../stores';
 import type { CanvasObject } from '../../types/canvas';
+
+/**
+ * Zustand store API type that includes both state and methods
+ */
+type ZustandStore = {
+  getState: () => PaperboxStore;
+  setState: (state: Partial<PaperboxStore>) => void;
+  subscribe: (listener: (state: PaperboxStore, prevState: PaperboxStore) => void) => () => void;
+} & StoreApi<PaperboxStore>;
 
 /**
  * Manages bidirectional synchronization between Fabric.js canvas and Zustand store
  */
 export class CanvasSyncManager {
   private fabricManager: FabricCanvasManager;
-  private store: PaperboxStore;
+  private store: ZustandStore;
   private unsubscribe: (() => void) | null = null;
 
   // Sync flags to prevent infinite loops
   private _isSyncingFromCanvas = false;
   private _isSyncingFromStore = false;
 
-  constructor(fabricManager: FabricCanvasManager, store: PaperboxStore) {
+  constructor(fabricManager: FabricCanvasManager, store: ZustandStore) {
     this.fabricManager = fabricManager;
     this.store = store;
   }
@@ -56,11 +66,11 @@ export class CanvasSyncManager {
    * - W2.D8.4-5: Pixel grid visualization
    */
   private setupViewportSync(): void {
-    // Setup mousewheel zoom
-    this.fabricManager.setupMousewheelZoom();
+    // W2.D12+: Removed old setupMousewheelZoom() call
+    // Now using setupScrollPanAndZoom() in useCanvasSync for Figma-style interactions
 
-    // Setup spacebar + drag panning
-    this.fabricManager.setupSpacebarPan();
+    // W2.D12+: Removed setupSpacebarPan() call
+    // Now called in useCanvasSync along with setupScrollPanAndZoom()
 
     // W2.D8.4-5: Setup pixel grid visualization (shows when zoom > 8x)
     this.fabricManager.setupPixelGrid();
