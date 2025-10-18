@@ -69,6 +69,7 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
   // W5: Multi-canvas API (loadCanvases + setActiveCanvas replaces deprecated initialize)
   const loadCanvases = usePaperboxStore((state) => state.loadCanvases);
   const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
+  const createCanvas = usePaperboxStore((state) => state.createCanvas);
   const storeError = usePaperboxStore((state) => state.error);
 
   useEffect(() => {
@@ -108,8 +109,24 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
           return;
         }
 
-        // Step 2b: Set active canvas (first canvas or create default if none exist)
-        const currentCanvases = usePaperboxStore.getState().canvases;
+        // Step 2b: Ensure user has at least one canvas (create default if needed)
+        let currentCanvases = usePaperboxStore.getState().canvases;
+
+        if (currentCanvases.length === 0) {
+          console.log('[useCanvasSync] No canvases found, creating default canvas...');
+          await createCanvas('Untitled Canvas', 'Your first canvas');
+
+          if (!mounted) {
+            fabric.dispose();
+            return;
+          }
+
+          // Reload to get the newly created canvas
+          currentCanvases = usePaperboxStore.getState().canvases;
+          console.log('[useCanvasSync] Default canvas created:', currentCanvases[0]?.id);
+        }
+
+        // Step 2c: Set active canvas if none is set
         const currentActiveId = usePaperboxStore.getState().activeCanvasId;
 
         if (currentCanvases.length > 0 && !currentActiveId) {
@@ -227,7 +244,7 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         setFabricManager(null);
       }
     };
-  }, [user?.id, canvasElement, loadCanvases, setActiveCanvas]);
+  }, [user?.id, canvasElement, loadCanvases, setActiveCanvas, createCanvas]);
 
   // Propagate store errors to hook state
   useEffect(() => {
