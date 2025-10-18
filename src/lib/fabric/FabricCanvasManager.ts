@@ -399,6 +399,8 @@ export class FabricCanvasManager {
       stroke: canvasObject.stroke || undefined,
       strokeWidth: canvasObject.stroke_width || undefined,
       opacity: canvasObject.opacity,
+      scaleX: 1, // FIX #3: Reset scale to 1 (dimensions already baked into width/height/radius)
+      scaleY: 1, // FIX #3: Reset scale to 1 (prevents double-scaling on deserialization)
       visible: true, // W2.D12 FIX: Explicitly set visible to ensure objects render
       selectable: true, // W2.D12 FIX: Explicitly set selectable
       evented: true, // W2.D12 FIX: Explicitly set evented to ensure interaction
@@ -486,12 +488,13 @@ export class FabricCanvasManager {
 
     // Extract common properties from Fabric.js object
     // Maps Fabric.js property names to our database schema
+    // CRITICAL: Apply scale transforms to geometric properties before serialization
     const baseProperties = {
       id: dbId,
       x: obj.left || 0,
       y: obj.top || 0,
-      width: obj.width || 0,
-      height: obj.height || 0,
+      width: (obj.width || 0) * (obj.scaleX || 1), // FIX #1: Bake scaleX into width
+      height: (obj.height || 0) * (obj.scaleY || 1), // FIX #1: Bake scaleY into height
       rotation: obj.angle || 0,
       group_id: null, // TODO: Implement group support in W1.D3
       z_index: 1, // TODO: Calculate from canvas.getObjects() index in W1.D3
@@ -529,7 +532,7 @@ export class FabricCanvasManager {
           ...baseProperties,
           type: 'circle',
           type_properties: {
-            radius: circle.radius || 0,
+            radius: (circle.radius || 0) * (circle.scaleX || 1), // FIX #2: Bake scaleX into radius
           },
         } as CircleObject;
       }
