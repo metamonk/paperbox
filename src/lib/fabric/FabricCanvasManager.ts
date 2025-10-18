@@ -232,6 +232,19 @@ export class FabricCanvasManager {
 
     this.eventHandlers = handlers;
 
+    // W4.D3: Update cursor based on placement mode
+    if (handlers.onPlacementClick) {
+      // Entering placement mode - set crosshair cursor
+      this.canvas.defaultCursor = 'crosshair';
+      this.canvas.setCursor('crosshair');
+      this.canvas.hoverCursor = 'crosshair';
+    } else {
+      // Exiting placement mode - restore default cursor
+      this.canvas.defaultCursor = 'default';
+      this.canvas.setCursor('default');
+      this.canvas.hoverCursor = 'move';
+    }
+
     // Object modification events
     this.canvas.on('object:modified', (event) => {
       const target = event.target;
