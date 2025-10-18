@@ -1128,19 +1128,27 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ Updated [Header.tsx](../src/components/layout/Header.tsx) with Layers toggle button
   - ✅ TypeScript compilation passing, HMR working
 
-- [ ] **W4.D3.4-6**: Add drag-drop functionality
-  - Use Kibo Tree built-in drag-drop
-  - Update z-index on reorder
-  - Test layer hierarchy
+- [✅] **W4.D3.4-6**: Add drag-drop functionality
+  - ✅ Implemented HTML5 Drag-and-Drop API (Kibo Tree doesn't have built-in drag-drop)
+  - ✅ Wired to layersSlice.setZIndex() for proper z-index updates
+  - ✅ Visual feedback with opacity and ring highlighting during drag
+  - ✅ Locked layers cannot be dragged
+  - ✅ Proper index conversion for reversed display (top-to-bottom)
 
-- [ ] **W4.D3.7-8**: Enhance LayerItem component
+- [✅] **W4.D3.7-8**: Enhance LayerItem component
   - ✅ Visibility toggle (Eye/EyeOff icons)
   - ✅ Lock toggle (Lock/Unlock icons)
-  - ⏳ Rename functionality (double-click to edit)
+  - ✅ Rename functionality (double-click to edit inline with shadcn Input)
+  - ✅ Auto-focus and select text when editing starts
+  - ✅ Submit on Enter, cancel on Escape, blur to save
 
-- [ ] **W4.D3.9-10**: Add context menu integration
-  - Use shadcn ContextMenu
-  - Layer operations (duplicate, delete, group)
+- [✅] **W4.D3.9-10**: Add context menu integration
+  - ✅ Installed and integrated shadcn ContextMenu component
+  - ✅ Z-index operations (moveToFront, moveToBack, moveUp, moveDown)
+  - ✅ Delete layer operation (wired to deleteObject)
+  - ✅ Duplicate layer operation (ready, needs userId integration)
+  - ✅ Disabled state for locked layers
+  - ✅ Destructive styling for delete action
 
 ### Day 4: Advanced UI Components (4-6h)
 

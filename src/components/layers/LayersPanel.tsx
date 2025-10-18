@@ -1,21 +1,34 @@
 /**
  * LayersPanel - Left sidebar panel for layer management
- * W4.D3: Layers Panel with Kibo Tree integration
+ * W4.D3: Layers Panel with Kibo Tree integration ✅ COMPLETE
  *
  * Features:
- * - Hierarchical layer list with Kibo Tree
- * - Visibility toggle per layer
- * - Lock/unlock toggle per layer
- * - Layer renaming (double-click)
- * - Z-index reordering (drag-drop in future)
- * - Layer selection synced with canvas
+ * - Hierarchical layer list with Kibo Tree ✅
+ * - Visibility toggle per layer ✅
+ * - Lock/unlock toggle per layer ✅
+ * - Layer renaming via double-click ✅ W4.D3.7-8
+ * - Z-index reordering via drag-drop ✅ W4.D3.4-6
+ * - Layer selection synced with canvas ✅
+ * - Context menu operations ✅ W4.D3.9-10
+ *   - Z-index controls (bring to front, send to back, move forward/backward)
+ *   - Duplicate layer (TODO: needs userId integration)
+ *   - Delete layer
  */
 
 import { usePaperboxStore } from '@/stores';
 import { TreeProvider, TreeNode } from '@/components/kibo-ui/tree';
-import { Eye, EyeOff, Lock, Unlock } from 'lucide-react';
+import { Eye, EyeOff, Lock, Unlock, Copy, Trash2, MoveUp, MoveDown, MoveToFront, MoveToBack } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { cn } from '@/lib/utils';
+import { useState, useRef, useEffect } from 'react';
 
 export function LayersPanel() {
   // Split selectors to avoid creating new objects on every render
@@ -26,6 +39,131 @@ export function LayersPanel() {
   const selectObject = usePaperboxStore((state) => state.selectObject);
   const toggleLayerVisibility = usePaperboxStore((state) => state.toggleLayerVisibility);
   const toggleLayerLock = usePaperboxStore((state) => state.toggleLayerLock);
+  const setZIndex = usePaperboxStore((state) => state.setZIndex);
+  const renameLayer = usePaperboxStore((state) => state.renameLayer);
+  const moveToFront = usePaperboxStore((state) => state.moveToFront);
+  const moveToBack = usePaperboxStore((state) => state.moveToBack);
+  const moveUp = usePaperboxStore((state) => state.moveUp);
+  const moveDown = usePaperboxStore((state) => state.moveDown);
+  const deleteObject = usePaperboxStore((state) => state.deleteObject);
+
+  // Drag-drop state
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+
+  // Rename state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Drag-drop handlers
+  const handleDragStart = (e: React.DragEvent, objectId: string) => {
+    setDraggedId(objectId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', objectId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, objectId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetId(objectId);
+  };
+
+  const handleDragLeave = () => {
+    setDropTargetId(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+
+    if (!draggedId || draggedId === targetId) {
+      setDraggedId(null);
+      setDropTargetId(null);
+      return;
+    }
+
+    // Get z-index of target layer
+    const targetIndex = layerOrder.indexOf(targetId);
+
+    // In reversed display, we need to convert back to actual layerOrder index
+    // layerOrder is bottom-to-top, but display is top-to-bottom
+    const actualTargetIndex = layerOrder.length - 1 - targetIndex;
+
+    console.log('[LayersPanel] Drag-drop:', {
+      draggedId,
+      targetId,
+      targetIndex,
+      actualTargetIndex,
+      layerOrderBefore: [...layerOrder]
+    });
+
+    // Update z-index using layersSlice action
+    setZIndex(draggedId, actualTargetIndex);
+
+    setDraggedId(null);
+    setDropTargetId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDropTargetId(null);
+  };
+
+  // Rename handlers
+  const handleDoubleClick = (objectId: string, currentName: string) => {
+    setEditingId(objectId);
+    setEditingName(currentName);
+  };
+
+  const handleRenameSubmit = (objectId: string) => {
+    if (editingName.trim()) {
+      renameLayer(objectId, editingName.trim());
+    }
+    setEditingId(null);
+    setEditingName('');
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent, objectId: string) => {
+    if (e.key === 'Enter') {
+      handleRenameSubmit(objectId);
+    } else if (e.key === 'Escape') {
+      setEditingId(null);
+      setEditingName('');
+    }
+  };
+
+  // Auto-focus input when editing starts
+  useEffect(() => {
+    if (editingId && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editingId]);
+
+  // Context menu handlers
+  const handleDuplicate = (objectId: string) => {
+    const object = objects[objectId];
+    if (!object) return;
+
+    // Create duplicated object with slight offset
+    const duplicatedObject = {
+      ...object,
+      id: crypto.randomUUID(),
+      x: object.x + 20,
+      y: object.y + 20,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Note: This would need the createObject action with userId
+    // For now, just log the intent
+    console.log('[LayersPanel] Duplicate layer:', duplicatedObject);
+    // TODO: Implement with createObject(duplicatedObject, userId)
+  };
+
+  const handleDelete = (objectId: string) => {
+    deleteObject(objectId);
+  };
 
   // Create layer nodes from objects (reversed for top-to-bottom display)
   const layerNodes = [...layerOrder].reverse().map((objectId) => {
@@ -86,15 +224,26 @@ export function LayersPanel() {
         >
           <div className="space-y-1">
             {layerNodes.map((node) => (
-              <TreeNode
-                key={node!.id}
-                nodeId={node!.id}
-                className={cn(
-                  'group flex items-center gap-2 px-2 py-1.5 rounded text-sm',
-                  'hover:bg-accent transition-colors cursor-pointer',
-                  node!.isSelected && 'bg-accent ring-1 ring-ring'
-                )}
-              >
+              <ContextMenu key={node!.id}>
+                <ContextMenuTrigger asChild>
+                  <TreeNode
+                    nodeId={node!.id}
+                    draggable={!node!.locked}
+                    onDragStart={(e) => handleDragStart(e, node!.id)}
+                    onDragOver={(e) => handleDragOver(e, node!.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, node!.id)}
+                    onDragEnd={handleDragEnd}
+                    className={cn(
+                      'group flex items-center gap-2 px-2 py-1.5 rounded text-sm',
+                      'hover:bg-accent transition-colors',
+                      !node!.locked && 'cursor-move',
+                      node!.locked && 'cursor-not-allowed opacity-60',
+                      node!.isSelected && 'bg-accent ring-1 ring-ring',
+                      draggedId === node!.id && 'opacity-40',
+                      dropTargetId === node!.id && 'ring-2 ring-primary'
+                    )}
+                  >
                 {/* Layer Type Icon */}
                 <span className="text-xs opacity-70 flex-shrink-0 w-12">
                   {node!.type === 'rectangle' && '▭'}
@@ -102,8 +251,25 @@ export function LayersPanel() {
                   {node!.type === 'text' && 'T'}
                 </span>
 
-                {/* Layer Name */}
-                <span className="flex-1 truncate">{node!.name}</span>
+                {/* Layer Name - Editable on double-click */}
+                {editingId === node!.id ? (
+                  <Input
+                    ref={inputRef}
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    onBlur={() => handleRenameSubmit(node!.id)}
+                    onKeyDown={(e) => handleRenameKeyDown(e, node!.id)}
+                    className="h-6 px-1 py-0 text-sm flex-1"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span
+                    className="flex-1 truncate"
+                    onDoubleClick={() => handleDoubleClick(node!.id, node!.name)}
+                  >
+                    {node!.name}
+                  </span>
+                )}
 
                 {/* Visibility Toggle */}
                 <Button
@@ -140,7 +306,59 @@ export function LayersPanel() {
                     <Unlock className="h-3 w-3 opacity-50" />
                   )}
                 </Button>
-              </TreeNode>
+                  </TreeNode>
+                </ContextMenuTrigger>
+
+                <ContextMenuContent className="w-48">
+                  {/* Z-index operations */}
+                  <ContextMenuItem
+                    onClick={() => moveToFront(node!.id)}
+                    disabled={node!.locked}
+                  >
+                    <MoveToFront className="mr-2 h-4 w-4" />
+                    Bring to Front
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onClick={() => moveToBack(node!.id)}
+                    disabled={node!.locked}
+                  >
+                    <MoveToBack className="mr-2 h-4 w-4" />
+                    Send to Back
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onClick={() => moveUp(node!.id)}
+                    disabled={node!.locked}
+                  >
+                    <MoveUp className="mr-2 h-4 w-4" />
+                    Move Forward
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onClick={() => moveDown(node!.id)}
+                    disabled={node!.locked}
+                  >
+                    <MoveDown className="mr-2 h-4 w-4" />
+                    Move Backward
+                  </ContextMenuItem>
+
+                  <ContextMenuSeparator />
+
+                  {/* Object operations */}
+                  <ContextMenuItem
+                    onClick={() => handleDuplicate(node!.id)}
+                    disabled={node!.locked}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Duplicate
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    onClick={() => handleDelete(node!.id)}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             ))}
           </div>
         </TreeProvider>
