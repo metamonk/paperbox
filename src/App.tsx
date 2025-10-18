@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/sonner';
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const Signup = lazy(() => import('./pages/Signup').then(m => ({ default: m.Signup })));
 const CanvasPage = lazy(() => import('./pages/CanvasPage').then(m => ({ default: m.CanvasPage })));
+const CanvasRedirect = lazy(() => import('./pages/CanvasRedirect').then(m => ({ default: m.CanvasRedirect })));
 
 /**
  * W2.D10: Loading fallback component for code splitting
@@ -119,7 +120,7 @@ function App() {
             path="/canvas"
             element={
               <ProtectedRoute>
-                <CanvasPage />
+                <CanvasRedirect />
               </ProtectedRoute>
             }
           />
