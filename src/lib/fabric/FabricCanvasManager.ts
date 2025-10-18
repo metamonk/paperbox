@@ -126,6 +126,10 @@ export class FabricCanvasManager {
   // W2.D8.7: Canvas boundary limits (Figma-style)
   private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
 
+  // W4.D3: Canvas resize observer for responsive rendering
+  private resizeObserver: ResizeObserver | null = null;
+  private canvasContainer: HTMLElement | null = null;
+
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -212,7 +216,59 @@ export class FabricCanvasManager {
     (window as any).__fabricCanvas = this.canvas;
     console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
+    // W4.D3: Setup ResizeObserver for responsive canvas rendering
+    this.setupResizeObserver(element);
+
     return this.canvas;
+  }
+
+  /**
+   * W4.D3: Setup ResizeObserver to handle canvas resizing
+   *
+   * Watches the canvas container for size changes (e.g., when DevTools opens/closes)
+   * and updates Fabric.js canvas dimensions accordingly.
+   *
+   * Fixes white space issue where canvas doesn't re-render when viewport changes.
+   */
+  private setupResizeObserver(canvasElement: HTMLCanvasElement): void {
+    const container = canvasElement.parentElement;
+    if (!container) {
+      console.warn('[FabricCanvasManager] No parent container found for ResizeObserver');
+      return;
+    }
+
+    this.canvasContainer = container;
+
+    // Create ResizeObserver to watch container size changes
+    this.resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (!this.canvas) return;
+
+        const { width, height } = entry.contentRect;
+
+        console.log('[FabricCanvasManager] Container resized:', {
+          width,
+          height,
+          prevWidth: this.canvas.width,
+          prevHeight: this.canvas.height,
+        });
+
+        // Update Fabric canvas dimensions
+        this.canvas.setDimensions({
+          width,
+          height,
+        });
+
+        // Re-render with new dimensions
+        this.canvas.requestRenderAll();
+
+        console.log('[FabricCanvasManager] Canvas resized and re-rendered');
+      }
+    });
+
+    // Start observing the container
+    this.resizeObserver.observe(container);
+    console.log('[FabricCanvasManager] ResizeObserver initialized for container');
   }
 
   /**
@@ -1536,6 +1592,14 @@ export class FabricCanvasManager {
     });
     this.pixelGridPattern = [];
     this.pixelGridInitialized = false;
+
+    // W4.D3: Clean up ResizeObserver
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+      console.log('[FabricCanvasManager] ResizeObserver disconnected');
+    }
+    this.canvasContainer = null;
 
     if (this.canvas) {
       // Clean up spacebar pan event listeners
