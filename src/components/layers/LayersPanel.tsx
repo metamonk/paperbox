@@ -45,7 +45,7 @@ export function LayersPanel() {
   const moveToBack = usePaperboxStore((state) => state.moveToBack);
   const moveUp = usePaperboxStore((state) => state.moveUp);
   const moveDown = usePaperboxStore((state) => state.moveDown);
-  const deleteObject = usePaperboxStore((state) => state.deleteObject);
+  const deleteObjects = usePaperboxStore((state) => state.deleteObjects);
 
   // Drag-drop state
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -162,7 +162,7 @@ export function LayersPanel() {
   };
 
   const handleDelete = (objectId: string) => {
-    deleteObject(objectId);
+    deleteObjects([objectId]);
   };
 
   // Create layer nodes from objects (reversed for top-to-bottom display)

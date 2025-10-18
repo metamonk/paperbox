@@ -126,9 +126,9 @@ export class FabricCanvasManager {
   // W2.D8.7: Canvas boundary limits (Figma-style)
   private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
 
-  // W4.D3: Canvas resize observer for responsive rendering
-  private resizeObserver: ResizeObserver | null = null;
-  private canvasContainer: HTMLElement | null = null;
+  // W4.D3: Window resize handler for responsive rendering
+  private resizeHandler: (() => void) | null = null;
+  private resizeDebounceTimeout: number | null = null;
 
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -182,15 +182,23 @@ export class FabricCanvasManager {
       hasGetContext: typeof element.getContext !== 'undefined'
     });
 
-    // Calculate dimensions from parent container for full viewport sizing
-    const parent = element.parentElement;
-    const width = parent ? parent.clientWidth : this.config.width;
-    const height = parent ? parent.clientHeight : this.config.height;
+    // W4.D3 ARCHITECTURAL FIX: Query canvas element's own dimensions, not parent's
+    // The canvas element is already sized by CSS (absolute inset-0, width: 100%, height: 100%)
+    // By querying the element itself, we get the actual rendered size after CSS layout
+    // This avoids timing issues where parent dimensions might not reflect canvas size
+    const width = element.clientWidth || this.config.width;
+    const height = element.clientHeight || this.config.height;
 
     // W2.D12 FIX: Fabric.js v6 Canvas constructor expects ID string, not HTMLCanvasElement
     // From official docs: new fabric.Canvas('canvasId', options)
     // Passing HTMLCanvasElement directly may cause rendering issues
     console.log(`[FabricCanvasManager] Initializing Fabric.js v6 Canvas with ID: "${canvasId}"`);
+    console.log(`[FabricCanvasManager] Element dimensions after CSS layout:`, {
+      elementClientWidth: element.clientWidth,
+      elementClientHeight: element.clientHeight,
+      parentClientWidth: element.parentElement?.clientWidth,
+      parentClientHeight: element.parentElement?.clientHeight,
+    });
     console.log(`[FabricCanvasManager] Config:`, {
       backgroundColor: this.config.backgroundColor,
       width,
@@ -210,82 +218,80 @@ export class FabricCanvasManager {
     console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
     console.log(`[FabricCanvasManager] Canvas type:`, this.canvas.constructor.name);
     console.log(`[FabricCanvasManager] Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
-    console.log(`[FabricCanvasManager] Canvas element:`, this.canvas.lowerCanvasEl);
 
     // W2.D12 DEBUG: Expose canvas instance globally for debugging
     (window as any).__fabricCanvas = this.canvas;
     console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
-    // W4.D3: Setup ResizeObserver for responsive canvas rendering
-    this.setupResizeObserver(element);
+    // W4.D3: Setup window resize handler for responsive canvas rendering
+    this.setupWindowResizeHandler(element);
 
     return this.canvas;
   }
 
   /**
-   * W4.D3: Setup ResizeObserver to handle canvas resizing
+   * W4.D3: Setup window resize handler for responsive canvas rendering
    *
-   * Watches the canvas container for size changes (e.g., when DevTools opens/closes)
-   * and updates both the HTML canvas element AND Fabric.js canvas dimensions.
+   * Uses simple debounced window resize listener (like Figma, Miro) instead of ResizeObserver.
+   * This is a more foundational, battle-tested approach for canvas resize handling.
    *
-   * Critical understanding: HTML canvas elements need BOTH:
-   * 1. CSS dimensions (width/height style) - controls visual sizing in the DOM
-   * 2. Canvas dimensions (width/height attributes) - defines the actual drawing buffer
+   * On window resize:
+   * 1. Query container's clientWidth/clientHeight for new dimensions
+   * 2. Update Fabric.js canvas dimensions via setDimensions()
+   * 3. Re-render canvas with requestRenderAll()
    *
-   * If only CSS is updated, the canvas appears sized correctly but the drawing
-   * buffer remains at the old size, causing white space and rendering issues.
+   * Debouncing (150ms) prevents excessive resize calculations during window drag.
    *
-   * Fixes white space issue where canvas doesn't re-render when viewport changes.
+   * Fixes white space issue where canvas doesn't expand when DevTools closes.
    */
-  private setupResizeObserver(canvasElement: HTMLCanvasElement): void {
+  private setupWindowResizeHandler(canvasElement: HTMLCanvasElement): void {
     const container = canvasElement.parentElement;
     if (!container) {
-      console.warn('[FabricCanvasManager] No parent container found for ResizeObserver');
+      console.warn('[FabricCanvasManager] No parent container found for resize handler');
       return;
     }
 
-    this.canvasContainer = container;
+    // Create debounced resize handler
+    this.resizeHandler = () => {
+      // Clear existing timeout
+      if (this.resizeDebounceTimeout !== null) {
+        window.clearTimeout(this.resizeDebounceTimeout);
+      }
 
-    // Create ResizeObserver to watch container size changes
-    this.resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
+      // Schedule resize update
+      this.resizeDebounceTimeout = window.setTimeout(() => {
         if (!this.canvas) return;
 
-        const { width, height } = entry.contentRect;
-
-        console.log('[FabricCanvasManager] Container resized:', {
-          width,
-          height,
-          prevWidth: this.canvas.width,
-          prevHeight: this.canvas.height,
-        });
-
-        // CRITICAL FIX: Update HTML canvas element attributes
-        // The canvas element's width/height attributes define the drawing buffer size
-        // CSS width/height only affects visual display, not the actual drawing surface
-        const lowerCanvas = this.canvas.lowerCanvasEl;
-        if (lowerCanvas) {
-          lowerCanvas.width = width;
-          lowerCanvas.height = height;
-          console.log('[FabricCanvasManager] Updated HTML canvas element:', { width, height });
+        // W4.D3 CRITICAL FIX: Fabric.js creates a wrapper div that needs explicit sizing
+        // The wrapper has class="canvas-container" and data-fabric="wrapper"
+        // It uses inline styles with hardcoded pixel dimensions that don't auto-update
+        // We must update the wrapper's dimensions, not just the canvas elements
+        const wrapper = (this.canvas as any).wrapperEl;
+        if (!wrapper) {
+          console.warn('[FabricCanvasManager] No Fabric.js wrapper element found');
+          return;
         }
 
-        // Update Fabric canvas dimensions
-        this.canvas.setDimensions({
-          width,
-          height,
-        });
+        // Query the parent container's current dimensions (after viewport change)
+        const width = container.clientWidth;
+        const height = container.clientHeight;
 
-        // Re-render with new dimensions
+        // Update Fabric.js wrapper element dimensions via inline styles
+        wrapper.style.width = `${width}px`;
+        wrapper.style.height = `${height}px`;
+
+        // Update Fabric.js canvas dimensions (updates both lower and upper canvas)
+        this.canvas.setDimensions({ width, height });
+
+        // Re-render canvas
         this.canvas.requestRenderAll();
+      }, 150); // 150ms debounce - balance between responsiveness and performance
+    };
 
-        console.log('[FabricCanvasManager] Canvas resized and re-rendered');
-      }
-    });
+    // Attach window resize listener
+    window.addEventListener('resize', this.resizeHandler);
 
-    // Start observing the container
-    this.resizeObserver.observe(container);
-    console.log('[FabricCanvasManager] ResizeObserver initialized for container');
+    console.log('[FabricCanvasManager] Window resize handler initialized');
   }
 
   /**
@@ -364,8 +370,8 @@ export class FabricCanvasManager {
     const commonProps = {
       left: canvasObject.x,
       top: canvasObject.y,
-      originX: 'center', // W4.D3 FIX: Center object origin for placement
-      originY: 'center', // W4.D3 FIX: Center object origin for placement
+      originX: 'center' as const, // W4.D3 FIX: Center object origin for placement
+      originY: 'center' as const, // W4.D3 FIX: Center object origin for placement
       angle: canvasObject.rotation,
       fill: canvasObject.fill,
       stroke: canvasObject.stroke || undefined,
@@ -1610,13 +1616,16 @@ export class FabricCanvasManager {
     this.pixelGridPattern = [];
     this.pixelGridInitialized = false;
 
-    // W4.D3: Clean up ResizeObserver
-    if (this.resizeObserver) {
-      this.resizeObserver.disconnect();
-      this.resizeObserver = null;
-      console.log('[FabricCanvasManager] ResizeObserver disconnected');
+    // W4.D3: Clean up window resize handler
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+      console.log('[FabricCanvasManager] Window resize handler removed');
     }
-    this.canvasContainer = null;
+    if (this.resizeDebounceTimeout !== null) {
+      window.clearTimeout(this.resizeDebounceTimeout);
+      this.resizeDebounceTimeout = null;
+    }
 
     if (this.canvas) {
       // Clean up spacebar pan event listeners
