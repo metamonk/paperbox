@@ -15,7 +15,6 @@
  */
 
 import type { StateCreator } from 'zustand';
-import { nanoid } from 'nanoid';
 import { supabase } from '../../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type {
@@ -206,7 +205,7 @@ export const createCanvasSlice: StateCreator<
    * Pattern: Optimistic update → Database write → Rollback on error
    */
   createObject: async (object: Partial<CanvasObject>, userId: string) => {
-    const id = nanoid();
+    const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
     // Create full object with defaults
