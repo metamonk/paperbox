@@ -152,7 +152,16 @@ export class CanvasSyncManager {
     this.unsubscribe = this.store.subscribe(
       (state) => state.objects,
       (objects, prevObjects) => {
-        if (this._isSyncingFromCanvas) return; // Prevent loop
+        console.log('[CanvasSyncManager] State→Canvas sync triggered', {
+          currentCount: Object.keys(objects).length,
+          prevCount: Object.keys(prevObjects).length,
+          isSyncingFromCanvas: this._isSyncingFromCanvas
+        });
+
+        if (this._isSyncingFromCanvas) {
+          console.log('[CanvasSyncManager] Skipping - sync from canvas in progress');
+          return; // Prevent loop
+        }
 
         this._isSyncingFromStore = true;
         try {
@@ -160,9 +169,15 @@ export class CanvasSyncManager {
           const currentIds = new Set(Object.keys(objects));
           const prevIds = new Set(Object.keys(prevObjects));
 
+          console.log('[CanvasSyncManager] Analyzing changes', {
+            current: Array.from(currentIds),
+            previous: Array.from(prevIds)
+          });
+
           // Handle additions
           currentIds.forEach((id) => {
             if (!prevIds.has(id)) {
+              console.log('[CanvasSyncManager] Adding new object to Fabric:', id, objects[id]);
               this.fabricManager.addObject(objects[id]);
             }
           });
