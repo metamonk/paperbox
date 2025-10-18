@@ -65,6 +65,48 @@ export class CanvasSyncManager {
     this.setupStateToCanvasSync();
     this.setupLayersSync(); // W4.D3: Sync layer visibility/lock to Fabric
     this.setupViewportSync(); // W2.D6-D7: Initialize viewport controls
+    this.syncInitialState(); // W4.D3 FIX: Sync existing objects on initialization
+  }
+
+  /**
+   * W4.D3 FIX: Sync initial state from Zustand to Fabric
+   *
+   * Called during initialization to render objects that were loaded
+   * from database before CanvasSyncManager was set up.
+   *
+   * The subscription in setupStateToCanvasSync() only catches changes
+   * AFTER it's initialized, so we need this explicit initial sync.
+   */
+  private syncInitialState(): void {
+    const objects = this.store.getState().objects;
+    const objectCount = Object.keys(objects).length;
+
+    console.log('[CanvasSyncManager] Syncing initial state:', {
+      objectCount,
+      objectIds: Object.keys(objects),
+    });
+
+    if (objectCount === 0) {
+      console.log('[CanvasSyncManager] No objects to sync');
+      return;
+    }
+
+    // Add all existing objects to Fabric canvas
+    this._isSyncingFromStore = true;
+    try {
+      Object.values(objects).forEach((obj: any) => {
+        console.log('[CanvasSyncManager] Adding initial object to Fabric:', {
+          id: obj.id.slice(0, 8),
+          type: obj.type,
+          position: `(${obj.x}, ${obj.y})`,
+        });
+        this.fabricManager.addObject(obj);
+      });
+    } finally {
+      this._isSyncingFromStore = false;
+    }
+
+    console.log('[CanvasSyncManager] Initial state sync complete');
   }
 
   /**
