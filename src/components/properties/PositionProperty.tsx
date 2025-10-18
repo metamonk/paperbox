@@ -6,6 +6,7 @@
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
+import { usePaperboxStore } from '@/stores';
 import type { CanvasObject } from '@/types/canvas';
 
 interface PositionPropertyProps {
@@ -13,6 +14,8 @@ interface PositionPropertyProps {
 }
 
 export function PositionProperty({ object }: PositionPropertyProps) {
+  const updateObject = usePaperboxStore((state) => state.updateObject);
+
   return (
     <div className="space-y-3">
       {/* X Position */}
@@ -22,8 +25,10 @@ export function PositionProperty({ object }: PositionPropertyProps) {
           type="number"
           value={Math.round(object.x)}
           onChange={(e) => {
-            // TODO: Wire to object update action
-            console.log('X changed:', e.target.value);
+            const newX = Number(e.target.value);
+            if (!isNaN(newX)) {
+              updateObject(object.id, { x: newX });
+            }
           }}
           className="h-8 text-xs"
         />
@@ -36,8 +41,10 @@ export function PositionProperty({ object }: PositionPropertyProps) {
           type="number"
           value={Math.round(object.y)}
           onChange={(e) => {
-            // TODO: Wire to object update action
-            console.log('Y changed:', e.target.value);
+            const newY = Number(e.target.value);
+            if (!isNaN(newY)) {
+              updateObject(object.id, { y: newY });
+            }
           }}
           className="h-8 text-xs"
         />
@@ -57,8 +64,7 @@ export function PositionProperty({ object }: PositionPropertyProps) {
           max={360}
           step={1}
           onValueChange={(values) => {
-            // TODO: Wire to object update action
-            console.log('Rotation changed:', values[0]);
+            updateObject(object.id, { rotation: values[0] });
           }}
         />
       </div>

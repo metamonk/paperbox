@@ -126,6 +126,10 @@ export class FabricCanvasManager {
   // W2.D8.7: Canvas boundary limits (Figma-style)
   private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
 
+  // W4.D3: Window resize handler for responsive rendering
+  private resizeHandler: (() => void) | null = null;
+  private resizeDebounceTimeout: number | null = null;
+
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -178,15 +182,23 @@ export class FabricCanvasManager {
       hasGetContext: typeof element.getContext !== 'undefined'
     });
 
-    // Calculate dimensions from parent container for full viewport sizing
-    const parent = element.parentElement;
-    const width = parent ? parent.clientWidth : this.config.width;
-    const height = parent ? parent.clientHeight : this.config.height;
+    // W4.D3 ARCHITECTURAL FIX: Query canvas element's own dimensions, not parent's
+    // The canvas element is already sized by CSS (absolute inset-0, width: 100%, height: 100%)
+    // By querying the element itself, we get the actual rendered size after CSS layout
+    // This avoids timing issues where parent dimensions might not reflect canvas size
+    const width = element.clientWidth || this.config.width;
+    const height = element.clientHeight || this.config.height;
 
     // W2.D12 FIX: Fabric.js v6 Canvas constructor expects ID string, not HTMLCanvasElement
     // From official docs: new fabric.Canvas('canvasId', options)
     // Passing HTMLCanvasElement directly may cause rendering issues
     console.log(`[FabricCanvasManager] Initializing Fabric.js v6 Canvas with ID: "${canvasId}"`);
+    console.log(`[FabricCanvasManager] Element dimensions after CSS layout:`, {
+      elementClientWidth: element.clientWidth,
+      elementClientHeight: element.clientHeight,
+      parentClientWidth: element.parentElement?.clientWidth,
+      parentClientHeight: element.parentElement?.clientHeight,
+    });
     console.log(`[FabricCanvasManager] Config:`, {
       backgroundColor: this.config.backgroundColor,
       width,
@@ -206,13 +218,80 @@ export class FabricCanvasManager {
     console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
     console.log(`[FabricCanvasManager] Canvas type:`, this.canvas.constructor.name);
     console.log(`[FabricCanvasManager] Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
-    console.log(`[FabricCanvasManager] Canvas element:`, this.canvas.lowerCanvasEl);
 
     // W2.D12 DEBUG: Expose canvas instance globally for debugging
     (window as any).__fabricCanvas = this.canvas;
     console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
+    // W4.D3: Setup window resize handler for responsive canvas rendering
+    this.setupWindowResizeHandler(element);
+
     return this.canvas;
+  }
+
+  /**
+   * W4.D3: Setup window resize handler for responsive canvas rendering
+   *
+   * Uses simple debounced window resize listener (like Figma, Miro) instead of ResizeObserver.
+   * This is a more foundational, battle-tested approach for canvas resize handling.
+   *
+   * On window resize:
+   * 1. Query container's clientWidth/clientHeight for new dimensions
+   * 2. Update Fabric.js canvas dimensions via setDimensions()
+   * 3. Re-render canvas with requestRenderAll()
+   *
+   * Debouncing (150ms) prevents excessive resize calculations during window drag.
+   *
+   * Fixes white space issue where canvas doesn't expand when DevTools closes.
+   */
+  private setupWindowResizeHandler(canvasElement: HTMLCanvasElement): void {
+    const container = canvasElement.parentElement;
+    if (!container) {
+      console.warn('[FabricCanvasManager] No parent container found for resize handler');
+      return;
+    }
+
+    // Create debounced resize handler
+    this.resizeHandler = () => {
+      // Clear existing timeout
+      if (this.resizeDebounceTimeout !== null) {
+        window.clearTimeout(this.resizeDebounceTimeout);
+      }
+
+      // Schedule resize update
+      this.resizeDebounceTimeout = window.setTimeout(() => {
+        if (!this.canvas) return;
+
+        // W4.D3 CRITICAL FIX: Fabric.js creates a wrapper div that needs explicit sizing
+        // The wrapper has class="canvas-container" and data-fabric="wrapper"
+        // It uses inline styles with hardcoded pixel dimensions that don't auto-update
+        // We must update the wrapper's dimensions, not just the canvas elements
+        const wrapper = (this.canvas as any).wrapperEl;
+        if (!wrapper) {
+          console.warn('[FabricCanvasManager] No Fabric.js wrapper element found');
+          return;
+        }
+
+        // Query the parent container's current dimensions (after viewport change)
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // Update Fabric.js wrapper element dimensions via inline styles
+        wrapper.style.width = `${width}px`;
+        wrapper.style.height = `${height}px`;
+
+        // Update Fabric.js canvas dimensions (updates both lower and upper canvas)
+        this.canvas.setDimensions({ width, height });
+
+        // Re-render canvas
+        this.canvas.requestRenderAll();
+      }, 150); // 150ms debounce - balance between responsiveness and performance
+    };
+
+    // Attach window resize listener
+    window.addEventListener('resize', this.resizeHandler);
+
+    console.log('[FabricCanvasManager] Window resize handler initialized');
   }
 
   /**
@@ -231,6 +310,19 @@ export class FabricCanvasManager {
     }
 
     this.eventHandlers = handlers;
+
+    // W4.D3: Update cursor based on placement mode
+    if (handlers.onPlacementClick) {
+      // Entering placement mode - set crosshair cursor
+      this.canvas.defaultCursor = 'crosshair';
+      this.canvas.setCursor('crosshair');
+      this.canvas.hoverCursor = 'crosshair';
+    } else {
+      // Exiting placement mode - restore default cursor
+      this.canvas.defaultCursor = 'default';
+      this.canvas.setCursor('default');
+      this.canvas.hoverCursor = 'move';
+    }
 
     // Object modification events
     this.canvas.on('object:modified', (event) => {
@@ -278,6 +370,8 @@ export class FabricCanvasManager {
     const commonProps = {
       left: canvasObject.x,
       top: canvasObject.y,
+      originX: 'center' as const, // W4.D3 FIX: Center object origin for placement
+      originY: 'center' as const, // W4.D3 FIX: Center object origin for placement
       angle: canvasObject.rotation,
       fill: canvasObject.fill,
       stroke: canvasObject.stroke || undefined,
@@ -848,20 +942,19 @@ export class FabricCanvasManager {
       // W2.D12: Check for placement mode first (higher priority than panning)
       // Only trigger placement if clicking empty canvas (no target object)
       if (!opt.target && this.eventHandlers.onPlacementClick) {
-        // W2.D12 FIX: Use ignoreZoom=true to get viewport-relative coordinates
-        // ignoreZoom: true = HTMLElement coordinates (what you see on screen)
-        // ignoreZoom: false = fabric space coordinates (accounting for pan/zoom)
-        // For placement mode, we want screen-relative coords where user clicked
-        const pointer = this.canvas!.getPointer(opt.e, true);
+        // Get fabric space coordinates (accounts for pan/zoom)
+        // ignoreZoom: false = fabric space coordinates (correct for object placement)
+        // This ensures objects are placed at the correct position regardless of zoom level
+        const pointer = this.canvas!.getPointer(opt.e, false);
 
         console.log('[FabricCanvasManager] Placement click detected:', {
-          viewportX: pointer.x,
-          viewportY: pointer.y,
-          windowX: opt.e.clientX,
-          windowY: opt.e.clientY,
+          fabricX: pointer.x,
+          fabricY: pointer.y,
+          zoom: this.canvas!.getZoom(),
+          vpt: this.canvas!.viewportTransform,
         });
 
-        // Trigger placement handler with viewport-relative coordinates
+        // Trigger placement handler with fabric space coordinates
         this.eventHandlers.onPlacementClick(pointer.x, pointer.y);
         return; // Don't process as pan event
       }
@@ -1522,6 +1615,17 @@ export class FabricCanvasManager {
     });
     this.pixelGridPattern = [];
     this.pixelGridInitialized = false;
+
+    // W4.D3: Clean up window resize handler
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+      console.log('[FabricCanvasManager] Window resize handler removed');
+    }
+    if (this.resizeDebounceTimeout !== null) {
+      window.clearTimeout(this.resizeDebounceTimeout);
+      this.resizeDebounceTimeout = null;
+    }
 
     if (this.canvas) {
       // Clean up spacebar pan event listeners

@@ -15,7 +15,6 @@
  */
 
 import type { StateCreator } from 'zustand';
-import { nanoid } from 'nanoid';
 import { supabase } from '../../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type {
@@ -178,7 +177,32 @@ export const createCanvasSlice: StateCreator<
         {} as Record<string, CanvasObject>,
       );
 
+      console.log('[canvasSlice] Database query completed:', {
+        rowCount: data?.length || 0,
+        objectCount: Object.keys(objectsMap).length,
+        objectIds: Object.keys(objectsMap),
+        objectTypes: Object.values(objectsMap).map(o => `${o.type}:${o.id.slice(0, 6)}`),
+      });
+
       set({ objects: objectsMap, loading: false }, undefined, 'canvas/initializeSuccess');
+
+      console.log('[canvasSlice] Objects set in store, now adding layers...');
+
+      // Add layer metadata for all loaded objects
+      Object.values(objectsMap).forEach((obj) => {
+        console.log('[canvasSlice] Adding layer for loaded object:', {
+          id: obj.id.slice(0, 8),
+          type: obj.type,
+          position: `(${obj.x}, ${obj.y})`,
+        });
+        get().addLayer(obj.id, {
+          name: `${obj.type} ${obj.id.slice(0, 6)}`,
+          visible: true,
+          locked: false,
+        });
+      });
+
+      console.log('[canvasSlice] Layer metadata creation complete');
 
       // Setup realtime subscription after successful load
       get().setupRealtimeSubscription(userId);
@@ -206,7 +230,7 @@ export const createCanvasSlice: StateCreator<
    * Pattern: Optimistic update → Database write → Rollback on error
    */
   createObject: async (object: Partial<CanvasObject>, userId: string) => {
-    const id = nanoid();
+    const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
     // Create full object with defaults
@@ -235,7 +259,7 @@ export const createCanvasSlice: StateCreator<
       lock_acquired_at: null,
     } as CanvasObject;
 
-    // Optimistic update
+    // Optimistic update - add to objects AND layers
     set(
       (state) => {
         state.objects[id] = fullObject;
@@ -243,6 +267,13 @@ export const createCanvasSlice: StateCreator<
       undefined,
       'canvas/createObjectOptimistic',
     );
+
+    // Add layer metadata for layers panel
+    get().addLayer(id, {
+      name: `${fullObject.type} ${id.slice(0, 6)}`,
+      visible: true,
+      locked: false,
+    });
 
     try {
       // Database write
@@ -367,7 +398,7 @@ export const createCanvasSlice: StateCreator<
       return;
     }
 
-    // Optimistic delete
+    // Optimistic delete from objects AND layers
     set(
       (state) => {
         ids.forEach((id) => {
@@ -378,13 +409,18 @@ export const createCanvasSlice: StateCreator<
       'canvas/deleteObjectsOptimistic',
     );
 
+    // Remove layers
+    ids.forEach((id) => {
+      get().removeLayer(id);
+    });
+
     try {
       // Database delete
       const { error } = await supabase.from('canvas_objects').delete().in('id', ids);
 
       if (error) throw error;
     } catch (error) {
-      // Rollback optimistic delete on error
+      // Rollback optimistic delete on error - restore objects AND layers
       set(
         (state) => {
           deletedObjects.forEach((obj) => {
@@ -394,6 +430,15 @@ export const createCanvasSlice: StateCreator<
         undefined,
         'canvas/deleteObjectsRollback',
       );
+
+      // Restore layers
+      deletedObjects.forEach((obj) => {
+        get().addLayer(obj.id, {
+          name: `${obj.type} ${obj.id.slice(0, 6)}`,
+          visible: true,
+          locked: false,
+        });
+      });
 
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete objects';
       console.error('Delete objects error:', error);

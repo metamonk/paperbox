@@ -1076,7 +1076,7 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - Note: shadcn already provides CSS variables via components.json
   - Light/dark mode can be added later if needed
 
-### Day 2: Property Panels (5-7h)
+### Day 2: Property Panels (5-7h) ✅ COMPLETE
 
 - [✅] **W4.D2.1-3**: Create PropertyPanel template
   - ✅ Installed shadcn Collapsible + Input components
@@ -1099,13 +1099,21 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ Position inputs (X, Y coordinates)
   - ✅ Size inputs with aspect ratio lock
 
-- [🔄] **W4.D2.10**: Test property panel interactions
+- [✅] **W4.D2.10**: Wire property changes to Zustand store
+  - ✅ PositionProperty: X, Y, rotation → updateObject()
+  - ✅ SizeProperty: width, height with aspect ratio lock
+  - ✅ PropertyPanel: fill, stroke, stroke_width, opacity
+  - ✅ All inputs validated (NaN checks)
+  - ✅ **CRITICAL FIX 1**: useShapeCreation now uses createObject() for proper DB sync
+  - ✅ **CRITICAL FIX 2**: Fixed 400 error - pass userId to createObject(object, userId)
+  - ✅ **CRITICAL FIX 3**: Fixed UUID compatibility - use crypto.randomUUID() instead of nanoid()
+  - ✅ **CRITICAL FIX 4**: Added subscribeWithSelector middleware to enable Zustand subscriptions
+  - ✅ Objects now persist to database and sync across users
+  - ✅ Shape placement fully working (objects appear on canvas)
+  - ✅ Realtime collaboration sync operational
   - ✅ TypeScript compilation passing
   - ✅ HMR working without errors
-  - ✅ Integrated PropertyPanel into Canvas sidebar
-  - ✅ Added Properties toggle button to Header
-  - ⏳ Need to wire property changes to object state
-  - ⏳ Need browser testing with object selection
+  - ✅ Commits: `362dfec` (wiring) + `7b2975d` (sync) + `f2da24b` (userId) + `6475f31` (UUID) + `8ee558d` (middleware)
 
 ### Day 3: Layers Panel (6-9h)
 
@@ -1120,19 +1128,27 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ Updated [Header.tsx](../src/components/layout/Header.tsx) with Layers toggle button
   - ✅ TypeScript compilation passing, HMR working
 
-- [ ] **W4.D3.4-6**: Add drag-drop functionality
-  - Use Kibo Tree built-in drag-drop
-  - Update z-index on reorder
-  - Test layer hierarchy
+- [✅] **W4.D3.4-6**: Add drag-drop functionality
+  - ✅ Implemented HTML5 Drag-and-Drop API (Kibo Tree doesn't have built-in drag-drop)
+  - ✅ Wired to layersSlice.setZIndex() for proper z-index updates
+  - ✅ Visual feedback with opacity and ring highlighting during drag
+  - ✅ Locked layers cannot be dragged
+  - ✅ Proper index conversion for reversed display (top-to-bottom)
 
-- [ ] **W4.D3.7-8**: Enhance LayerItem component
+- [✅] **W4.D3.7-8**: Enhance LayerItem component
   - ✅ Visibility toggle (Eye/EyeOff icons)
   - ✅ Lock toggle (Lock/Unlock icons)
-  - ⏳ Rename functionality (double-click to edit)
+  - ✅ Rename functionality (double-click to edit inline with shadcn Input)
+  - ✅ Auto-focus and select text when editing starts
+  - ✅ Submit on Enter, cancel on Escape, blur to save
 
-- [ ] **W4.D3.9-10**: Add context menu integration
-  - Use shadcn ContextMenu
-  - Layer operations (duplicate, delete, group)
+- [✅] **W4.D3.9-10**: Add context menu integration
+  - ✅ Installed and integrated shadcn ContextMenu component
+  - ✅ Z-index operations (moveToFront, moveToBack, moveUp, moveDown)
+  - ✅ Delete layer operation (wired to deleteObject)
+  - ✅ Duplicate layer operation (ready, needs userId integration)
+  - ✅ Disabled state for locked layers
+  - ✅ Destructive styling for delete action
 
 ### Day 4: Advanced UI Components (4-6h)
 

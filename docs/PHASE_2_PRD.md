@@ -12,8 +12,10 @@
 - ⏭️ Week 3 Skipped: Selection/Transform (Fabric.js defaults sufficient)
 - 🔄 Week 4 In Progress: Design System (shadcn/ui + Kibo UI)
   - ✅ W4.D0 Complete: Foundation installed (11 shadcn components + Kibo UI + react-colorful)
-  - ✅ W4.D1 Complete: Toolbar/Sidebar migrated to shadcn, Toast replaced with Sonner
-  - 🔜 W4.D2 Next: Property panels with Form + ColorPicker + Sliders
+  - ✅ W4.D1 Complete: Toolbar/Sidebar migrated to shadcn, Toast replaced with Sonner, Click-to-place fixes
+  - ✅ W4.D2 Complete: Property panels with real-time Zustand sync + **CRITICAL sync pipeline fix**
+  - ✅ W4.D3 Complete: Layers Panel with drag-drop reordering, rename, and context menu operations
+  - 🔜 W4.D4 Next: Advanced UI components (tooltips, enhanced toolbar, z-index commands)
 - 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---

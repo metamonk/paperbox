@@ -28,6 +28,8 @@ export function useShapeCreation({ fabricManager, user }: UseShapeCreationOption
   const enterPlacementMode = usePaperboxStore((state) => state.enterPlacementMode);
   const exitPlacementMode = usePaperboxStore((state) => state.exitPlacementMode);
   const resetToSelectTool = usePaperboxStore((state) => state.resetToSelectTool);
+  // Access canvas store action for creating objects (syncs to database)
+  const createObject = usePaperboxStore((state) => state.createObject);
 
   /**
    * W2.D12: Trigger placement mode for shape creation (Figma pattern)
@@ -122,24 +124,27 @@ export function useShapeCreation({ fabricManager, user }: UseShapeCreationOption
       });
       console.log('[useShapeCreation] Object will be at:', { x, y, width, height });
 
-      // Add to Fabric canvas
-      const fabricObject = fabricManager.addObject(baseObject as any);
+      // W4.D2 FIX: Use createObject() to trigger full sync pipeline
+      // This will: Zustand → SyncManager → Supabase → CanvasSyncManager → Fabric.js
+      // Instead of directly calling fabricManager.addObject() which bypasses sync
+      createObject(baseObject as any, user.id)
+        .then(() => {
+          console.log('[useShapeCreation] Object created and synced to database');
 
-      console.log('[useShapeCreation] Fabric object created:', {
-        fabricObject,
-        visible: (fabricObject as any)?.visible,
-        opacity: (fabricObject as any)?.opacity,
-        left: (fabricObject as any)?.left,
-        top: (fabricObject as any)?.top,
-      });
+          // Exit placement mode and return to select tool
+          exitPlacementMode();
+          resetToSelectTool();
 
-      // Exit placement mode and return to select tool
-      exitPlacementMode();
-      resetToSelectTool();
-
-      console.log('[useShapeCreation] Object created, placement mode exited');
+          console.log('[useShapeCreation] Placement mode exited');
+        })
+        .catch((error) => {
+          console.error('[useShapeCreation] Failed to create object:', error);
+          // Still exit placement mode on error
+          exitPlacementMode();
+          resetToSelectTool();
+        });
     },
-    [fabricManager, user, exitPlacementMode, resetToSelectTool]
+    [fabricManager, user, createObject, exitPlacementMode, resetToSelectTool]
   );
 
   return { handleAddShape, createObjectAtPosition };

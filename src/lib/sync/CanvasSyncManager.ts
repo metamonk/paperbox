@@ -63,7 +63,50 @@ export class CanvasSyncManager {
   initialize(): void {
     this.setupCanvasToStateSync();
     this.setupStateToCanvasSync();
+    this.setupLayersSync(); // W4.D3: Sync layer visibility/lock to Fabric
     this.setupViewportSync(); // W2.D6-D7: Initialize viewport controls
+    this.syncInitialState(); // W4.D3 FIX: Sync existing objects on initialization
+  }
+
+  /**
+   * W4.D3 FIX: Sync initial state from Zustand to Fabric
+   *
+   * Called during initialization to render objects that were loaded
+   * from database before CanvasSyncManager was set up.
+   *
+   * The subscription in setupStateToCanvasSync() only catches changes
+   * AFTER it's initialized, so we need this explicit initial sync.
+   */
+  private syncInitialState(): void {
+    const objects = this.store.getState().objects;
+    const objectCount = Object.keys(objects).length;
+
+    console.log('[CanvasSyncManager] Syncing initial state:', {
+      objectCount,
+      objectIds: Object.keys(objects),
+    });
+
+    if (objectCount === 0) {
+      console.log('[CanvasSyncManager] No objects to sync');
+      return;
+    }
+
+    // Add all existing objects to Fabric canvas
+    this._isSyncingFromStore = true;
+    try {
+      Object.values(objects).forEach((obj: any) => {
+        console.log('[CanvasSyncManager] Adding initial object to Fabric:', {
+          id: obj.id.slice(0, 8),
+          type: obj.type,
+          position: `(${obj.x}, ${obj.y})`,
+        });
+        this.fabricManager.addObject(obj);
+      });
+    } finally {
+      this._isSyncingFromStore = false;
+    }
+
+    console.log('[CanvasSyncManager] Initial state sync complete');
   }
 
   /**
@@ -152,7 +195,16 @@ export class CanvasSyncManager {
     this.unsubscribe = this.store.subscribe(
       (state) => state.objects,
       (objects, prevObjects) => {
-        if (this._isSyncingFromCanvas) return; // Prevent loop
+        console.log('[CanvasSyncManager] State→Canvas sync triggered', {
+          currentCount: Object.keys(objects).length,
+          prevCount: Object.keys(prevObjects).length,
+          isSyncingFromCanvas: this._isSyncingFromCanvas
+        });
+
+        if (this._isSyncingFromCanvas) {
+          console.log('[CanvasSyncManager] Skipping - sync from canvas in progress');
+          return; // Prevent loop
+        }
 
         this._isSyncingFromStore = true;
         try {
@@ -160,9 +212,15 @@ export class CanvasSyncManager {
           const currentIds = new Set(Object.keys(objects));
           const prevIds = new Set(Object.keys(prevObjects));
 
+          console.log('[CanvasSyncManager] Analyzing changes', {
+            current: Array.from(currentIds),
+            previous: Array.from(prevIds)
+          });
+
           // Handle additions
           currentIds.forEach((id) => {
             if (!prevIds.has(id)) {
+              console.log('[CanvasSyncManager] Adding new object to Fabric:', id, objects[id]);
               this.fabricManager.addObject(objects[id]);
             }
           });
@@ -192,6 +250,58 @@ export class CanvasSyncManager {
         } finally {
           this._isSyncingFromStore = false;
         }
+      }
+    );
+  }
+
+  /**
+   * W4.D3: Setup layers visibility/lock sync
+   *
+   * Watches layersSlice.layers and syncs visibility/lock to Fabric.js:
+   * - Visibility changes: Update object.visible property
+   * - Lock changes: Update object.selectable and evented properties
+   */
+  private setupLayersSync(): void {
+    this.store.subscribe(
+      (state) => state.layers,
+      (layers, prevLayers) => {
+        console.log('[CanvasSyncManager] Layers sync triggered', {
+          layerCount: Object.keys(layers).length,
+        });
+
+        // Check each layer for visibility/lock changes
+        Object.entries(layers).forEach(([objectId, layer]) => {
+          const prevLayer = prevLayers[objectId];
+
+          // Skip if layer didn't exist before
+          if (!prevLayer) return;
+
+          const canvas = this.fabricManager.getCanvas();
+          if (!canvas) return;
+
+          // Find the Fabric object
+          const fabricObj = canvas.getObjects().find(
+            (obj: FabricObjectWithData) => obj.data?.id === objectId
+          );
+
+          if (!fabricObj) return;
+
+          // Handle visibility change
+          if (layer.visible !== prevLayer.visible) {
+            console.log(`[CanvasSyncManager] Visibility change for ${objectId}:`, layer.visible);
+            fabricObj.visible = layer.visible;
+          }
+
+          // Handle lock change
+          if (layer.locked !== prevLayer.locked) {
+            console.log(`[CanvasSyncManager] Lock change for ${objectId}:`, layer.locked);
+            fabricObj.selectable = !layer.locked;
+            fabricObj.evented = !layer.locked;
+          }
+        });
+
+        // Request re-render after changes
+        this.fabricManager.getCanvas()?.requestRenderAll();
       }
     );
   }
