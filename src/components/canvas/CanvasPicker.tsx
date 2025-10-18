@@ -11,6 +11,7 @@
  */
 
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Check, ChevronsUpDown, Plus, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePaperboxStore } from '@/stores';
@@ -43,11 +44,11 @@ export function CanvasPicker({ className }: CanvasPickerProps) {
   const [search, setSearch] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
 
+  const navigate = useNavigate();
   const { user } = useAuth();
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const canvases = usePaperboxStore((state) => state.canvases);
   const canvasesLoading = usePaperboxStore((state) => state.canvasesLoading);
-  const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
   const createCanvas = usePaperboxStore((state) => state.createCanvas);
 
   // Get active canvas for display
@@ -66,21 +67,18 @@ export function CanvasPicker({ className }: CanvasPickerProps) {
     return () => document.removeEventListener('keydown', down);
   }, []);
 
-  // Handle canvas selection
-  const handleSelectCanvas = async (canvasId: string) => {
+  // Handle canvas selection (navigate to URL - let CanvasPage handle store sync)
+  const handleSelectCanvas = (canvasId: string) => {
     if (canvasId === activeCanvasId) {
       setOpen(false);
       setCommandOpen(false);
       return;
     }
 
-    try {
-      await setActiveCanvas(canvasId);
-      setOpen(false);
-      setCommandOpen(false);
-    } catch (error) {
-      console.error('[CanvasPicker] Failed to switch canvas:', error);
-    }
+    // Navigate to canvas URL (CanvasPage will sync store automatically)
+    navigate(`/canvas/${canvasId}`);
+    setOpen(false);
+    setCommandOpen(false);
   };
 
   // Handle create new canvas
@@ -90,7 +88,8 @@ export function CanvasPicker({ className }: CanvasPickerProps) {
     setIsCreating(true);
     try {
       const newCanvas = await createCanvas('Untitled Canvas', 'New design workspace');
-      await setActiveCanvas(newCanvas.id);
+      // Navigate to new canvas URL (CanvasPage will sync store automatically)
+      navigate(`/canvas/${newCanvas.id}`);
       setOpen(false);
       setCommandOpen(false);
     } catch (error) {
