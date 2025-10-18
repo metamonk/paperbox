@@ -1544,60 +1544,80 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
 
 ## ─── Week 6: Color & Text Styling ───
 
-### Feature: Color Picker (2 days)
-- [ ] **W5.D1.1**: [Context7] Fetch color picker patterns
-- [ ] **W5.D1.2-4**: Color picker component [RED/GREEN/REFACTOR]
-- [ ] **W5.D1.5-7**: Fill color application
-- [ ] **W5.D1.8-10**: Stroke color and width
+**Status**: 🔄 IN PROGRESS (40% complete - Color Picker + Opacity done in W4.D2)
+**Documentation**: [W6_COLOR_PICKER_COMPLETE.md](../claudedocs/W6_COLOR_PICKER_COMPLETE.md)
+
+### Feature: Color Picker (2 days) ✅ COMPLETE (implemented in W4.D2)
+- [✅] **W6.D1.1**: [Context7] Fetch color picker patterns
+  - ✅ Implemented: react-colorful + shadcn Popover patterns
+  - ✅ Created [ColorProperty.tsx](../src/components/properties/ColorProperty.tsx)
+- [✅] **W6.D1.2-4**: Color picker component [RED/GREEN/REFACTOR]
+  - ✅ HexColorPicker with popover UI
+  - ✅ Color swatch preview + hex input field
+  - ✅ Validation: `/^#[0-9A-F]{6}$/i` regex pattern
+- [✅] **W6.D1.5-7**: Fill color application
+  - ✅ PropertyPanel fill color control
+  - ✅ Zustand store integration via updateObject()
+- [✅] **W6.D1.8-10**: Stroke color and width
+  - ✅ Stroke color picker (conditional rendering)
+  - ✅ Stroke width slider (0-20px)
+  - ✅ Database persistence + realtime sync
 
 ### Feature: Text Formatting (2 days)
-- [ ] **W5.D2.1**: [Context7] Fetch Fabric.js text editing patterns
-- [ ] **W5.D2.2-4**: Font family selector [RED/GREEN/REFACTOR]
-- [ ] **W5.D2.5-7**: Font size, weight, style
-- [ ] **W5.D2.8-10**: Text alignment and decoration
+- [ ] **W6.D2.1**: [Context7] Fetch Fabric.js text editing patterns
+- [ ] **W6.D2.2-4**: Font family selector [RED/GREEN/REFACTOR]
+- [ ] **W6.D2.5-7**: Font size, weight, style
+- [ ] **W6.D2.8-10**: Text alignment and decoration
 
 ### Feature: Opacity & Blend Modes (1 day)
-- [ ] **W5.D3.1-3**: Opacity slider [RED/GREEN/REFACTOR]
-- [ ] **W5.D3.4-6**: Blend modes dropdown
-- [ ] **W5.D3.7-10**: Blend mode preview
+- [✅] **W6.D3.1-3**: Opacity slider [RED/GREEN/REFACTOR]
+  - ✅ Implemented in W4.D2: PropertyPanel opacity slider (0-100%)
+  - ✅ Percentage display + real-time updates
+- [ ] **W6.D3.4-6**: Blend modes dropdown
+- [ ] **W6.D3.7-10**: Blend mode preview
 
-- [ ] **W5.D4.1-7**: Week 5 integration testing
-- [ ] **W5.D4.8**: Weekly validation - /sc:test [TEST]
+- [ ] **W6.D4.1-7**: Week 6 integration testing
+- [ ] **W6.D4.8**: Weekly validation - /sc:test [TEST]
   - Target: >60% coverage
-- [ ] **W5.D4.9-10**: Week 5 commit
+- [ ] **W6.D4.9-10**: Week 6 commit
+
+**Notes**:
+- ✅ Color picker fully implemented in W4.D2 (ahead of schedule)
+- ✅ Opacity slider completed in W4.D2
+- 🎯 Next: Text Formatting (W6.D2) and Blend Modes (W6.D3.4-10)
 
 ---
 
-## ─── Week 6: Advanced Styling ───
+## ─── Week 7: Advanced Styling ───
 
 ### Feature: Gradients (2 days)
-- [ ] **W6.D1.1**: [Context7] Fetch Fabric.js gradient patterns
-- [ ] **W6.D1.2-4**: Linear gradient editor [RED/GREEN/REFACTOR]
-- [ ] **W6.D1.5-7**: Radial gradient editor
-- [ ] **W6.D1.8-10**: Gradient stop management
+- [ ] **W7.D1.1**: [Context7] Fetch Fabric.js gradient patterns
+- [ ] **W7.D1.2-4**: Linear gradient editor [RED/GREEN/REFACTOR]
+- [ ] **W7.D1.5-7**: Radial gradient editor
+- [ ] **W7.D1.8-10**: Gradient stop management
 
 ### Feature: Shadows & Effects (2 days)
-- [ ] **W6.D2.1-3**: Drop shadow properties [RED/GREEN/REFACTOR]
-- [ ] **W6.D2.4-6**: Inner shadow
-- [ ] **W6.D2.7-10**: Blur effects
+- [ ] **W7.D2.1-3**: Drop shadow properties [RED/GREEN/REFACTOR]
+- [ ] **W7.D2.4-6**: Inner shadow
+- [ ] **W7.D2.7-10**: Blur effects
 
 ### Feature: Filters (1 day)
-- [ ] **W6.D3.1-10**: Basic filters (brightness, contrast, saturation) [RED/GREEN/REFACTOR]
+- [ ] **W7.D3.1-10**: Basic filters (brightness, contrast, saturation) [RED/GREEN/REFACTOR]
 
-- [ ] **W6.D4.1-7**: Week 6 integration testing
-- [ ] **W6.D4.8**: Milestone 3 Validation - /sc:test + benchmarks [VALIDATE]
+- [ ] **W7.D4.1-7**: Week 7 integration testing
+- [ ] **W7.D4.8**: Milestone 3 Validation - /sc:test + benchmarks [VALIDATE]
   - Target: >65% coverage
   - All styling features working
-- [ ] **W6.D4.9-10**: Week 6 commit
+- [ ] **W7.D4.9-10**: Week 7 commit
   - Tag: `milestone-3-styling-complete`
 
 ---
 
 # ═══════════════════════════════════════════════════════
-# WEEK 7-8: LAYOUT & ORGANIZATION (PARALLEL EXECUTION)
+# WEEK 8-9: LAYOUT & ORGANIZATION (PARALLEL EXECUTION)
 # ═══════════════════════════════════════════════════════
 
-## ─── Week 7: Alignment & Distribution ───
+## ─── Week 8: Alignment & Distribution ───
 
 ### Feature: Alignment Tools (2 days)
 - [ ] **W7.D1.1-3**: Align left/center/right [RED/GREEN/REFACTOR]
