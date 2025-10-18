@@ -226,7 +226,14 @@ export class FabricCanvasManager {
    * W4.D3: Setup ResizeObserver to handle canvas resizing
    *
    * Watches the canvas container for size changes (e.g., when DevTools opens/closes)
-   * and updates Fabric.js canvas dimensions accordingly.
+   * and updates both the HTML canvas element AND Fabric.js canvas dimensions.
+   *
+   * Critical understanding: HTML canvas elements need BOTH:
+   * 1. CSS dimensions (width/height style) - controls visual sizing in the DOM
+   * 2. Canvas dimensions (width/height attributes) - defines the actual drawing buffer
+   *
+   * If only CSS is updated, the canvas appears sized correctly but the drawing
+   * buffer remains at the old size, causing white space and rendering issues.
    *
    * Fixes white space issue where canvas doesn't re-render when viewport changes.
    */
@@ -252,6 +259,16 @@ export class FabricCanvasManager {
           prevWidth: this.canvas.width,
           prevHeight: this.canvas.height,
         });
+
+        // CRITICAL FIX: Update HTML canvas element attributes
+        // The canvas element's width/height attributes define the drawing buffer size
+        // CSS width/height only affects visual display, not the actual drawing surface
+        const lowerCanvas = this.canvas.lowerCanvasEl;
+        if (lowerCanvas) {
+          lowerCanvas.width = width;
+          lowerCanvas.height = height;
+          console.log('[FabricCanvasManager] Updated HTML canvas element:', { width, height });
+        }
 
         // Update Fabric canvas dimensions
         this.canvas.setDimensions({
