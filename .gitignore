@@ -17,6 +17,9 @@ dist-ssr
 .env.test
 .env*.local
 
+# Claude Code documentation (may contain sensitive debug info)
+claudedocs/
+
 # Test coverage
 coverage
 .nyc_output
