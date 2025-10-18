@@ -59,12 +59,12 @@ export function dbToCanvasObject(dbObject: DbCanvasObject): CanvasObject {
     return {
       ...baseObject,
       type: 'circle',
-    } as CanvasObject;
+    } as unknown as CanvasObject;
   } else if (dbObject.type === 'text') {
     return {
       ...baseObject,
       type: 'text',
-    } as CanvasObject;
+    } as unknown as CanvasObject;
   }
 
   throw new Error(`Unknown object type: ${dbObject.type}`);
@@ -91,7 +91,7 @@ export function canvasObjectToDb(
     stroke_width: object.stroke_width || null,
     group_id: object.group_id,
     z_index: object.z_index || 0,
-    type_properties: object.type_properties || {},
+    type_properties: (object.type_properties || {}) as any,
     style_properties: object.style_properties || {},
     metadata: object.metadata || {},
     created_by: userId,
@@ -120,7 +120,7 @@ export function canvasObjectToDbUpdate(
   if (object.group_id !== undefined) update.group_id = object.group_id;
   if (object.z_index !== undefined) update.z_index = object.z_index;
   if (object.type_properties !== undefined)
-    update.type_properties = object.type_properties;
+    update.type_properties = object.type_properties as any;
   if (object.style_properties !== undefined)
     update.style_properties = object.style_properties;
   if (object.metadata !== undefined) update.metadata = object.metadata;

@@ -54,11 +54,11 @@ function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
 
   switch (row.type) {
     case 'rectangle':
-      return { ...base, type: 'rectangle' } as CanvasObject;
+      return { ...base, type: 'rectangle' } as unknown as CanvasObject;
     case 'circle':
-      return { ...base, type: 'circle' } as CanvasObject;
+      return { ...base, type: 'circle' } as unknown as CanvasObject;
     case 'text':
-      return { ...base, type: 'text' } as CanvasObject;
+      return { ...base, type: 'text' } as unknown as CanvasObject;
     default:
       throw new Error(`Unknown shape type: ${row.type}`);
   }

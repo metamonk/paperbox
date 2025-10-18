@@ -10,6 +10,7 @@
  */
 
 import hotkeys from 'hotkeys-js';
+import { Point } from 'fabric';
 import type { FabricCanvasManager } from '../../lib/fabric/FabricCanvasManager';
 import { usePaperboxStore } from '../../stores';
 
@@ -66,7 +67,7 @@ export class NavigationShortcuts {
 
     // Reset to identity transform: [1, 0, 0, 1, 0, 0]
     canvas.setZoom(1);
-    canvas.absolutePan({ x: 0, y: 0 });
+    canvas.absolutePan(new Point(0, 0));
     canvas.requestRenderAll();
 
     // Sync to store
@@ -167,10 +168,10 @@ export class NavigationShortcuts {
     const centerY = bounds.top + bounds.height / 2;
 
     canvas.setZoom(zoom);
-    canvas.absolutePan({
-      x: canvasWidth / 2 - centerX * zoom,
-      y: canvasHeight / 2 - centerY * zoom,
-    });
+    canvas.absolutePan(new Point(
+      canvasWidth / 2 - centerX * zoom,
+      canvasHeight / 2 - centerY * zoom
+    ));
     canvas.requestRenderAll();
 
     // Sync to store

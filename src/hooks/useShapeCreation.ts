@@ -1,6 +1,7 @@
 /**
  * Shape Creation Hook
  * W2.D9: Extracted from Canvas.tsx for better separation of concerns
+ * W2.D12: Refactored to use Figma-style click-to-place pattern
  *
  * Encapsulates logic for creating new canvas shapes (rectangles, circles, text)
  * and delegating to FabricCanvasManager for rendering.
@@ -9,6 +10,7 @@
 import { useCallback } from 'react';
 import type { FabricCanvasManager } from '../lib/fabric/FabricCanvasManager';
 import type { User } from '@supabase/supabase-js';
+import { usePaperboxStore } from '../stores';
 
 export interface UseShapeCreationOptions {
   fabricManager: FabricCanvasManager | null;
@@ -19,67 +21,88 @@ export interface UseShapeCreationOptions {
  * Custom hook for creating shapes on the canvas
  *
  * @param options - Configuration including fabricManager and user
- * @returns handleAddShape callback for shape creation
+ * @returns handleAddShape callback for triggering placement mode
  */
 export function useShapeCreation({ fabricManager, user }: UseShapeCreationOptions) {
+  // Access placement mode actions from toolsSlice
+  const enterPlacementMode = usePaperboxStore((state) => state.enterPlacementMode);
+  const exitPlacementMode = usePaperboxStore((state) => state.exitPlacementMode);
+  const resetToSelectTool = usePaperboxStore((state) => state.resetToSelectTool);
+
   /**
-   * Handle shape creation requests
-   * Creates shapes at viewport center with type-specific properties
+   * W2.D12: Trigger placement mode for shape creation (Figma pattern)
+   *
+   * Instead of creating shapes immediately with hardcoded window coordinates,
+   * we now enter placement mode and wait for user to click canvas.
    */
   const handleAddShape = useCallback(
     (type: 'rectangle' | 'circle' | 'text') => {
-      console.log('[useShapeCreation] handleAddShape called with type:', type);
-      console.log('[useShapeCreation] fabricManager:', fabricManager);
-      console.log('[useShapeCreation] user:', user);
+      console.log('[useShapeCreation] handleAddShape - entering placement mode for:', type);
+
+      // Define default sizes for each shape type
+      const defaultSizes = {
+        rectangle: { width: 200, height: 150 },
+        circle: { width: 150, height: 150 },
+        text: { width: 200, height: 50 },
+      };
+
+      // Enter placement mode - user will click canvas to place object
+      enterPlacementMode({
+        type,
+        defaultSize: defaultSizes[type],
+      });
+    },
+    [enterPlacementMode]
+  );
+
+  /**
+   * W2.D12: Create object at specified canvas position
+   *
+   * Called when user clicks canvas during placement mode.
+   * Uses real canvas coordinates (not window coordinates).
+   *
+   * @param type - Shape type to create
+   * @param x - Canvas X coordinate (accounts for zoom/pan)
+   * @param y - Canvas Y coordinate (accounts for zoom/pan)
+   * @param width - Shape width
+   * @param height - Shape height
+   */
+  const createObjectAtPosition = useCallback(
+    (type: 'rectangle' | 'circle' | 'text', x: number, y: number, width: number, height: number) => {
+      console.log('[useShapeCreation] createObjectAtPosition:', { type, x, y, width, height });
 
       if (!fabricManager || !user) {
-        console.log('[useShapeCreation] Early return - fabricManager or user is null');
+        console.log('[useShapeCreation] Cannot create object - fabricManager or user is null');
         return;
       }
 
-      // Calculate center position for new shape
-      const centerX = (window.innerWidth / 2) - 100;
-      const centerY = (window.innerHeight / 2) - 75;
-
       // Build type-specific properties
       let typeProperties: Record<string, any> = {};
-      let width = 200;
-      let height = 150;
 
       if (type === 'circle') {
-        // Circle requires radius in type_properties
-        const radius = 75;
-        typeProperties = { radius };
-        width = radius * 2;
-        height = radius * 2;
+        typeProperties = { radius: width / 2 };
       } else if (type === 'text') {
-        // Text requires text_content and font_size
         typeProperties = {
-          text_content: 'New Text',
-          font_size: 16
+          text_content: 'Double click to edit',
+          font_size: 16,
         };
-        width = 200;
-        height = 50;
       } else if (type === 'rectangle') {
-        // Rectangle has optional corner_radius
         typeProperties = { corner_radius: 0 };
-        width = 200;
-        height = 150;
       }
 
-      // Build base canvas object matching database schema
+      // Build canvas object at clicked position
       const baseObject = {
         id: `${type}-${Date.now()}-${Math.random()}`,
         type,
-        x: centerX,
-        y: centerY,
+        x,
+        y,
         width,
         height,
         rotation: 0,
         opacity: 1,
         fill: type === 'rectangle' ? '#3B82F6' : type === 'circle' ? '#10B981' : '#EF4444',
-        stroke: null,
-        stroke_width: null,
+        stroke: '#000000', // W4.D1 FIX: Add black stroke for visibility
+        stroke_width: 2, // W4.D1 FIX: Add stroke width for visibility
         group_id: null,
         z_index: 1,
         style_properties: {},
@@ -92,16 +115,32 @@ export function useShapeCreation({ fabricManager, user }: UseShapeCreationOption
         type_properties: typeProperties,
       };
 
-      console.log('[useShapeCreation] Calling fabricManager.addObject with:', baseObject);
+      console.log('[useShapeCreation] Creating object at canvas position:', baseObject);
+      console.log('[useShapeCreation] Canvas dimensions:', {
+        width: fabricManager.getCanvas()?.width,
+        height: fabricManager.getCanvas()?.height,
+      });
+      console.log('[useShapeCreation] Object will be at:', { x, y, width, height });
 
       // Add to Fabric canvas
-      // CanvasSyncManager will sync to Zustand → SyncManager syncs to Supabase
-      fabricManager.addObject(baseObject as any);
+      const fabricObject = fabricManager.addObject(baseObject as any);
 
-      console.log('[useShapeCreation] addObject call completed');
+      console.log('[useShapeCreation] Fabric object created:', {
+        fabricObject,
+        visible: (fabricObject as any)?.visible,
+        opacity: (fabricObject as any)?.opacity,
+        left: (fabricObject as any)?.left,
+        top: (fabricObject as any)?.top,
+      });
+
+      // Exit placement mode and return to select tool
+      exitPlacementMode();
+      resetToSelectTool();
+
+      console.log('[useShapeCreation] Object created, placement mode exited');
     },
-    [fabricManager, user]
+    [fabricManager, user, exitPlacementMode, resetToSelectTool]
   );
 
-  return { handleAddShape };
+  return { handleAddShape, createObjectAtPosition };
 }

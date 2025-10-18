@@ -13,9 +13,22 @@
  * @see docs/PHASE_2_PRD.md for architecture details
  */
 
-import { Canvas as FabricCanvas, FabricObject, Rect, Circle, Textbox, Path, Text } from 'fabric';
+// W2.D12 FIX: Use Fabric.js v6 official import pattern (named imports)
+// v6 removed the fabric namespace - use named exports instead
+// Official v6 pattern: import { Canvas, Rect, ... } from 'fabric'
+// See: https://github.com/fabricjs/fabric.js/issues/8299
+import { Canvas, Rect, Circle, Textbox, FabricObject, Path, Point, Text } from 'fabric';
+
 import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
 import type { CursorPosition, UserPresence } from '@/stores/slices/collaborationSlice';
+
+/**
+ * Extended FabricObject type with custom data property
+ * Fabric.js v6 allows arbitrary properties but TypeScript needs explicit declaration
+ */
+interface FabricObjectWithData extends FabricObject {
+  data?: { id: string; type: string };
+}
 
 /**
  * Configuration options for FabricCanvasManager
@@ -70,6 +83,12 @@ export interface FabricCanvasEventHandlers {
    * Called when selection is cleared
    */
   onSelectionCleared?: () => void;
+
+  /**
+   * W2.D12: Called when user clicks canvas during placement mode (Figma pattern)
+   * Provides canvas-relative coordinates from click position
+   */
+  onPlacementClick?: (x: number, y: number) => void;
 }
 
 /**
@@ -89,7 +108,7 @@ const DEFAULT_CONFIG: Required<FabricCanvasConfig> = {
  * Singleton pattern to manage a single Fabric.js canvas instance.
  */
 export class FabricCanvasManager {
-  private canvas: FabricCanvas | null = null;
+  private canvas: Canvas | null = null;
   private config: Required<FabricCanvasConfig>;
   private eventHandlers: FabricCanvasEventHandlers = {};
   private cursorObjects: FabricObject[] = []; // W1.D6: Track cursor overlay objects
@@ -121,28 +140,54 @@ export class FabricCanvasManager {
   initialize(
     canvasElement: HTMLCanvasElement | string,
     config?: FabricCanvasConfig
-  ): FabricCanvas {
+  ): Canvas {
     // Merge config if provided
     if (config) {
       this.config = { ...this.config, ...config };
     }
 
-    // Get the actual canvas element
-    const element = typeof canvasElement === 'string'
-      ? document.getElementById(canvasElement) as HTMLCanvasElement
-      : canvasElement;
+    // W2.D12 FIX: Fabric.js v6 expects string ID, not HTMLCanvasElement
+    // If we have an HTMLCanvasElement, get its ID instead
+    let canvasId: string;
+    let element: HTMLCanvasElement;
+
+    if (typeof canvasElement === 'string') {
+      canvasId = canvasElement;
+      element = document.getElementById(canvasElement) as HTMLCanvasElement;
+    } else {
+      // Get ID from element - it MUST have an ID for Fabric.js to work correctly
+      canvasId = canvasElement.id;
+      element = canvasElement;
+
+      if (!canvasId) {
+        throw new Error('Canvas element must have an ID attribute for Fabric.js initialization');
+      }
+    }
 
     if (!element) {
       throw new Error('Canvas element not found');
     }
+
+    // W2.D12 DEBUG: Check canvas element state before Fabric.js initialization
+    console.log('[FabricCanvasManager] Canvas element BEFORE Fabric init:', {
+      id: element.id,
+      widthAttr: element.width,
+      heightAttr: element.height,
+      clientWidth: element.clientWidth,
+      clientHeight: element.clientHeight,
+      hasGetContext: typeof element.getContext !== 'undefined'
+    });
 
     // Calculate dimensions from parent container for full viewport sizing
     const parent = element.parentElement;
     const width = parent ? parent.clientWidth : this.config.width;
     const height = parent ? parent.clientHeight : this.config.height;
 
-    // Create Fabric.js canvas instance with dynamic dimensions
-    this.canvas = new FabricCanvas(canvasElement, {
+    // W2.D12 FIX: Fabric.js v6 Canvas constructor expects ID string, not HTMLCanvasElement
+    // From official docs: new fabric.Canvas('canvasId', options)
+    // Passing HTMLCanvasElement directly may cause rendering issues
+    console.log(`[FabricCanvasManager] Initializing Fabric.js v6 Canvas with ID: "${canvasId}"`);
+    console.log(`[FabricCanvasManager] Config:`, {
       backgroundColor: this.config.backgroundColor,
       width,
       height,
@@ -150,7 +195,22 @@ export class FabricCanvasManager {
       renderOnAddRemove: this.config.renderOnAddRemove,
     });
 
-    console.log(`[FabricCanvasManager] Canvas initialized with dimensions: ${width}x${height}`);
+    this.canvas = new Canvas(canvasId, {
+      backgroundColor: this.config.backgroundColor,
+      width,
+      height,
+      selection: this.config.selection,
+      renderOnAddRemove: this.config.renderOnAddRemove,
+    });
+
+    console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
+    console.log(`[FabricCanvasManager] Canvas type:`, this.canvas.constructor.name);
+    console.log(`[FabricCanvasManager] Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
+    console.log(`[FabricCanvasManager] Canvas element:`, this.canvas.lowerCanvasEl);
+
+    // W2.D12 DEBUG: Expose canvas instance globally for debugging
+    (window as any).__fabricCanvas = this.canvas;
+    console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
     return this.canvas;
   }
@@ -223,6 +283,9 @@ export class FabricCanvasManager {
       stroke: canvasObject.stroke || undefined,
       strokeWidth: canvasObject.stroke_width || undefined,
       opacity: canvasObject.opacity,
+      visible: true, // W2.D12 FIX: Explicitly set visible to ensure objects render
+      selectable: true, // W2.D12 FIX: Explicitly set selectable
+      evented: true, // W2.D12 FIX: Explicitly set evented to ensure interaction
       data: {
         id: canvasObject.id,
         type: canvasObject.type,
@@ -295,30 +358,31 @@ export class FabricCanvasManager {
    * @returns CanvasObject suitable for database storage, or null if input is null
    */
   toCanvasObject(fabricObject: FabricObject | null): CanvasObject | null {
-    if (!fabricObject || !fabricObject.data) {
+    const obj = fabricObject as FabricObjectWithData;
+    if (!obj || !obj.data) {
       return null;
     }
 
     // Extract stored database type and ID from data property
     // These were set when the object was created via createFabricObject()
-    const dbType = fabricObject.data.type as ShapeType;
-    const dbId = fabricObject.data.id as string;
+    const dbType = obj.data.type as ShapeType;
+    const dbId = obj.data.id as string;
 
     // Extract common properties from Fabric.js object
     // Maps Fabric.js property names to our database schema
     const baseProperties = {
       id: dbId,
-      x: fabricObject.left || 0,
-      y: fabricObject.top || 0,
-      width: fabricObject.width || 0,
-      height: fabricObject.height || 0,
-      rotation: fabricObject.angle || 0,
+      x: obj.left || 0,
+      y: obj.top || 0,
+      width: obj.width || 0,
+      height: obj.height || 0,
+      rotation: obj.angle || 0,
       group_id: null, // TODO: Implement group support in W1.D3
       z_index: 1, // TODO: Calculate from canvas.getObjects() index in W1.D3
-      fill: fabricObject.fill as string,
-      stroke: (fabricObject.stroke as string) || null,
-      stroke_width: fabricObject.strokeWidth || null,
-      opacity: fabricObject.opacity ?? 1,
+      fill: obj.fill as string,
+      stroke: (obj.stroke as string) || null,
+      stroke_width: obj.strokeWidth || null,
+      opacity: obj.opacity ?? 1,
       style_properties: {}, // TODO: Implement style properties in W2.D1
       metadata: {}, // TODO: Implement metadata in W2.D1
       // Audit fields: These should ideally be preserved from original object
@@ -386,6 +450,7 @@ export class FabricCanvasManager {
    */
   addObject(canvasObject: CanvasObject): FabricObject | null {
     if (!this.canvas) {
+      console.log('[FabricCanvasManager] addObject: canvas is null');
       return null;
     }
 
@@ -393,11 +458,44 @@ export class FabricCanvasManager {
     const fabricObject = this.createFabricObject(canvasObject);
 
     if (!fabricObject) {
+      console.log('[FabricCanvasManager] addObject: createFabricObject returned null');
       return null;
     }
 
+    console.log('[FabricCanvasManager] Adding object to canvas:', {
+      id: canvasObject.id,
+      type: canvasObject.type,
+      x: canvasObject.x,
+      y: canvasObject.y,
+      objectCount: this.canvas.getObjects().length
+    });
+
+    // W2.D12 DEBUG: Log object details BEFORE adding
+    console.log('[FabricCanvasManager] fabricObject details:', {
+      type: fabricObject.type,
+      left: (fabricObject as any).left,
+      top: (fabricObject as any).top,
+      width: (fabricObject as any).width,
+      height: (fabricObject as any).height,
+      fill: (fabricObject as any).fill,
+      visible: (fabricObject as any).visible,
+      opacity: (fabricObject as any).opacity,
+    });
+
     // Add to canvas and render
     this.canvas.add(fabricObject);
+
+    // W2.D12 FIX: Use synchronous renderAll() instead of requestRenderAll()
+    // requestRenderAll() schedules render on next animation frame (async)
+    // renderAll() renders immediately (sync) - critical for initial object visibility
+    this.canvas.renderAll();
+
+    console.log('[FabricCanvasManager] Object added, new count:', this.canvas.getObjects().length);
+
+    // W2.D12 DEBUG: Check if object is actually in canvas
+    const objectsInCanvas = this.canvas.getObjects();
+    console.log('[FabricCanvasManager] Objects in canvas:', objectsInCanvas);
+    console.log('[FabricCanvasManager] Last object in canvas:', objectsInCanvas[objectsInCanvas.length - 1]);
 
     return fabricObject;
   }
@@ -446,7 +544,8 @@ export class FabricCanvasManager {
     const objects = this.canvas.getObjects();
 
     for (const obj of objects) {
-      if (obj.data?.id === id) {
+      const objWithData = obj as FabricObjectWithData;
+      if (objWithData.data?.id === id) {
         return obj;
       }
     }
@@ -520,12 +619,12 @@ export class FabricCanvasManager {
       // Get all objects in the selection
       const objects = (activeObject as any)._objects || [];
       return objects
-        .map((obj: FabricObject) => obj.data?.id)
+        .map((obj: FabricObject) => (obj as FabricObjectWithData).data?.id)
         .filter((id: string | undefined) => id !== undefined) as string[];
     }
 
     // Single object selected
-    const id = activeObject.data?.id;
+    const id = (activeObject as FabricObjectWithData).data?.id;
     return id ? [id] : [];
   }
 
@@ -534,7 +633,7 @@ export class FabricCanvasManager {
    *
    * @returns Fabric.js canvas instance or null if not initialized
    */
-  getCanvas(): FabricCanvas | null {
+  getCanvas(): Canvas | null {
     return this.canvas;
   }
 
@@ -594,8 +693,10 @@ export class FabricCanvasManager {
       });
 
       // Add to canvas and track for cleanup
-      this.canvas.add(cursorIcon, nameLabel);
-      this.cursorObjects.push(cursorIcon, nameLabel);
+      if (this.canvas) {
+        this.canvas.add(cursorIcon as FabricObject, nameLabel as FabricObject);
+        this.cursorObjects.push(cursorIcon as FabricObject, nameLabel as FabricObject);
+      }
     });
 
     // Render all cursor objects
@@ -613,7 +714,7 @@ export class FabricCanvasManager {
    *
    * @param callback - Function to call with (zoom, panX, panY) values
    */
-  setViewportSyncCallback(callback: (zoom: number, panX, panY: number) => void): void {
+  setViewportSyncCallback(callback: (zoom: number, panX: number, panY: number) => void): void {
     this.viewportSyncCallback = callback;
   }
 
@@ -679,7 +780,7 @@ export class FabricCanvasManager {
 
       // Zoom to cursor position
       this.canvas!.zoomToPoint(
-        { x: opt.e.offsetX || 0, y: opt.e.offsetY || 0 },
+        new Point(opt.e.offsetX || 0, opt.e.offsetY || 0),
         zoom
       );
 
@@ -742,8 +843,30 @@ export class FabricCanvasManager {
       }
     };
 
-    // Mouse down - start panning if spacebar held
+    // Mouse down - handle placement mode OR start panning if spacebar held
     this.canvas.on('mouse:down', (opt: any) => {
+      // W2.D12: Check for placement mode first (higher priority than panning)
+      // Only trigger placement if clicking empty canvas (no target object)
+      if (!opt.target && this.eventHandlers.onPlacementClick) {
+        // W2.D12 FIX: Use ignoreZoom=true to get viewport-relative coordinates
+        // ignoreZoom: true = HTMLElement coordinates (what you see on screen)
+        // ignoreZoom: false = fabric space coordinates (accounting for pan/zoom)
+        // For placement mode, we want screen-relative coords where user clicked
+        const pointer = this.canvas!.getPointer(opt.e, true);
+
+        console.log('[FabricCanvasManager] Placement click detected:', {
+          viewportX: pointer.x,
+          viewportY: pointer.y,
+          windowX: opt.e.clientX,
+          windowY: opt.e.clientY,
+        });
+
+        // Trigger placement handler with viewport-relative coordinates
+        this.eventHandlers.onPlacementClick(pointer.x, pointer.y);
+        return; // Don't process as pan event
+      }
+
+      // Spacebar panning (existing logic)
       if (isSpacePressed && this.canvas) {
         isPanning = true;
         lastPosX = opt.e.clientX || 0;
@@ -785,6 +908,13 @@ export class FabricCanvasManager {
 
         vpt[4] = newPanX;
         vpt[5] = newPanY;
+
+        // W4.D1 FIX: Update selection controls after spacebar pan
+        const activeObject = this.canvas.getActiveObject();
+        if (activeObject) {
+          activeObject.setCoords(); // Recalculate control positions
+        }
+
         this.canvas.requestRenderAll(); // Triggers recalculation
 
         // Update last position
@@ -819,6 +949,157 @@ export class FabricCanvasManager {
       keydown: handleKeyDown,
       keyup: handleKeyUp,
     };
+  }
+
+  /**
+   * W2.D12+: Setup scroll pan and zoom interactions (Figma-style)
+   *
+   * Behavior:
+   * - Scroll (no modifier) = Pan canvas vertically/horizontally
+   * - Cmd/Ctrl + Scroll = Zoom in/out at cursor position
+   * - Shift + Scroll = Pan horizontally
+   *
+   * Disabled during placement mode to avoid interference.
+   */
+  setupScrollPanAndZoom(): void {
+    if (!this.canvas) return;
+
+    this.canvas.on('mouse:wheel', (opt: any) => {
+      const event = opt.e as WheelEvent;
+
+      // Prevent default scroll behavior
+      event.preventDefault();
+
+      // Get delta value (normalized for cross-browser compatibility)
+      const delta = event.deltaY;
+
+      // Check for zoom modifier (Cmd on Mac, Ctrl on Windows/Linux)
+      const isZoomModifier = event.metaKey || event.ctrlKey;
+
+      console.log('[FabricCanvasManager] mouse:wheel:', {
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        isZoomModifier,
+        action: isZoomModifier ? 'ZOOM' : 'PAN',
+      });
+
+      if (isZoomModifier) {
+        // Cmd/Ctrl + Scroll = Zoom
+        this.handleScrollZoom(event, delta);
+      } else {
+        // Scroll = Pan (default Figma behavior)
+        this.handleScrollPan(event, delta);
+      }
+    });
+  }
+
+  /**
+   * Handle scroll panning (Figma default behavior)
+   *
+   * - Vertical scroll = Pan up/down
+   * - Horizontal scroll = Pan left/right (trackpad horizontal scroll)
+   * - Shift + Vertical Scroll = Pan left/right
+   */
+  private handleScrollPan(event: WheelEvent, _delta: number) {
+    if (!this.canvas) return;
+
+    // Get both horizontal and vertical deltas
+    const deltaX = event.deltaX;
+    const deltaY = event.deltaY;
+
+    // Determine pan direction:
+    // - Horizontal scroll (deltaX) OR Shift + vertical scroll = Pan left/right
+    // - Vertical scroll (deltaY) = Pan up/down
+    let panX = deltaX; // Trackpad horizontal scroll
+    let panY = deltaY; // Trackpad vertical scroll
+
+    // Shift modifier: Convert vertical scroll to horizontal pan
+    if (event.shiftKey) {
+      panX = deltaY;
+      panY = 0;
+    }
+
+    // Apply pan (negative to match natural scroll direction)
+    const vpt = this.canvas.viewportTransform;
+    const zoom = this.canvas.getZoom();
+
+    // Calculate new pan with boundary enforcement
+    let newPanX = vpt[4] - panX;
+    let newPanY = vpt[5] - panY;
+
+    // Clamp to canvas boundaries
+    const maxPan = this.CANVAS_BOUNDARY * zoom;
+    const minPan = -this.CANVAS_BOUNDARY * zoom;
+
+    newPanX = Math.max(minPan, Math.min(maxPan, newPanX));
+    newPanY = Math.max(minPan, Math.min(maxPan, newPanY));
+
+    vpt[4] = newPanX;
+    vpt[5] = newPanY;
+
+    // W4.D1 FIX: Update selection controls after viewport change
+    // Fabric.js v6 doesn't automatically update controls with requestRenderAll()
+    const activeObject = this.canvas.getActiveObject();
+    if (activeObject) {
+      activeObject.setCoords(); // Recalculate control positions
+    }
+
+    this.canvas.requestRenderAll();
+
+    // Sync viewport to Zustand
+    this.requestViewportSync();
+
+    // Update pixel grid visibility
+    this.updatePixelGridVisibility();
+  }
+
+  /**
+   * Handle scroll zoom (Cmd/Ctrl + Scroll)
+   *
+   * Zoom centered on cursor position (Figma behavior)
+   * - Scroll up = Zoom in
+   * - Scroll down = Zoom out
+   */
+  private handleScrollZoom(event: WheelEvent, delta: number) {
+    if (!this.canvas) return;
+
+    // Get current zoom
+    const zoom = this.canvas.getZoom();
+
+    // Calculate zoom factor (10% increment/decrement)
+    const zoomFactor = delta > 0 ? 0.9 : 1.1;
+    let newZoom = zoom * zoomFactor;
+
+    // Clamp zoom range (0.1x to 10x)
+    const MIN_ZOOM = 0.1;
+    const MAX_ZOOM = 10;
+    newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+
+    // Get cursor position for zoom center (viewport coordinates)
+    const pointer = this.canvas.getPointer(event, true);
+
+    // Zoom to cursor position
+    this.canvas.zoomToPoint(
+      new Point(pointer.x, pointer.y),
+      newZoom
+    );
+
+    // W4.D1 FIX: Update selection controls after zoom
+    const activeObject = this.canvas.getActiveObject();
+    if (activeObject) {
+      activeObject.setCoords(); // Recalculate control positions
+    }
+
+    this.canvas.requestRenderAll();
+
+    // Sync viewport to Zustand
+    this.requestViewportSync();
+
+    // Update pixel grid visibility based on new zoom
+    this.updatePixelGridVisibility();
   }
 
   /**
@@ -863,7 +1144,7 @@ export class FabricCanvasManager {
     this.canvas.setZoom(zoom);
 
     // Then apply pan using absolutePan
-    this.canvas.absolutePan({ x: panX, y: panY });
+    this.canvas.absolutePan(new Point(panX, panY));
 
     // Render the canvas with new viewport
     this.canvas.renderAll();
@@ -1150,7 +1431,7 @@ export class FabricCanvasManager {
     }
 
     // Serialize all canvas objects to CanvasObject format
-    const fabricObjects = this.canvas.getObjects().filter(obj => obj.data?.id);
+    const fabricObjects = this.canvas.getObjects().filter(obj => (obj as FabricObjectWithData).data?.id);
     const canvasObjects: CanvasObject[] = fabricObjects
       .map(obj => this.toCanvasObject(obj))
       .filter((obj): obj is CanvasObject => obj !== null);
