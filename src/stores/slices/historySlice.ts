@@ -45,7 +45,7 @@ export const createHistorySlice: StateCreator<
   [['zustand/immer', never], ['zustand/devtools', never]],
   [],
   HistorySlice
-> = (set, get) => ({
+> = (set) => ({
   // Initial state
   undoStack: [],
   redoStack: [],

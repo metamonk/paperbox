@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { ToastProvider } from './components/ui/Toast';
+import { Toaster } from '@/components/ui/sonner';
 
 // W2.D10: Code splitting - lazy load route components
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
@@ -77,15 +77,14 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 /**
  * Main App component with routing
  * Wrapped in ErrorBoundary for graceful error handling
- * Wrapped in ToastProvider for user notifications (W1.D8)
+ * W4.D1: Using Sonner for toast notifications (replaced custom Toast)
  * W2.D10: Wrapped in Suspense for code splitting support
  */
 function App() {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <Suspense fallback={<RouteLoadingFallback />}>
-          <Routes>
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
           {/* Public Routes - redirect to canvas if authenticated */}
           <Route
             path="/login"
@@ -121,8 +120,8 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
-    </ToastProvider>
-  </ErrorBoundary>
+      <Toaster />
+    </ErrorBoundary>
   );
 }
 

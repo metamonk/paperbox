@@ -1,11 +1,20 @@
 # Phase II Product Requirements Document (PRD)
 ## Paperbox: Feature-Complete Figma Clone with AI-Ready Architecture
 
-**Document Version**: 1.0
-**Date**: 2025-10-16
+**Document Version**: 1.1
+**Last Updated**: 2025-10-17
 **Phase**: II - Feature-Complete Implementation
-**Migration**: Konva.js → Fabric.js (Big Bang)
-**Timeline**: 12 weeks
+**Migration**: Konva.js → Fabric.js (Big Bang) ✅ COMPLETE
+**Timeline**: 12 weeks (adjusted)
+
+**Implementation Updates**:
+- ✅ Week 1-2 Complete: Fabric.js + Zustand + Infinite Canvas + Figma-style interactions
+- ⏭️ Week 3 Skipped: Selection/Transform (Fabric.js defaults sufficient)
+- 🔄 Week 4 In Progress: Design System (shadcn/ui + Kibo UI)
+  - ✅ W4.D0 Complete: Foundation installed (11 shadcn components + Kibo UI + react-colorful)
+  - ✅ W4.D1 Complete: Toolbar/Sidebar migrated to shadcn, Toast replaced with Sonner
+  - 🔜 W4.D2 Next: Property panels with Form + ColorPicker + Sliders
+- 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---
 
@@ -935,6 +944,212 @@ function updateObjectVisibility(canvas) {
   canvas.renderAll();
 }
 ```
+
+### Canvas Interaction Patterns (Figma-Style)
+
+**Implementation Status**: ✅ **COMPLETE** (W2.D12)
+
+Paperbox implements industry-standard Figma-style canvas interactions for intuitive navigation and object manipulation.
+
+#### Interaction Modes
+
+| Interaction | Trigger | Behavior | Status |
+|-------------|---------|----------|--------|
+| **Scroll to pan** | Mouse wheel | Pan canvas up/down (default) | ✅ |
+| **Horizontal scroll** | Trackpad horizontal | Pan canvas left/right | ✅ |
+| **Shift + Scroll** | Shift + Mouse wheel | Pan canvas horizontally | ✅ |
+| **Cmd/Ctrl + Scroll** | Modifier + Wheel | Zoom centered on cursor | ✅ |
+| **Spacebar + Drag** | Hold space + Drag | Free panning with grab cursor | ✅ |
+| **Click-to-place** | Tool + Click | Place object at cursor position | ✅ |
+
+#### Technical Implementation
+
+**Scroll Event Handler**:
+```typescript
+setupScrollPanAndZoom(): void {
+  this.canvas.on('mouse:wheel', (opt: any) => {
+    const event = opt.e as WheelEvent;
+    event.preventDefault();
+
+    // Detect zoom modifier (Cmd on Mac, Ctrl on Windows/Linux)
+    const isZoomModifier = event.metaKey || event.ctrlKey;
+
+    if (isZoomModifier) {
+      this.handleScrollZoom(event, event.deltaY);
+    } else {
+      this.handleScrollPan(event, event.deltaY);
+    }
+  });
+}
+```
+
+**Scroll Pan (with horizontal scroll support)**:
+```typescript
+private handleScrollPan(event: WheelEvent, delta: number) {
+  // Support both vertical and horizontal scroll
+  const deltaX = event.deltaX;
+  const deltaY = event.deltaY;
+
+  let panX = deltaX; // Trackpad horizontal scroll
+  let panY = deltaY; // Trackpad vertical scroll
+
+  // Shift modifier: Convert vertical scroll to horizontal pan
+  if (event.shiftKey) {
+    panX = deltaY;
+    panY = 0;
+  }
+
+  // Apply pan with boundary enforcement (±50,000 pixels)
+  const vpt = this.canvas.viewportTransform;
+  vpt[4] -= panX;
+  vpt[5] -= panY;
+  this.canvas.requestRenderAll();
+
+  // Sync to Zustand (throttled via RAF)
+  this.requestViewportSync();
+}
+```
+
+**Scroll Zoom (centered on cursor)**:
+```typescript
+private handleScrollZoom(event: WheelEvent, delta: number) {
+  const zoom = this.canvas.getZoom();
+  const zoomFactor = delta > 0 ? 0.9 : 1.1;
+  let newZoom = zoom * zoomFactor;
+
+  // Clamp zoom range (0.1x to 10x)
+  newZoom = Math.max(0.1, Math.min(10, newZoom));
+
+  // Get cursor position for zoom center (viewport coordinates)
+  const pointer = this.canvas.getPointer(event, true);
+
+  // Zoom centered on cursor position (Figma behavior)
+  this.canvas.zoomToPoint(
+    new Point(pointer.x, pointer.y),
+    newZoom
+  );
+
+  this.canvas.requestRenderAll();
+  this.requestViewportSync();
+}
+```
+
+**Click-to-Place (viewport coordinates)**:
+```typescript
+// CRITICAL FIX: Use viewport coordinates (true flag)
+// Previously used fabric space (false) causing offset from cursor
+const pointer = this.canvas.getPointer(event, true);
+
+// Create object at viewport position (where user clicked)
+const rect = new Rect({
+  left: pointer.x,
+  top: pointer.y,
+  width: 100,
+  height: 100,
+  fill: 'blue'
+});
+
+this.canvas.add(rect);
+this.canvas.requestRenderAll();
+```
+
+#### Coordinate Spaces
+
+**Viewport Space vs Fabric Space**:
+```typescript
+// Viewport space (screen-relative, what user sees)
+const viewportPointer = canvas.getPointer(event, true);
+// Use for: Click-to-place, UI overlays, cursor positioning
+
+// Fabric space (accounts for pan/zoom transform)
+const fabricPointer = canvas.getPointer(event, false);
+// Use for: Object manipulation, selection bounds, snapping
+```
+
+**Viewport Transform Matrix**:
+```typescript
+// viewportTransform = [scaleX, skewY, skewX, scaleY, translateX, translateY]
+//                      zoom             zoom      panX      panY
+//                     [0]   [1]   [2]   [3]      [4]       [5]
+
+const vpt = canvas.viewportTransform;
+const zoom = canvas.getZoom();      // From indices [0] and [3]
+const panX = vpt[4];                // Horizontal pan
+const panY = vpt[5];                // Vertical pan
+```
+
+#### Visual Feedback
+
+**Navigation Indicator Component**:
+- **Location**: Bottom-right corner overlay
+- **Content**: Real-time zoom % and pan X/Y coordinates
+- **Updates**: Synced from Zustand viewport state
+- **Purpose**: Visual feedback for canvas position without scrollbars
+
+```tsx
+export function CanvasNavigationIndicator() {
+  const zoom = usePaperboxStore((state) => state.viewport.zoom);
+  const panX = usePaperboxStore((state) => state.viewport.panX);
+  const panY = usePaperboxStore((state) => state.viewport.panY);
+
+  const zoomPercent = Math.round(zoom * 100);
+  const displayPanX = Math.round(panX);
+  const displayPanY = Math.round(panY);
+
+  return (
+    <div className="absolute bottom-4 right-4 bg-white border rounded-lg shadow-md px-4 py-2">
+      <div>Zoom: {zoomPercent}%</div>
+      <div>Pan: X: {displayPanX}, Y: {displayPanY}</div>
+    </div>
+  );
+}
+```
+
+#### Boundary Enforcement
+
+**Canvas Limits**:
+- **Pan boundaries**: ±50,000 pixels from origin
+- **Zoom range**: 0.1x to 10x (10% to 1000%)
+- **Enforcement**: Clamped during pan/zoom operations
+
+```typescript
+// Pan boundary enforcement
+const MAX_PAN = 50000;
+const newPanX = Math.max(-MAX_PAN, Math.min(MAX_PAN, vpt[4] - deltaX));
+const newPanY = Math.max(-MAX_PAN, Math.min(MAX_PAN, vpt[5] - deltaY));
+
+// Zoom boundary enforcement
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 10;
+newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * zoomFactor));
+```
+
+#### Event Handler Consolidation
+
+**Pattern**: Single `mouse:wheel` handler to prevent conflicts
+
+**Previous Issue**: Duplicate handlers caused zoom-without-modifier bug
+- OLD: `setupMousewheelZoom()` always zoomed (no modifier check)
+- NEW: `setupScrollPanAndZoom()` checks modifier correctly
+
+**Fix**: Removed duplicate handler registration, single source of truth in `useCanvasSync` hook initialization.
+
+#### Integration with Existing Features
+
+**Pixel Grid**: Automatically updates visibility based on zoom level
+**Viewport Sync**: Throttled via RAF (60fps) to Zustand store
+**Placement Mode**: Scroll interactions work during object placement
+**Selection**: Pan/zoom don't affect object selection behavior
+
+#### User Experience Benefits
+
+1. **Intuitive Navigation**: Matches Figma/Miro interaction patterns
+2. **Efficient Workflow**: Multiple input methods for different contexts (scroll, spacebar, shortcuts)
+3. **Visual Feedback**: Real-time indicator shows canvas state during navigation
+4. **Precise Control**: Zoom centered on cursor, not canvas center
+5. **Flexible Input**: Supports trackpad, mouse wheel, keyboard modifiers
+
+---
 
 ### Industry Patterns
 

@@ -28,7 +28,6 @@ import type { PaperboxStore } from '../index';
 import type { Database } from '../../types/database';
 
 type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
-type DbCanvasObjectInsert = Database['public']['Tables']['canvas_objects']['Insert'];
 
 /**
  * Convert database row to CanvasObject discriminated union
@@ -59,11 +58,11 @@ function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
 
   switch (row.type) {
     case 'rectangle':
-      return { ...base, type: 'rectangle' } as RectangleObject;
+      return { ...base, type: 'rectangle' } as unknown as RectangleObject;
     case 'circle':
-      return { ...base, type: 'circle' } as CircleObject;
+      return { ...base, type: 'circle' } as unknown as CircleObject;
     case 'text':
-      return { ...base, type: 'text' } as TextObject;
+      return { ...base, type: 'text' } as unknown as TextObject;
     default:
       throw new Error(`Unknown shape type: ${row.type}`);
   }
@@ -316,7 +315,6 @@ export const createCanvasSlice: StateCreator<
 
     try {
       // Database write
-      // @ts-expect-error - Supabase generated types have issues with partial updates
       const { error } = await supabase
         .from('canvas_objects')
         .update({
@@ -331,7 +329,7 @@ export const createCanvasSlice: StateCreator<
           stroke: updates.stroke,
           stroke_width: updates.stroke_width,
           opacity: updates.opacity,
-          type_properties: updates.type_properties,
+          type_properties: updates.type_properties as any,
           style_properties: updates.style_properties,
           metadata: updates.metadata,
           locked_by: updates.locked_by,
@@ -667,7 +665,7 @@ export const createCanvasSlice: StateCreator<
 
       if (error || !data) return;
 
-      const viewport = data.viewport_state as ViewportState;
+      const viewport = data.viewport_state as unknown as ViewportState;
       set(
         { viewport },
         undefined,
@@ -685,17 +683,22 @@ export const createCanvasSlice: StateCreator<
    * Call this during app/canvas initialization
    */
   initializeViewport: async () => {
+    // W4.D1 TEMP FIX: Disable viewport persistence to start at origin
+    // TODO: Re-enable once viewport persistence is properly tested
     // Try PostgreSQL first (cross-device sync)
-    await get().loadViewportFromPostgreSQL();
+    // await get().loadViewportFromPostgreSQL();
 
     // If PostgreSQL didn't load anything, fall back to localStorage
-    if (
-      get().viewport.zoom === 1 &&
-      get().viewport.panX === 0 &&
-      get().viewport.panY === 0
-    ) {
-      get().loadViewportFromStorage();
-    }
+    // if (
+    //   get().viewport.zoom === 1 &&
+    //   get().viewport.panX === 0 &&
+    //   get().viewport.panY === 0
+    // ) {
+    //   get().loadViewportFromStorage();
+    // }
+
+    // Always start at origin for now
+    console.log('[canvasSlice] Viewport initialized to origin (0, 0)');
   },
 
   // ─── Utility selectors ───

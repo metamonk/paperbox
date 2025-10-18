@@ -20,12 +20,23 @@ import type { PaperboxStore } from '../../stores';
 import type { CanvasObject } from '../../types/canvas';
 
 /**
+ * Extended FabricObject type with custom data property
+ */
+interface FabricObjectWithData extends FabricObject {
+  data?: { id: string; type: string };
+}
+
+/**
  * Zustand store API type that includes both state and methods
+ * Supports subscribe with selector pattern (subscribeWithSelector middleware)
  */
 type ZustandStore = {
   getState: () => PaperboxStore;
   setState: (state: Partial<PaperboxStore>) => void;
-  subscribe: (listener: (state: PaperboxStore, prevState: PaperboxStore) => void) => () => void;
+  subscribe: {
+    (listener: (state: PaperboxStore, prevState: PaperboxStore) => void): () => void;
+    <U>(selector: (state: PaperboxStore) => U, listener: (slice: U, previousSlice: U) => void): () => void;
+  };
 } & StoreApi<PaperboxStore>;
 
 /**
@@ -40,7 +51,7 @@ export class CanvasSyncManager {
   private _isSyncingFromCanvas = false;
   private _isSyncingFromStore = false;
 
-  constructor(fabricManager: FabricCanvasManager, store: ZustandStore) {
+  constructor(fabricManager: FabricCanvasManager, store: any) {
     this.fabricManager = fabricManager;
     this.store = store;
   }
@@ -110,12 +121,12 @@ export class CanvasSyncManager {
       },
 
       onSelectionCreated: (targets: FabricObject[]) => {
-        const ids = targets.map(t => t.data?.id).filter(Boolean) as string[];
+        const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
         this.store.getState().selectObjects(ids);
       },
 
       onSelectionUpdated: (targets: FabricObject[]) => {
-        const ids = targets.map(t => t.data?.id).filter(Boolean) as string[];
+        const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
         this.store.getState().selectObjects(ids);
       },
 

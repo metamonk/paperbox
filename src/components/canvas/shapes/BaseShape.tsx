@@ -16,8 +16,8 @@
 import { useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import Konva from 'konva';
+import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
-import { useToast } from '../../ui/Toast';
 import type { CanvasObject } from '../../../types/canvas';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../../lib/constants';
 
@@ -86,7 +86,6 @@ export function BaseShape<T extends CanvasObject>({
   children
 }: BaseShapeProps<T>) {
   const { user } = useAuth();
-  const { showToast } = useToast();
   const shapeRef = useRef<Konva.Node>(null);
 
   // Determine lock state
@@ -123,9 +122,9 @@ export function BaseShape<T extends CanvasObject>({
     if (!lockAcquired && isLockedByOther) {
       // Get lock owner name from shape if available
       const lockOwner = shape.locked_by ? 'another user' : 'another user';
-      showToast(`This object is locked by ${lockOwner}`, 'warning', 2000);
+      toast.warning(`This object is locked by ${lockOwner}`);
     }
-  }, [shape.id, shape.locked_by, onAcquireLock, onActivity, isLockedByOther, showToast]);
+  }, [shape.id, shape.locked_by, onAcquireLock, onActivity, isLockedByOther]);
 
   /**
    * Update position and release lock on drag end

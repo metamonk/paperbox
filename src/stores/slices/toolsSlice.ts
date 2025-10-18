@@ -71,6 +71,22 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
 };
 
 /**
+ * Shape type for placement mode
+ */
+export type ShapeType = 'rectangle' | 'circle' | 'text';
+
+/**
+ * Placement configuration for click-to-place interaction
+ */
+export interface PlacementConfig {
+  type: ShapeType;
+  defaultSize: {
+    width: number;
+    height: number;
+  };
+}
+
+/**
  * Tools slice state interface
  */
 export interface ToolsSlice {
@@ -78,10 +94,16 @@ export interface ToolsSlice {
   activeTool: ToolType;
   toolSettings: ToolSettings;
   isDrawing: boolean; // True when actively creating a shape
+  isPlacementMode: boolean; // True when waiting for user to click canvas to place object (Figma pattern)
+  placementConfig: PlacementConfig | null; // Configuration for object being placed
 
   // Actions - Tool selection
   setActiveTool: (tool: ToolType) => void;
   resetToSelectTool: () => void;
+
+  // Actions - Placement mode (Figma-style click-to-place)
+  enterPlacementMode: (config: PlacementConfig) => void;
+  exitPlacementMode: () => void;
 
   // Actions - Tool settings
   updateToolSettings: (updates: Partial<ToolSettings>) => void;
@@ -126,6 +148,8 @@ export const createToolsSlice: StateCreator<
   activeTool: 'select',
   toolSettings: DEFAULT_TOOL_SETTINGS,
   isDrawing: false,
+  isPlacementMode: false,
+  placementConfig: null,
 
   // Tool selection actions
 
@@ -155,6 +179,34 @@ export const createToolsSlice: StateCreator<
       },
       undefined,
       'tools/resetToSelectTool',
+    ),
+
+  // Placement mode actions (Figma-style click-to-place)
+
+  /**
+   * Enter placement mode - user will click canvas to place object
+   */
+  enterPlacementMode: (config: PlacementConfig) =>
+    set(
+      (state) => {
+        state.isPlacementMode = true;
+        state.placementConfig = config;
+      },
+      undefined,
+      'tools/enterPlacementMode',
+    ),
+
+  /**
+   * Exit placement mode - return to normal interaction
+   */
+  exitPlacementMode: () =>
+    set(
+      (state) => {
+        state.isPlacementMode = false;
+        state.placementConfig = null;
+      },
+      undefined,
+      'tools/exitPlacementMode',
     ),
 
   // Tool settings actions

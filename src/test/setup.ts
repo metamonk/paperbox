@@ -206,10 +206,8 @@ vi.mock('fabric', () => {
     public evented: boolean;
     public hoverCursor: string;
     public data?: any;
-    private pathData: string;
 
-    constructor(pathData: string, config: any = {}) {
-      this.pathData = pathData;
+    constructor(_pathData: string, config: any = {}) {
       this.left = config.left || 0;
       this.top = config.top || 0;
       this.fill = config.fill || '#000000';
