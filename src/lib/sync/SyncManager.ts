@@ -163,6 +163,16 @@ export class SyncManager {
       // Update Zustand store
       usePaperboxStore.getState()._addObject(obj);
 
+      // Add layer metadata for layers panel
+      const store = usePaperboxStore.getState();
+      if (!store.layers[obj.id]) {
+        store.addLayer(obj.id, {
+          name: `${obj.type} ${obj.id.slice(0, 6)}`,
+          visible: true,
+          locked: false,
+        });
+      }
+
       // TODO (Phase II W1-2): Update Fabric.js canvas
       // const fabricObj = ObjectFactory.fromCanvasObject(obj);
       // fabricCanvas.add(fabricObj);
@@ -206,6 +216,9 @@ export class SyncManager {
 
       // Update Zustand store
       usePaperboxStore.getState()._removeObject(row.id);
+
+      // Remove layer metadata
+      usePaperboxStore.getState().removeLayer(row.id);
 
       // TODO (Phase II W1-2): Update Fabric.js canvas
       // const fabricObj = fabricCanvas.getObjects().find(o => o.data.id === row.id);

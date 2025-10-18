@@ -234,7 +234,7 @@ export const createCanvasSlice: StateCreator<
       lock_acquired_at: null,
     } as CanvasObject;
 
-    // Optimistic update
+    // Optimistic update - add to objects AND layers
     set(
       (state) => {
         state.objects[id] = fullObject;
@@ -242,6 +242,13 @@ export const createCanvasSlice: StateCreator<
       undefined,
       'canvas/createObjectOptimistic',
     );
+
+    // Add layer metadata for layers panel
+    get().addLayer(id, {
+      name: `${fullObject.type} ${id.slice(0, 6)}`,
+      visible: true,
+      locked: false,
+    });
 
     try {
       // Database write
@@ -366,7 +373,7 @@ export const createCanvasSlice: StateCreator<
       return;
     }
 
-    // Optimistic delete
+    // Optimistic delete from objects AND layers
     set(
       (state) => {
         ids.forEach((id) => {
@@ -377,13 +384,18 @@ export const createCanvasSlice: StateCreator<
       'canvas/deleteObjectsOptimistic',
     );
 
+    // Remove layers
+    ids.forEach((id) => {
+      get().removeLayer(id);
+    });
+
     try {
       // Database delete
       const { error } = await supabase.from('canvas_objects').delete().in('id', ids);
 
       if (error) throw error;
     } catch (error) {
-      // Rollback optimistic delete on error
+      // Rollback optimistic delete on error - restore objects AND layers
       set(
         (state) => {
           deletedObjects.forEach((obj) => {
@@ -393,6 +405,15 @@ export const createCanvasSlice: StateCreator<
         undefined,
         'canvas/deleteObjectsRollback',
       );
+
+      // Restore layers
+      deletedObjects.forEach((obj) => {
+        get().addLayer(obj.id, {
+          name: `${obj.type} ${obj.id.slice(0, 6)}`,
+          visible: true,
+          locked: false,
+        });
+      });
 
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete objects';
       console.error('Delete objects error:', error);
