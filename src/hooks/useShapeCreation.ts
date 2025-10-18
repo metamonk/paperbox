@@ -127,7 +127,7 @@ export function useShapeCreation({ fabricManager, user }: UseShapeCreationOption
       // W4.D2 FIX: Use createObject() to trigger full sync pipeline
       // This will: Zustand → SyncManager → Supabase → CanvasSyncManager → Fabric.js
       // Instead of directly calling fabricManager.addObject() which bypasses sync
-      createObject(baseObject as any)
+      createObject(baseObject as any, user.id)
         .then(() => {
           console.log('[useShapeCreation] Object created and synced to database');
 
