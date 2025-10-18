@@ -1107,10 +1107,13 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ **CRITICAL FIX 1**: useShapeCreation now uses createObject() for proper DB sync
   - ✅ **CRITICAL FIX 2**: Fixed 400 error - pass userId to createObject(object, userId)
   - ✅ **CRITICAL FIX 3**: Fixed UUID compatibility - use crypto.randomUUID() instead of nanoid()
+  - ✅ **CRITICAL FIX 4**: Added subscribeWithSelector middleware to enable Zustand subscriptions
   - ✅ Objects now persist to database and sync across users
+  - ✅ Shape placement fully working (objects appear on canvas)
+  - ✅ Realtime collaboration sync operational
   - ✅ TypeScript compilation passing
   - ✅ HMR working without errors
-  - ✅ Commits: `362dfec` (wiring) + `7b2975d` (sync) + `f2da24b` (userId) + `6475f31` (UUID)
+  - ✅ Commits: `362dfec` (wiring) + `7b2975d` (sync) + `f2da24b` (userId) + `6475f31` (UUID) + `8ee558d` (middleware)
 
 ### Day 3: Layers Panel (6-9h)
 
