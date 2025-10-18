@@ -17,7 +17,7 @@
 
 import { usePaperboxStore } from '@/stores';
 import { TreeProvider, TreeNode } from '@/components/kibo-ui/tree';
-import { Eye, EyeOff, Lock, Unlock, Copy, Trash2, MoveUp, MoveDown, MoveToFront, MoveToBack } from 'lucide-react';
+import { Eye, EyeOff, Lock, Unlock, Copy, Trash2, MoveUp, MoveDown, ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -315,14 +315,14 @@ export function LayersPanel() {
                     onClick={() => moveToFront(node!.id)}
                     disabled={node!.locked}
                   >
-                    <MoveToFront className="mr-2 h-4 w-4" />
+                    <ArrowUpToLine className="mr-2 h-4 w-4" />
                     Bring to Front
                   </ContextMenuItem>
                   <ContextMenuItem
                     onClick={() => moveToBack(node!.id)}
                     disabled={node!.locked}
                   >
-                    <MoveToBack className="mr-2 h-4 w-4" />
+                    <ArrowDownToLine className="mr-2 h-4 w-4" />
                     Send to Back
                   </ContextMenuItem>
                   <ContextMenuItem
