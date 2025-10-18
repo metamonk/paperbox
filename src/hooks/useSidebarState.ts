@@ -9,13 +9,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-export type SidebarContent = 'users' | 'tools';
+export type SidebarContent = 'users' | 'tools' | 'properties' | 'layers';
 
 export interface UseSidebarStateResult {
   sidebarOpen: boolean;
   sidebarContent: SidebarContent;
   handleToggleTools: () => void;
   handleToggleUsers: () => void;
+  handleToggleProperties: () => void;
+  handleToggleLayers: () => void;
 }
 
 /**
@@ -32,17 +34,21 @@ export function useSidebarState(): UseSidebarStateResult {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarContent, setSidebarContent] = useState<SidebarContent>('tools');
 
-  // Auto-hide sidebar on mobile, default to tools on desktop
+  // Auto-hide sidebar on mobile, show on desktop (preserve content selection)
   useEffect(() => {
     const handleResize = () => {
       const isDesktop = window.innerWidth >= 768;
       setSidebarOpen(isDesktop);
-      if (isDesktop) {
-        setSidebarContent('tools');
-      }
+      // Don't reset content on resize - preserve user's panel selection
     };
 
-    handleResize();
+    // Initialize on mount: set default to tools on desktop, closed on mobile
+    const isDesktop = window.innerWidth >= 768;
+    setSidebarOpen(isDesktop);
+    if (isDesktop) {
+      setSidebarContent('tools');
+    }
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -77,10 +83,42 @@ export function useSidebarState(): UseSidebarStateResult {
     }
   }, [sidebarOpen, sidebarContent]);
 
+  /**
+   * Toggle properties sidebar
+   * - If already showing properties: close sidebar
+   * - If showing other content: switch to properties
+   * - If closed: open and show properties
+   */
+  const handleToggleProperties = useCallback(() => {
+    if (sidebarOpen && sidebarContent === 'properties') {
+      setSidebarOpen(false);
+    } else {
+      setSidebarOpen(true);
+      setSidebarContent('properties');
+    }
+  }, [sidebarOpen, sidebarContent]);
+
+  /**
+   * Toggle layers sidebar
+   * - If already showing layers: close sidebar
+   * - If showing other content: switch to layers
+   * - If closed: open and show layers
+   */
+  const handleToggleLayers = useCallback(() => {
+    if (sidebarOpen && sidebarContent === 'layers') {
+      setSidebarOpen(false);
+    } else {
+      setSidebarOpen(true);
+      setSidebarContent('layers');
+    }
+  }, [sidebarOpen, sidebarContent]);
+
   return {
     sidebarOpen,
     sidebarContent,
     handleToggleTools,
     handleToggleUsers,
+    handleToggleProperties,
+    handleToggleLayers,
   };
 }
