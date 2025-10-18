@@ -64,6 +64,7 @@ export type Database = {
       }
       canvas_objects: {
         Row: {
+          canvas_id: string
           created_at: string | null
           created_by: string | null
           fill: string
@@ -87,6 +88,7 @@ export type Database = {
           z_index: number | null
         }
         Insert: {
+          canvas_id: string
           created_at?: string | null
           created_by?: string | null
           fill?: string
@@ -110,6 +112,7 @@ export type Database = {
           z_index?: number | null
         }
         Update: {
+          canvas_id?: string
           created_at?: string | null
           created_by?: string | null
           fill?: string
@@ -134,6 +137,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "canvas_objects_canvas_id_fkey"
+            columns: ["canvas_id"]
+            isOneToOne: false
+            referencedRelation: "canvases"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "canvas_objects_new_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
@@ -156,6 +166,33 @@ export type Database = {
           },
         ]
       }
+      canvases: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -173,38 +210,6 @@ export type Database = {
           id?: string
         }
         Relationships: []
-      }
-      user_canvas_viewports: {
-        Row: {
-          created_at: string | null
-          id: string
-          updated_at: string | null
-          user_id: string
-          viewport_state: Json
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          updated_at?: string | null
-          user_id: string
-          viewport_state?: Json
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          updated_at?: string | null
-          user_id?: string
-          viewport_state?: Json
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_canvas_viewports_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
       }
     }
     Views: {

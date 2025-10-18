@@ -104,6 +104,17 @@ function App() {
           />
 
           {/* Protected Routes - require authentication */}
+          {/* W5.D4: Canvas routing with dynamic canvasId parameter */}
+          <Route
+            path="/canvas/:canvasId"
+            element={
+              <ProtectedRoute>
+                <CanvasPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Redirect /canvas to user's active or first canvas */}
           <Route
             path="/canvas"
             element={

@@ -18,12 +18,13 @@
   - ✅ W4.D3 Complete: Layers Panel with drag-drop reordering, rename, and context menu operations
   - ✅ W4.D4 Complete: Advanced UI components + **CRITICAL collaboration fix** (selection persistence + multi-user object visibility)
   - ✅ W4.D5 Complete: Testing & Polish (accessibility, keyboard nav, final integration)
-- 🔜 **Week 5 Next**: Multi-Canvas Architecture (CRITICAL - Figma clone foundation)
-  - Database: canvases table, canvas_id scoping
-  - State: Canvas selection, CRUD operations
-  - UI: Canvas picker, management modal
-  - Routing: /canvas/:canvasId
-  - Duration: 5 days (W5.D1-D5)
+- ✅ **Week 5 Complete**: Multi-Canvas Architecture (CRITICAL - Figma clone foundation)
+  - ✅ W5.D1 Complete: Database schema & migrations (canvases table, canvas_id scoping, RLS policies)
+  - ✅ W5.D2 Complete: State Management (Zustand canvas CRUD, canvas-scoped queries, realtime filtering)
+  - ✅ W5.D3 Complete: UI Components (CanvasPicker with ⌘K shortcut, CanvasManagementModal)
+  - ✅ W5.D4 Complete: Routing & Integration (/canvas/:canvasId with URL-state bidirectional sync)
+  - ✅ W5.D5 Complete: Testing, Polish & Documentation (W5_MULTI_CANVAS_COMPLETE.md + AI Integration)
+- 🔜 **Week 6 Next**: Color & Text Styling
 - 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---
@@ -1805,6 +1806,93 @@ All 57 features designed for AI invocation:
 - ✅ **Multi-step**: Complex commands compose simple commands
 - ✅ **Context-Aware**: Commands have access to current selection, canvas state
 - ✅ **Feedback**: Progress events for AI status updates
+
+### Canvas-Aware AI Commands (W5 Multi-Canvas Integration)
+
+**W5 Update**: All AI commands now include canvas context for multi-canvas support.
+
+**Canvas Context in Commands**:
+```typescript
+// Phase III: AI commands respect active canvas
+async function executeAICommand(naturalLanguage: string) {
+  const activeCanvasId = usePaperboxStore.getState().activeCanvasId;
+
+  // AI parses with canvas context
+  const parsed = await aiService.parse(naturalLanguage, {
+    canvasId: activeCanvasId,
+    canvasName: getCanvasName(activeCanvasId)
+  });
+
+  // Example: "Create a red circle"
+  // Implicitly targets active canvas
+  {
+    commandType: 'CreateObject',
+    params: {
+      canvas_id: activeCanvasId,  // ← Canvas-scoped
+      type: 'circle',
+      x: 100,
+      y: 100,
+      fill: '#ff0000',
+      type_properties: { radius: 50 }
+    }
+  }
+}
+```
+
+**Canvas Management Commands** (New AI Capability):
+```typescript
+// "Switch to Design System canvas"
+async function executeSwitchCanvasCommand(naturalLanguage: string) {
+  const parsed = await aiService.parse(naturalLanguage);
+
+  // Parsed result:
+  {
+    commandType: 'SwitchCanvas',
+    params: {
+      canvasName: 'Design System',
+      canvasId: 'uuid-of-design-system-canvas'
+    }
+  }
+
+  // Execute via Zustand action
+  await usePaperboxStore.getState().setActiveCanvas(parsed.params.canvasId);
+}
+
+// "Create new canvas called 'Mobile Mockups'"
+async function executeCreateCanvasCommand(naturalLanguage: string) {
+  const parsed = await aiService.parse(naturalLanguage);
+
+  // Parsed result:
+  {
+    commandType: 'CreateCanvas',
+    params: {
+      name: 'Mobile Mockups',
+      description: 'Mobile app design mockups'
+    }
+  }
+
+  // Execute via Zustand action
+  const canvas = await usePaperboxStore.getState().createCanvas(
+    parsed.params.name,
+    parsed.params.description
+  );
+
+  // Auto-switch to new canvas
+  await usePaperboxStore.getState().setActiveCanvas(canvas.id);
+}
+```
+
+**Canvas-Scoped AI Workflows**:
+1. **Object Creation**: "Create circle" → adds to `activeCanvasId`
+2. **Canvas Switching**: "Switch to Design System" → AI parses canvas name → calls `setActiveCanvas()`
+3. **Multi-Canvas Operations**: "Copy this to Mobile canvas" → AI creates duplicate in target canvas
+4. **Canvas Organization**: "List all canvases" → AI returns canvas metadata for user review
+
+**Benefits for Phase III**:
+- AI commands automatically scoped to active canvas (no ambiguity)
+- Natural language canvas management ("Show me my Design System")
+- Cross-canvas operations ("Move this to Prototype canvas")
+- Canvas-aware context ("What's in my Wireframes canvas?")
 
 ---
 

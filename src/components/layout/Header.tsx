@@ -1,4 +1,11 @@
 import { PresenceBadge } from '../collaboration/PresenceBadge';
+import { CanvasPicker } from '../canvas/CanvasPicker';
+import { CanvasManagementModal } from '../canvas/CanvasManagementModal';
+import { useState } from 'react';
+import { Settings } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { usePaperboxStore } from '@/stores';
+import type { Canvas } from '@/types/canvas';
 
 interface HeaderProps {
   userCount: number;
@@ -14,15 +21,40 @@ interface HeaderProps {
 
 /**
  * Header component displays the top navigation bar
- * - App title, tools button, and presence badge on the left
+ * - W5.D3: Canvas picker prominently placed like Figma (top-left)
+ * - App title, tools button, and presence badge
  * - User info and sign out button on the right
  */
 export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarContent, onToggleTools, onToggleUsers, onToggleProperties, onToggleLayers }: HeaderProps) {
+  // W5.D3: Canvas management modal state
+  const [managementModalOpen, setManagementModalOpen] = useState(false);
+  const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
+  const canvases = usePaperboxStore((state) => state.canvases);
+  const activeCanvas = canvases.find((c: Canvas) => c.id === activeCanvasId);
+
   return (
     <header className="h-16 bg-white border-b border-gray-200 px-4 md:px-6 flex items-center justify-between gap-4">
-      {/* Left side: Title + Tools Button + Properties Button + Presence Badge */}
+      {/* Left side: Canvas Picker (Figma-style) + Tools + Presence */}
       <div className="flex items-center gap-3">
-        <h1 className="text-xl font-bold text-gray-900">
+        {/* W5.D3: Canvas Picker - prominently placed like Figma */}
+        <div className="flex items-center gap-2">
+          <CanvasPicker />
+          {/* Settings icon to open canvas management modal */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setManagementModalOpen(true)}
+            disabled={!activeCanvas}
+            title="Canvas settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="h-6 w-px bg-gray-300" /> {/* Separator */}
+
+        <h1 className="text-xl font-bold text-gray-900 hidden md:block">
           CollabCanvas
         </h1>
 
@@ -91,6 +123,13 @@ export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarCon
           Sign Out
         </button>
       </div>
+
+      {/* W5.D3: Canvas Management Modal */}
+      <CanvasManagementModal
+        canvas={activeCanvas || null}
+        open={managementModalOpen}
+        onOpenChange={setManagementModalOpen}
+      />
     </header>
   );
 }

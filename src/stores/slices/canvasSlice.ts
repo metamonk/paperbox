@@ -22,6 +22,7 @@ import type {
   RectangleObject,
   CircleObject,
   TextObject,
+  Canvas,
 } from '../../types/canvas';
 import type { PaperboxStore } from '../index';
 import type { Database } from '../../types/database';
@@ -34,6 +35,7 @@ type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
 function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
   const base = {
     id: row.id,
+    canvas_id: row.canvas_id!,  // Multi-canvas: canvas_id is required (NOT NULL after migration 012)
     x: row.x,
     y: row.y,
     width: row.width,
@@ -81,7 +83,12 @@ export interface ViewportState {
  * Canvas slice state interface
  */
 export interface CanvasSlice {
-  // State
+  // Multi-Canvas State (W5.D2)
+  activeCanvasId: string | null;
+  canvases: Canvas[];
+  canvasesLoading: boolean;
+
+  // Object State
   objects: Record<string, CanvasObject>;
   loading: boolean;
   error: string | null;
@@ -92,13 +99,20 @@ export interface CanvasSlice {
   initialize: (userId: string) => Promise<void>;
   cleanup: () => void;
 
+  // Canvas Management (W5.D2)
+  loadCanvases: (userId: string) => Promise<void>;
+  createCanvas: (name: string, description?: string) => Promise<Canvas>;
+  updateCanvas: (id: string, updates: Partial<Pick<Canvas, 'name' | 'description'>>) => Promise<void>;
+  deleteCanvas: (id: string) => Promise<void>;
+  setActiveCanvas: (canvasId: string) => Promise<void>;
+
   // CRUD Operations (Supabase-integrated)
   createObject: (object: Partial<CanvasObject>, userId: string) => Promise<string>;
   updateObject: (id: string, updates: Partial<CanvasObject>) => Promise<void>;
   deleteObjects: (ids: string[]) => Promise<void>;
 
   // Realtime Subscriptions (W1.D4.7-4.9)
-  setupRealtimeSubscription: (userId: string) => void;
+  setupRealtimeSubscription: () => void;
   cleanupRealtimeSubscription: () => void;
 
   // Viewport Management (W2.D6.2)
@@ -142,7 +156,12 @@ export const createCanvasSlice: StateCreator<
   [],
   CanvasSlice
 > = (set, get) => ({
-  // Initial state
+  // Multi-Canvas Initial State (W5.D2)
+  activeCanvasId: null,
+  canvases: [],
+  canvasesLoading: false,
+
+  // Object Initial State
   objects: {},
   loading: false,
   error: null,
@@ -153,63 +172,35 @@ export const createCanvasSlice: StateCreator<
 
   /**
    * W1.D4.2-3: Initialize canvas store from Supabase
+   * W5.D2.3: DEPRECATED - Use loadCanvases() → setActiveCanvas() workflow instead
    *
-   * Fetches all canvas_objects from database and populates store
-   * W1.D4.8: Setup realtime subscription after data load
+   * This function is kept for backward compatibility during migration.
+   * It will load canvases and select the first one automatically.
    */
   initialize: async (userId: string) => {
     set({ loading: true, error: null }, undefined, 'canvas/initialize');
 
+    console.warn('[canvasSlice] initialize() is deprecated. Use loadCanvases() → setActiveCanvas() instead.');
+
     try {
-      // CRITICAL FIX: Remove user filter to enable collaboration
-      // All authenticated users can see all objects (single global canvas model)
-      // Future: Add canvas_id filter when multi-canvas architecture implemented (Phase III)
-      const { data, error } = await supabase
-        .from('canvas_objects')
-        .select('*');
-        // Removed: .eq('created_by', userId) - was breaking collaboration!
+      // W5.D2: Load user's canvases first
+      await get().loadCanvases(userId);
 
-      if (error) throw error;
+      // Auto-select first canvas or create default if none exists
+      const canvases = get().canvases;
+      if (canvases.length === 0) {
+        console.log('[canvasSlice] No canvases found, creating default canvas...');
+        const defaultCanvas = await get().createCanvas('My Canvas', 'Default canvas');
+        await get().setActiveCanvas(defaultCanvas.id);
+        return;
+      }
 
-      // Convert array to Record<id, CanvasObject>
-      const objectsMap = (data || []).reduce(
-        (acc, row) => {
-          const obj = dbToCanvasObject(row as DbCanvasObject);
-          acc[obj.id] = obj;
-          return acc;
-        },
-        {} as Record<string, CanvasObject>,
-      );
+      // Select first canvas
+      const firstCanvas = canvases[0];
+      console.log('[canvasSlice] Auto-selecting first canvas:', firstCanvas.id.slice(0, 8));
+      await get().setActiveCanvas(firstCanvas.id);
 
-      console.log('[canvasSlice] Database query completed:', {
-        rowCount: data?.length || 0,
-        objectCount: Object.keys(objectsMap).length,
-        objectIds: Object.keys(objectsMap),
-        objectTypes: Object.values(objectsMap).map(o => `${o.type}:${o.id.slice(0, 6)}`),
-      });
-
-      set({ objects: objectsMap, loading: false }, undefined, 'canvas/initializeSuccess');
-
-      console.log('[canvasSlice] Objects set in store, now adding layers...');
-
-      // Add layer metadata for all loaded objects
-      Object.values(objectsMap).forEach((obj) => {
-        console.log('[canvasSlice] Adding layer for loaded object:', {
-          id: obj.id.slice(0, 8),
-          type: obj.type,
-          position: `(${obj.x}, ${obj.y})`,
-        });
-        get().addLayer(obj.id, {
-          name: `${obj.type} ${obj.id.slice(0, 6)}`,
-          visible: true,
-          locked: false,
-        });
-      });
-
-      console.log('[canvasSlice] Layer metadata creation complete');
-
-      // Setup realtime subscription after successful load
-      get().setupRealtimeSubscription(userId);
+      // Note: setActiveCanvas handles object loading and realtime subscription
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load canvas objects';
       set({ error: errorMessage, loading: false }, undefined, 'canvas/initializeError');
@@ -226,6 +217,196 @@ export const createCanvasSlice: StateCreator<
     set({ objects: {}, loading: false, error: null }, undefined, 'canvas/cleanup');
   },
 
+  // ─── Canvas Management (W5.D2) ───
+
+  /**
+   * Load all canvases for a user
+   * W5.D2.2: Fetch canvases from Supabase
+   */
+  loadCanvases: async (userId: string) => {
+    set({ canvasesLoading: true }, undefined, 'canvas/loadCanvasesStart');
+
+    try {
+      const { data, error } = await supabase
+        .from('canvases')
+        .select('*')
+        .eq('owner_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      set({ canvases: data || [], canvasesLoading: false }, undefined, 'canvas/loadCanvasesSuccess');
+
+      console.log('[canvasSlice] Loaded canvases:', {
+        count: data?.length || 0,
+        canvasIds: data?.map(c => c.id.slice(0, 8)) || [],
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load canvases';
+      set({ error: errorMessage, canvasesLoading: false }, undefined, 'canvas/loadCanvasesError');
+      console.error('Load canvases error:', error);
+    }
+  },
+
+  /**
+   * Create a new canvas
+   * W5.D2.2: Create canvas with Supabase
+   */
+  createCanvas: async (name: string, description?: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    try {
+      const { data, error } = await supabase
+        .from('canvases')
+        .insert({
+          name,
+          description: description || null,
+          owner_id: user.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to local state
+      set((state) => {
+        state.canvases.push(data);
+      }, undefined, 'canvas/createCanvasSuccess');
+
+      console.log('[canvasSlice] Created canvas:', {
+        id: data.id.slice(0, 8),
+        name: data.name,
+      });
+
+      return data;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create canvas';
+      set({ error: errorMessage }, undefined, 'canvas/createCanvasError');
+      console.error('Create canvas error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Update canvas metadata (name, description)
+   * W5.D2.2: Update canvas in Supabase
+   */
+  updateCanvas: async (id: string, updates: Partial<Pick<Canvas, 'name' | 'description'>>) => {
+    try {
+      const { error } = await supabase
+        .from('canvases')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => {
+        const index = state.canvases.findIndex(c => c.id === id);
+        if (index !== -1) {
+          state.canvases[index] = { ...state.canvases[index], ...updates, updated_at: new Date().toISOString() };
+        }
+      }, undefined, 'canvas/updateCanvasSuccess');
+
+      console.log('[canvasSlice] Updated canvas:', {
+        id: id.slice(0, 8),
+        updates,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update canvas';
+      set({ error: errorMessage }, undefined, 'canvas/updateCanvasError');
+      console.error('Update canvas error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Delete a canvas (CASCADE deletes all objects)
+   * W5.D2.2: Delete canvas from Supabase
+   */
+  deleteCanvas: async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('canvases')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Remove from local state
+      set((state) => {
+        state.canvases = state.canvases.filter(c => c.id !== id);
+
+        // If deleted canvas was active, clear active canvas
+        if (state.activeCanvasId === id) {
+          state.activeCanvasId = null;
+          state.objects = {};
+        }
+      }, undefined, 'canvas/deleteCanvasSuccess');
+
+      console.log('[canvasSlice] Deleted canvas:', {
+        id: id.slice(0, 8),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete canvas';
+      set({ error: errorMessage }, undefined, 'canvas/deleteCanvasError');
+      console.error('Delete canvas error:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Set active canvas and load its objects
+   * W5.D2.3: Switch canvas context
+   */
+  setActiveCanvas: async (canvasId: string) => {
+    set({ loading: true, activeCanvasId: canvasId }, undefined, 'canvas/setActiveCanvasStart');
+
+    try {
+      // Load objects for the new canvas
+      const { data, error } = await supabase
+        .from('canvas_objects')
+        .select('*')
+        .eq('canvas_id', canvasId);  // W5.D2.3: Canvas scoping
+
+      if (error) throw error;
+
+      // Convert array to Record<id, CanvasObject>
+      const objectsMap = (data || []).reduce(
+        (acc, row) => {
+          const obj = dbToCanvasObject(row as DbCanvasObject);
+          acc[obj.id] = obj;
+          return acc;
+        },
+        {} as Record<string, CanvasObject>,
+      );
+
+      set({ objects: objectsMap, loading: false }, undefined, 'canvas/setActiveCanvasSuccess');
+
+      console.log('[canvasSlice] Switched to canvas:', {
+        canvasId: canvasId.slice(0, 8),
+        objectCount: Object.keys(objectsMap).length,
+      });
+
+      // Add layer metadata for all loaded objects
+      Object.values(objectsMap).forEach((obj) => {
+        get().addLayer(obj.id, {
+          name: `${obj.type} ${obj.id.slice(0, 6)}`,
+          visible: true,
+          locked: false,
+        });
+      });
+
+      // Setup realtime subscription for this canvas
+      get().setupRealtimeSubscription();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to switch canvas';
+      set({ error: errorMessage, loading: false }, undefined, 'canvas/setActiveCanvasError');
+      console.error('Set active canvas error:', error);
+    }
+  },
+
   // ─── CRUD Operations (Supabase-integrated) ───
 
   /**
@@ -237,11 +418,18 @@ export const createCanvasSlice: StateCreator<
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    // W5.D2.3: Ensure active canvas is set before creating objects
+    const activeCanvasId = get().activeCanvasId;
+    if (!activeCanvasId) {
+      throw new Error('No active canvas selected. Please select or create a canvas first.');
+    }
+
     // Create full object with defaults
     // Type assertion needed due to discriminated union complexity
     const fullObject = {
       id,
       type: object.type!,
+      canvas_id: activeCanvasId, // W5.D2.3: Canvas scoping
       x: object.x ?? 100,
       y: object.y ?? 100,
       width: object.width ?? 100,
@@ -285,6 +473,7 @@ export const createCanvasSlice: StateCreator<
       const { error } = await supabase.from('canvas_objects').insert({
         id: fullObject.id,
         type: fullObject.type,
+        canvas_id: fullObject.canvas_id, // W5.D2.3: Canvas scoping
         x: fullObject.x,
         y: fullObject.y,
         width: fullObject.width,
@@ -590,27 +779,34 @@ export const createCanvasSlice: StateCreator<
 
   /**
    * W1.D4.8: Setup realtime subscription for postgres_changes
+   * W5.D2.3: Updated to filter by canvas_id for multi-canvas architecture
    *
    * Subscribes to INSERT, UPDATE, DELETE events on canvas_objects table
-   * CRITICAL FIX: Removed user filter to enable realtime collaboration
-   * All authenticated users now see ALL object changes in real-time (single global canvas)
-   * Future: Add canvas_id filter when multi-canvas architecture implemented (Phase III)
+   * Filters by active canvas to only receive updates for current workspace
    */
-  setupRealtimeSubscription: (_userId: string) => {
+  setupRealtimeSubscription: () => {
     // Cleanup existing subscription first
     get().cleanupRealtimeSubscription();
 
-    // CRITICAL FIX: Listen to ALL canvas_objects changes for collaboration
-    // Previously filtered by created_by=eq.${userId} - was breaking multi-user sync!
+    // W5.D2.3: Get active canvas ID
+    const activeCanvasId = get().activeCanvasId;
+    if (!activeCanvasId) {
+      console.warn('[canvasSlice] Cannot setup realtime subscription: no active canvas');
+      return;
+    }
+
+    console.log('[canvasSlice] Setting up realtime subscription for canvas:', activeCanvasId.slice(0, 8));
+
+    // W5.D2.3: Listen to canvas_objects changes for active canvas only
     const channel = supabase
-      .channel('canvas-changes')
+      .channel(`canvas-changes-${activeCanvasId}`)
       .on(
         'postgres_changes',
         {
           event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'canvas_objects',
-          // Removed: filter: `created_by=eq.${userId}` - was breaking realtime collaboration!
+          filter: `canvas_id=eq.${activeCanvasId}`, // W5.D2.3: Canvas scoping
         },
         (payload) => {
           const { eventType, new: newRecord, old: oldRecord } = payload;
@@ -692,19 +888,24 @@ export const createCanvasSlice: StateCreator<
     }
 
     viewportSaveTimer = setTimeout(async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+      // TODO W5.D3: Re-implement viewport persistence for multi-canvas architecture
+      // Need to save viewport per canvas, not per user
+      // Will be implemented as part of canvas-scoped viewport persistence
+      console.log('[canvasSlice] Viewport persistence disabled - will be reimplemented for multi-canvas');
 
-        await supabase
-          .from('user_canvas_viewports')
-          .upsert({
-            user_id: user.id,
-            viewport_state: { zoom, panX, panY },
-          });
-      } catch (error) {
-        console.warn('Failed to save viewport to PostgreSQL:', error);
-      }
+      // try {
+      //   const { data: { user } } = await supabase.auth.getUser();
+      //   if (!user) return;
+      //
+      //   await supabase
+      //     .from('user_canvas_viewports')
+      //     .upsert({
+      //       user_id: user.id,
+      //       viewport_state: { zoom, panX, panY },
+      //     });
+      // } catch (error) {
+      //   console.warn('Failed to save viewport to PostgreSQL:', error);
+      // }
     }, VIEWPORT_SAVE_DEBOUNCE_MS);
   },
 
@@ -757,32 +958,36 @@ export const createCanvasSlice: StateCreator<
 
   /**
    * W2.D7.4: Load viewport from PostgreSQL
+   * TODO W5.D3: Re-implement for multi-canvas architecture
    *
-   * Called during canvas initialization (after auth)
-   * Falls back to localStorage/default if PostgreSQL unavailable
+   * Temporarily disabled - viewport persistence will be canvas-scoped
+   * Falls back to localStorage only for now
    */
   loadViewportFromPostgreSQL: async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    console.log('[canvasSlice] PostgreSQL viewport load disabled - will be reimplemented for multi-canvas');
+    return;
 
-      const { data, error } = await supabase
-        .from('user_canvas_viewports')
-        .select('viewport_state')
-        .eq('user_id', user.id)
-        .single();
-
-      if (error || !data) return;
-
-      const viewport = data.viewport_state as unknown as ViewportState;
-      set(
-        { viewport },
-        undefined,
-        'canvas/loadViewportFromPostgreSQL',
-      );
-    } catch (error) {
-      console.warn('Failed to load viewport from PostgreSQL:', error);
-    }
+    // try {
+    //   const { data: { user } } = await supabase.auth.getUser();
+    //   if (!user) return;
+    //
+    //   const { data, error } = await supabase
+    //     .from('user_canvas_viewports')
+    //     .select('viewport_state')
+    //     .eq('user_id', user.id)
+    //     .single();
+    //
+    //   if (error || !data) return;
+    //
+    //   const viewport = data.viewport_state as unknown as ViewportState;
+    //   set(
+    //     { viewport },
+    //     undefined,
+    //     'canvas/loadViewportFromPostgreSQL',
+    //   );
+    // } catch (error) {
+    //   console.warn('Failed to load viewport from PostgreSQL:', error);
+    // }
   },
 
   /**

@@ -12,20 +12,36 @@ export type ShapeType = 'rectangle' | 'circle' | 'text';
 export type ToolMode = 'select' | 'hand';
 
 /**
+ * Canvas workspace metadata
+ * Each canvas is an isolated design workspace (Figma-style multi-canvas architecture)
+ */
+export interface Canvas {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * Base properties all shapes share
  * These are stored as columns for fast indexed queries
  */
 export interface BaseCanvasObject {
   id: string;
   type: ShapeType;
-  
+
+  // Canvas scoping (multi-canvas architecture)
+  canvas_id: string;
+
   // Core geometry (always present)
   x: number;
   y: number;
   width: number;
   height: number;
   rotation: number;
-  
+
   // Hierarchy & organization
   group_id: string | null;
   z_index: number;
