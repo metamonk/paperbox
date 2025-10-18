@@ -66,7 +66,9 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
   const fabricManagerRef = useRef<FabricCanvasManager | null>(null);
   const navigationShortcutsRef = useRef<NavigationShortcuts | null>(null);
 
-  const initializeCanvas = usePaperboxStore((state) => state.initialize);
+  // W5: Multi-canvas API (loadCanvases + setActiveCanvas replaces deprecated initialize)
+  const loadCanvases = usePaperboxStore((state) => state.loadCanvases);
+  const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
   const storeError = usePaperboxStore((state) => state.error);
 
   useEffect(() => {
@@ -97,16 +99,25 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         setFabricManager(fabric);
         console.log('[useCanvasSync] FabricCanvasManager initialized');
 
-        // Step 2: Initialize Zustand store (fetch objects from Supabase)
-        console.log('[useCanvasSync] Fetching canvas objects from Supabase...');
-        await initializeCanvas(user.id);
+        // Step 2: Load canvases from database (W5: Multi-canvas architecture)
+        console.log('[useCanvasSync] Loading canvases from Supabase...');
+        await loadCanvases(user.id);
 
         if (!mounted) {
           fabric.dispose();
           return;
         }
 
-        console.log('[useCanvasSync] Canvas objects loaded');
+        // Step 2b: Set active canvas (first canvas or create default if none exist)
+        const currentCanvases = usePaperboxStore.getState().canvases;
+        const currentActiveId = usePaperboxStore.getState().activeCanvasId;
+
+        if (currentCanvases.length > 0 && !currentActiveId) {
+          console.log('[useCanvasSync] Setting active canvas:', currentCanvases[0].id);
+          await setActiveCanvas(currentCanvases[0].id);
+        }
+
+        console.log('[useCanvasSync] Canvases loaded and active canvas set');
 
         // Step 3: Setup Supabase→Zustand realtime subscription (SyncManager)
         console.log('[useCanvasSync] Setting up Supabase realtime subscription...');
@@ -216,7 +227,7 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         setFabricManager(null);
       }
     };
-  }, [user?.id, canvasElement, initializeCanvas]);
+  }, [user?.id, canvasElement, loadCanvases, setActiveCanvas]);
 
   // Propagate store errors to hook state
   useEffect(() => {
