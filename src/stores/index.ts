@@ -15,7 +15,7 @@
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { devtools } from 'zustand/middleware';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
 
 import { createCanvasSlice, type CanvasSlice } from './slices/canvasSlice';
 import { createSelectionSlice, type SelectionSlice } from './slices/selectionSlice';
@@ -38,21 +38,24 @@ export type PaperboxStore = CanvasSlice &
  * Main Paperbox store with all slices
  *
  * Features:
+ * - subscribeWithSelector middleware for selective subscriptions (required by CanvasSyncManager)
  * - Immer middleware for mutable-style updates
  * - DevTools integration for debugging
  * - Modular slice pattern for maintainability
  */
 export const usePaperboxStore = create<PaperboxStore>()(
-  devtools(
-    immer((...args) => ({
-      ...createCanvasSlice(...args),
-      ...createSelectionSlice(...args),
-      ...createHistorySlice(...args),
-      ...createLayersSlice(...args),
-      ...createToolsSlice(...args),
-      ...createCollaborationSlice(...args),
-    })),
-    { name: 'paperbox-store' },
+  subscribeWithSelector(
+    devtools(
+      immer((...args) => ({
+        ...createCanvasSlice(...args),
+        ...createSelectionSlice(...args),
+        ...createHistorySlice(...args),
+        ...createLayersSlice(...args),
+        ...createToolsSlice(...args),
+        ...createCollaborationSlice(...args),
+      })),
+      { name: 'paperbox-store' },
+    ),
   ),
 );
 
