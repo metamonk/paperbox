@@ -164,6 +164,9 @@ export class CanvasSyncManager {
       },
 
       onSelectionCreated: (targets: FabricObject[]) => {
+        // CRITICAL FIX: Prevent selection events during programmatic updates
+        if (this._isSyncingFromStore) return;
+
         console.log('[CanvasSyncManager] 🎯 onSelectionCreated handler called', {
           targetCount: targets.length,
           targets
@@ -176,6 +179,9 @@ export class CanvasSyncManager {
       },
 
       onSelectionUpdated: (targets: FabricObject[]) => {
+        // CRITICAL FIX: Prevent selection events during programmatic updates
+        if (this._isSyncingFromStore) return;
+
         console.log('[CanvasSyncManager] 🎯 onSelectionUpdated handler called', {
           targetCount: targets.length,
           targets
@@ -188,6 +194,9 @@ export class CanvasSyncManager {
       },
 
       onSelectionCleared: () => {
+        // CRITICAL FIX: Prevent selection events during programmatic updates
+        if (this._isSyncingFromStore) return;
+
         console.log('[CanvasSyncManager] 🎯 onSelectionCleared handler called');
         console.log('[CanvasSyncManager] Calling store.deselectAll()');
         this.store.getState().deselectAll();
@@ -347,8 +356,11 @@ export class CanvasSyncManager {
       current.rotation !== prev.rotation ||
       current.opacity !== prev.opacity ||
       current.fill !== prev.fill ||
+      current.stroke !== prev.stroke || // FIX #2: Add stroke detection
+      current.stroke_width !== prev.stroke_width || // FIX #2: Add stroke_width detection
       current.locked_by !== prev.locked_by ||
-      JSON.stringify(current.type_properties) !== JSON.stringify(prev.type_properties)
+      JSON.stringify(current.type_properties) !== JSON.stringify(prev.type_properties) ||
+      JSON.stringify(current.style_properties) !== JSON.stringify(prev.style_properties) // FIX #2: Add style_properties detection
     );
   }
 
