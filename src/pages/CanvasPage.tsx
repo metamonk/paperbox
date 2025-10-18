@@ -21,13 +21,15 @@ export function CanvasPage() {
   const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
 
   /**
-   * W5.D4: URL-Canvas State Synchronization
+   * W5.D4: URL-Canvas State Synchronization (SINGLE SOURCE OF TRUTH: URL)
+   *
+   * Strategy: URL is the source of truth, store follows URL
+   * This prevents circular updates between URL and store
    *
    * Scenarios:
    * 1. /canvas (no ID) → Redirect to /canvas/:activeCanvasId or /canvas/:firstCanvasId
-   * 2. /canvas/:canvasId (valid ID) → Set as active canvas in store
+   * 2. /canvas/:canvasId (valid ID) → Set as active canvas in store (if different)
    * 3. /canvas/:canvasId (invalid ID) → Redirect to /canvas/:activeCanvasId or first canvas
-   * 4. Store activeCanvasId changes → Update URL to match
    */
   useEffect(() => {
     // Wait for canvases to load
@@ -52,26 +54,12 @@ export function CanvasPage() {
       return;
     }
 
-    // Scenario 2: Valid canvasId in URL → Sync with store if different
+    // Scenario 2: Valid canvasId in URL → Sync store to match URL (URL is source of truth)
     if (canvasId !== activeCanvasId) {
-      console.log('[CanvasPage] URL canvasId differs from store, updating store:', canvasId);
+      console.log('[CanvasPage] Syncing store to match URL:', canvasId);
       setActiveCanvas(canvasId);
     }
   }, [canvasId, activeCanvasId, canvases, canvasesLoading, navigate, setActiveCanvas]);
-
-  /**
-   * Scenario 4: Store activeCanvasId changes → Update URL to match
-   * This handles CanvasPicker selection and other programmatic canvas switches
-   */
-  useEffect(() => {
-    if (canvasesLoading || !activeCanvasId) return;
-
-    // If URL doesn't match store, update URL (unless we're already navigating)
-    if (canvasId && canvasId !== activeCanvasId) {
-      console.log('[CanvasPage] Store activeCanvasId changed, updating URL:', activeCanvasId);
-      navigate(`/canvas/${activeCanvasId}`, { replace: true });
-    }
-  }, [activeCanvasId, canvasId, canvasesLoading, navigate]);
 
   // Show loading state while canvases load
   if (canvasesLoading) {
