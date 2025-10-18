@@ -59,7 +59,15 @@ export function ColorProperty({ label, value, onChange }: ColorPropertyProps) {
               aria-label={`Pick ${label.toLowerCase()} color`}
             />
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-3">
+          <PopoverContent
+            className="w-auto p-3"
+            onMouseDown={(e) => {
+              // W4.D4 CRITICAL FIX: Prevent Fabric.js deselection when clicking color picker
+              // PopoverContent renders in a portal (document.body), outside PropertyPanel tree
+              // PropertyPanel's stopPropagation doesn't affect portal content
+              e.stopPropagation();
+            }}
+          >
             <HexColorPicker color={color} onChange={handleColorChange} />
           </PopoverContent>
         </Popover>

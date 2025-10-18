@@ -1,9 +1,10 @@
 # Phase II Master Task List
 
-**Total Tasks**: ~370
+**Total Tasks**: ~260 (optimized from 370)
 **Duration**: 12 weeks (60 working days)
-**Approach**: TDD (Red → Green → Refactor)
-**Documentation**: Context7 integrated at critical points
+**Approach**: Implementation-First (Context7 → Build → Test → Document)
+**Testing**: Focused integration tests (>80% coverage target, not 100%)
+**Quality**: Architecture robustness for AI integration (Phase III)
 
 **How to Use**: See [TASK_TRACKING_GUIDE.md](./TASK_TRACKING_GUIDE.md) for filtering and workflow patterns
 
@@ -15,9 +16,9 @@
 - `[→]` = In Progress
 - `[✓]` = Completed
 - `[Context7]` = Documentation fetch required
-- `[RED]` = TDD: Write failing test
-- `[GREEN]` = TDD: Implement to pass test
-- `[REFACTOR]` = TDD: Clean up code
+- `[IMPLEMENT]` = Build feature directly
+- `[INTEGRATE]` = Test integration workflows
+- `[POLISH]` = Refine UX and performance
 - `[TEST]` = Execute /sc:test command
 - `[VALIDATE]` = Quality gate checkpoint
 - `[COMMIT]` = Git commit point
@@ -1115,7 +1116,7 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ HMR working without errors
   - ✅ Commits: `362dfec` (wiring) + `7b2975d` (sync) + `f2da24b` (userId) + `6475f31` (UUID) + `8ee558d` (middleware)
 
-### Day 3: Layers Panel (6-9h)
+### Day 3: Layers Panel (6-9h) ✅ COMPLETE
 
 - [✅] **W4.D3.1-3**: Implement Kibo Tree for layers panel
   - ✅ Built LayersPanel component with Kibo Tree integration
@@ -1150,21 +1151,27 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - ✅ Disabled state for locked layers
   - ✅ Destructive styling for delete action
 
-### Day 4: Advanced UI Components (4-6h)
+**Status**: ✅ COMPLETE - All layers panel functionality implemented and working
 
-- [ ] **W4.D4.1-3**: Enhanced toolbar with tooltips
+### Day 4: Advanced UI Components (4-6h) ✅ COMPLETE
+
+- [✅] **W4.D4.1-3**: Enhanced toolbar with tooltips
   - shadcn Tooltip on all buttons
   - Keyboard shortcut badges (shadcn Kbd)
+  - Already implemented in W4.D1, verified in W4.D4
 
-- [ ] **W4.D4.4-6**: Build component library browser (optional)
+- [⏭️] **W4.D4.4-6**: Build component library browser (optional - SKIPPED)
   - Use Kibo Tree for component palette
   - Drag-drop components to canvas
+  - Deferred to future enhancement
 
-- [ ] **W4.D4.7-10**: Z-index management commands
-  - Bring to front
-  - Send to back
-  - Bring forward / Send backward
-  - Wire to layersSlice
+- [✅] **W4.D4.7-10**: Z-index management commands
+  - Bring to front (Cmd/Ctrl + ])
+  - Send to back (Cmd/Ctrl + [)
+  - Bring forward / Send backward (Cmd/Ctrl + Shift + ] / [)
+  - Fully wired to layersSlice with UI buttons and keyboard shortcuts
+
+**Status**: ✅ COMPLETE - Tooltips verified, z-index commands implemented, test button removed, selection persistence fixed
 
 ### Day 5: Testing & Polish (6-8h)
 
@@ -1201,10 +1208,293 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
 ---
 
 # ═══════════════════════════════════════════════════════
-# WEEK 5-6: STYLING & FORMATTING (PARALLEL EXECUTION)
+# WEEK 5: MULTI-CANVAS ARCHITECTURE (CRITICAL FOUNDATION)
 # ═══════════════════════════════════════════════════════
 
-## ─── Week 5: Color & Text Styling ───
+**Status**: 🔜 **NEXT** - Critical Figma clone foundation before AI integration
+**Rationale**: Multi-canvas architecture MUST be in Phase II to:
+  1. Align with PRD goal: "Feature-complete Figma clone" (Figma = multiple design files)
+  2. Prevent technical debt (adding after AI requires retrofitting all commands)
+  3. Enable proper workspace organization (projects, teams, design systems)
+  4. Provide clean foundation for Phase III AI integration
+**Duration**: 5 days (W5.D1-D5)
+**Impact**: 12 files modified, clean architecture, enables professional UX
+
+**Architecture Decision**: [CRITICAL_MULTI_CANVAS_ARCHITECTURE_GAP.md](../claudedocs/CRITICAL_MULTI_CANVAS_ARCHITECTURE_GAP.md)
+**PRD Reference**: [PHASE_2_PRD.md#multi-canvas-architecture](./PHASE_2_PRD.md#multi-canvas-architecture-week-5)
+
+---
+
+## ─── Week 5, Day 1: Database Schema & Migrations ───
+
+### Morning Block (4 hours)
+
+- [ ] **W5.D1.1**: [Context7] Fetch Supabase migration patterns
+  - Topic: PostgreSQL migrations, foreign keys, RLS policies
+  - Focus: Safe schema changes, data migration strategies
+
+- [ ] **W5.D1.2**: Create canvases table migration
+  - File: `supabase/migrations/003_canvases_table.sql`
+  - Table structure:
+    ```sql
+    CREATE TABLE canvases (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      name TEXT NOT NULL,
+      description TEXT,
+      owner_id UUID REFERENCES auth.users(id) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    ```
+  - Indexes: owner_id, created_at
+  - RLS policies: View own canvases, insert own canvases
+
+- [ ] **W5.D1.3**: Add canvas_id to canvas_objects
+  - File: `supabase/migrations/004_canvas_objects_canvas_id.sql`
+  - Add column: `canvas_id UUID REFERENCES canvases(id) ON DELETE CASCADE`
+  - Create index on canvas_id for query performance
+  - **Migration strategy**: Create "Default Canvas" and assign all existing objects
+
+- [ ] **W5.D1.4**: Update RLS policies for canvas scoping
+  - Modify canvas_objects SELECT policy to filter by canvas ownership
+  - Add canvas-based INSERT/UPDATE/DELETE policies
+  - Test policies with multiple users/canvases
+
+### Afternoon Block (4 hours)
+
+- [ ] **W5.D1.5**: Write migration for default canvas creation
+  - File: `supabase/migrations/005_default_canvas_migration.sql`
+  - For each user: Create "Default Canvas"
+  - Assign all existing canvas_objects to user's default canvas
+  - Validate: All objects have valid canvas_id
+
+- [ ] **W5.D1.6**: Test migrations locally
+  - Reset local database: `pnpm supabase db reset`
+  - Verify tables created correctly
+  - Verify RLS policies work
+  - Test with multiple user accounts
+
+- [ ] **W5.D1.7**: Create TypeScript types for canvases
+  - File: `src/types/canvas.ts`
+  - Types: `Canvas`, `DbCanvas`, `CanvasCreateInput`, `CanvasUpdateInput`
+  - Export from main types file
+
+- [ ] **W5.D1.8**: Document database schema changes
+  - File: `claudedocs/W5_MULTI_CANVAS_DATABASE_SCHEMA.md`
+  - Schema diagrams, RLS policy explanations
+  - Migration instructions for production
+
+---
+
+## ─── Week 5, Day 2: State Management (Zustand) ───
+
+### Morning Block (4 hours)
+
+- [ ] **W5.D2.1**: Extend canvasSlice for canvas management
+  - Add state: `activeCanvasId: string | null`, `canvases: Canvas[]`
+  - Add actions: `setActiveCanvas()`, `addCanvas()`, `updateCanvas()`, `removeCanvas()`
+  - Maintain backward compatibility with existing object operations
+
+- [ ] **W5.D2.2**: Implement canvas CRUD operations
+  - `loadCanvases(userId)`: Fetch all user's canvases
+  - `createCanvas(name, description)`: Create new canvas
+  - `updateCanvas(id, updates)`: Update canvas metadata
+  - `deleteCanvas(id)`: Delete canvas (with cascade)
+
+- [ ] **W5.D2.3**: Update object queries to filter by canvas_id
+  - Modify `initialize()`: Add `.eq('canvas_id', activeCanvasId)`
+  - Modify `loadCanvasObjects()`: Filter by active canvas
+  - Handle canvas switching: Clear objects → Load new canvas objects
+
+- [ ] **W5.D2.4**: Update realtime subscription for canvas scoping
+  - Modify `setupRealtimeSubscription()`: Add canvas_id filter
+  - On canvas switch: Cleanup old subscription → Setup new subscription
+  - Test: Users only see objects from active canvas
+
+### Afternoon Block (4 hours)
+
+- [ ] **W5.D2.5**: Write tests for canvas state management
+  - Test: Load canvases for user
+  - Test: Create/update/delete canvas
+  - Test: Switch active canvas
+  - Test: Objects filtered by active canvas
+  - Target: >80% coverage for new canvas code
+
+- [ ] **W5.D2.6**: Implement optimistic updates for canvas operations
+  - Create canvas: Immediately add to state, rollback on error
+  - Update canvas: Optimistic update, rollback on error
+  - Delete canvas: Optimistic removal, rollback on error
+
+- [ ] **W5.D2.7**: Add canvas selection persistence
+  - Store `activeCanvasId` in localStorage
+  - On app load: Restore last active canvas
+  - Fallback: Default to first canvas or create new one
+
+- [ ] **W5.D2.8**: Document canvas state architecture
+  - File: `claudedocs/W5_CANVAS_STATE_MANAGEMENT.md`
+  - State flow diagrams, API documentation
+  - Migration guide from single-canvas to multi-canvas
+
+---
+
+## ─── Week 5, Day 3: UI Components ───
+
+### Morning Block (4 hours)
+
+- [ ] **W5.D3.1**: [Context7] Fetch shadcn/ui command palette patterns
+  - Topic: Combobox, command menu, dialog patterns
+  - Focus: Canvas picker/switcher UX
+
+- [ ] **W5.D3.2**: Create CanvasPicker component
+  - File: `src/components/canvas/CanvasPicker.tsx`
+  - UI: Dropdown with canvas list, search, "New Canvas" button
+  - Features: Display canvas name, creation date, owner
+  - Keyboard: ⌘K to open, arrow keys to navigate, Enter to select
+
+- [ ] **W5.D3.3**: Create CanvasManagementModal component
+  - File: `src/components/canvas/CanvasManagementModal.tsx`
+  - UI: Dialog with canvas list, create/rename/delete actions
+  - Form: Canvas name (required), description (optional)
+  - Validation: Non-empty name, max length constraints
+
+- [ ] **W5.D3.4**: Integrate CanvasPicker into AppLayout
+  - Position: Top-left of canvas area (like Figma)
+  - Show active canvas name prominently
+  - Click to open picker dropdown
+  - Keyboard shortcut: ⌘K or Ctrl+K
+
+### Afternoon Block (4 hours)
+
+- [ ] **W5.D3.5**: Create CanvasListView component (optional)
+  - File: `src/components/canvas/CanvasListView.tsx`
+  - UI: Grid/list view of all canvases with thumbnails
+  - Features: Sort by name/date, filter, bulk actions
+  - Consider: May defer to later if time-constrained
+
+- [ ] **W5.D3.6**: Add canvas context menu actions
+  - Right-click canvas in picker: Rename, Duplicate, Delete
+  - Confirm deletion with dialog: "Delete [Canvas Name]?"
+  - Show object count in deletion warning
+
+- [ ] **W5.D3.7**: Style canvas picker to match design system
+  - Use shadcn/ui Popover + Command components
+  - Match Figma's canvas switcher aesthetics
+  - Ensure mobile-responsive (if applicable)
+
+- [ ] **W5.D3.8**: Test canvas UI components
+  - Manual testing: Create, switch, rename, delete canvases
+  - Keyboard navigation testing
+  - Accessibility testing (screen reader, keyboard-only)
+
+---
+
+## ─── Week 5, Day 4: Routing & Integration ───
+
+### Morning Block (4 hours)
+
+- [ ] **W5.D4.1**: [Context7] Fetch React Router dynamic routing patterns
+  - Topic: Route parameters, nested routes, URL state sync
+  - Focus: /canvas/:canvasId pattern
+
+- [ ] **W5.D4.2**: Implement canvas routing
+  - Route: `/canvas/:canvasId`
+  - Update App.tsx or Router.tsx with canvas routes
+  - Default route: Redirect to user's last active or first canvas
+
+- [ ] **W5.D4.3**: Sync active canvas with URL
+  - On route change: Update activeCanvasId in Zustand
+  - On canvas switch: Navigate to `/canvas/:canvasId`
+  - Handle invalid canvas IDs: Redirect to default canvas
+
+- [ ] **W5.D4.4**: Update Canvas component for canvas-aware initialization
+  - Read canvasId from route params
+  - Load canvas metadata and objects
+  - Show loading state during canvas switch
+
+### Afternoon Block (4 hours)
+
+- [ ] **W5.D4.5**: Implement canvas switching logic
+  - On switch: Cleanup current canvas (unsubscribe realtime)
+  - Load new canvas objects
+  - Setup new realtime subscription
+  - Smooth transition without flicker
+
+- [ ] **W5.D4.6**: Handle edge cases
+  - Canvas not found: Show 404 or redirect to default
+  - No canvases exist: Auto-create "My First Canvas"
+  - Canvas deleted while viewing: Redirect gracefully
+  - Concurrent canvas access: Multiple tabs/users
+
+- [ ] **W5.D4.7**: Add canvas breadcrumb navigation
+  - Show: Home > [Canvas Name] > Objects
+  - Clickable breadcrumb to navigate back
+  - Consider: May defer if time-constrained
+
+- [ ] **W5.D4.8**: Test routing and navigation
+  - Test: URL sync with active canvas
+  - Test: Browser back/forward buttons work correctly
+  - Test: Direct URL access to `/canvas/:canvasId`
+  - Test: Invalid canvas ID handling
+
+---
+
+## ─── Week 5, Day 5: Testing, Polish & Documentation ───
+
+### Morning Block (4 hours)
+
+- [ ] **W5.D5.1**: Integration testing for multi-canvas flow
+  - Test: Create canvas → Add objects → Switch canvas → Verify isolation
+  - Test: Delete canvas → Verify objects cascade deleted
+  - Test: Realtime sync scoped to active canvas
+  - Test: Multiple users on different canvases (independent)
+
+- [ ] **W5.D5.2**: Performance testing with multiple canvases
+  - Test: 10+ canvases, 100+ objects each
+  - Measure: Canvas switch latency, query performance
+  - Optimize: Add indexes, optimize queries if needed
+
+- [ ] **W5.D5.3**: Fix any bugs discovered in testing
+  - Prioritize: Critical bugs (data loss, crashes)
+  - Document: Known issues if any remain
+  - Test fixes thoroughly
+
+- [ ] **W5.D5.4**: Accessibility audit for canvas UI
+  - Screen reader testing for CanvasPicker
+  - Keyboard navigation for all canvas actions
+  - Focus management during canvas switch
+
+### Afternoon Block (4 hours)
+
+- [ ] **W5.D5.5**: Polish canvas switcher UX
+  - Animations: Smooth canvas transitions
+  - Feedback: Loading states, success/error toasts
+  - Icons: Canvas type icons (optional)
+
+- [ ] **W5.D5.6**: Create comprehensive documentation
+  - File: `claudedocs/W5_MULTI_CANVAS_COMPLETE.md`
+  - User guide: How to use multi-canvas features
+  - Developer guide: Architecture, API, extension points
+  - Migration guide: Single-canvas to multi-canvas transition
+
+- [ ] **W5.D5.7**: Update AI Integration docs for canvas scoping
+  - File: `docs/PHASE_2_PRD.md` (AI Integration section)
+  - Document: Commands now include canvas_id context
+  - Example: "Create circle" → adds to activeCanvasId
+  - Example: "Switch to Design System canvas" → AI can manage canvases
+
+- [ ] **W5.D5.8**: Week 5 commit [COMMIT]
+  - Run: `pnpm validate`
+  - Commit: `feat(canvas): Add multi-canvas architecture with workspace organization`
+  - Tag: `milestone-3-multi-canvas-complete`
+  - Documentation: Link to W5_MULTI_CANVAS_COMPLETE.md
+
+---
+
+# ═══════════════════════════════════════════════════════
+# WEEK 6-7: STYLING & FORMATTING (PARALLEL EXECUTION)
+# ═══════════════════════════════════════════════════════
+
+## ─── Week 6: Color & Text Styling ───
 
 ### Feature: Color Picker (2 days)
 - [ ] **W5.D1.1**: [Context7] Fetch color picker patterns

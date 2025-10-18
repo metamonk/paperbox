@@ -213,6 +213,7 @@ export class FabricCanvasManager {
       height,
       selection: this.config.selection,
       renderOnAddRemove: this.config.renderOnAddRemove,
+      preserveObjectStacking: true, // CRITICAL FIX: Prevent selection from bringing objects to front
     });
 
     console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
@@ -309,7 +310,10 @@ export class FabricCanvasManager {
       );
     }
 
-    this.eventHandlers = handlers;
+    // W4.D4 CRITICAL FIX: Merge handlers instead of replacing
+    // Canvas.tsx calls this with only onPlacementClick, which was overwriting
+    // selection handlers set by CanvasSyncManager, breaking selection sync
+    this.eventHandlers = { ...this.eventHandlers, ...handlers };
 
     // W4.D3: Update cursor based on placement mode
     if (handlers.onPlacementClick) {
@@ -334,22 +338,40 @@ export class FabricCanvasManager {
 
     // Selection events
     this.canvas.on('selection:created', (event) => {
+      console.log('[FabricCanvasManager] 🎯 selection:created event fired', {
+        selectedCount: event.selected?.length || 0,
+        selected: event.selected
+      });
       const targets = event.selected || [];
       if (this.eventHandlers.onSelectionCreated) {
+        console.log('[FabricCanvasManager] Calling onSelectionCreated handler');
         this.eventHandlers.onSelectionCreated(targets);
+      } else {
+        console.warn('[FabricCanvasManager] No onSelectionCreated handler registered!');
       }
     });
 
     this.canvas.on('selection:updated', (event) => {
+      console.log('[FabricCanvasManager] 🎯 selection:updated event fired', {
+        selectedCount: event.selected?.length || 0,
+        selected: event.selected
+      });
       const targets = event.selected || [];
       if (this.eventHandlers.onSelectionUpdated) {
+        console.log('[FabricCanvasManager] Calling onSelectionUpdated handler');
         this.eventHandlers.onSelectionUpdated(targets);
+      } else {
+        console.warn('[FabricCanvasManager] No onSelectionUpdated handler registered!');
       }
     });
 
     this.canvas.on('selection:cleared', () => {
+      console.log('[FabricCanvasManager] 🎯 selection:cleared event fired');
       if (this.eventHandlers.onSelectionCleared) {
+        console.log('[FabricCanvasManager] Calling onSelectionCleared handler');
         this.eventHandlers.onSelectionCleared();
+      } else {
+        console.warn('[FabricCanvasManager] No onSelectionCleared handler registered!');
       }
     });
   }
@@ -686,6 +708,137 @@ export class FabricCanvasManager {
 
     this.canvas.discardActiveObject();
     this.canvas.renderAll();
+  }
+
+  /**
+   * W4.D4: Move object to front (highest z-index)
+   *
+   * @param id - Database ID of the object to move
+   * @returns true if object was found and moved, false otherwise
+   */
+  moveToFront(id: string): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    const fabricObject = this.findObjectById(id);
+    if (!fabricObject) {
+      return false;
+    }
+
+    this.canvas.bringObjectToFront(fabricObject);
+    this.canvas.renderAll();
+    return true;
+  }
+
+  /**
+   * W4.D4: Move object to back (lowest z-index)
+   *
+   * @param id - Database ID of the object to move
+   * @returns true if object was found and moved, false otherwise
+   */
+  moveToBack(id: string): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    const fabricObject = this.findObjectById(id);
+    if (!fabricObject) {
+      return false;
+    }
+
+    this.canvas.sendObjectToBack(fabricObject);
+    this.canvas.renderAll();
+    return true;
+  }
+
+  /**
+   * W4.D4: Move object up one position
+   *
+   * @param id - Database ID of the object to move
+   * @returns true if object was found and moved, false otherwise
+   */
+  moveUp(id: string): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    const fabricObject = this.findObjectById(id);
+    if (!fabricObject) {
+      return false;
+    }
+
+    this.canvas.bringObjectForward(fabricObject);
+    this.canvas.renderAll();
+    return true;
+  }
+
+  /**
+   * W4.D4: Move object down one position
+   *
+   * @param id - Database ID of the object to move
+   * @returns true if object was found and moved, false otherwise
+   */
+  moveDown(id: string): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    const fabricObject = this.findObjectById(id);
+    if (!fabricObject) {
+      return false;
+    }
+
+    this.canvas.sendObjectBackwards(fabricObject);
+    this.canvas.renderAll();
+    return true;
+  }
+
+  /**
+   * W4.D4: Set object to specific z-index position
+   *
+   * @param id - Database ID of the object
+   * @param index - Target z-index (0 = back, higher = front)
+   * @returns true if object was found and moved, false otherwise
+   */
+  setZIndex(id: string, index: number): boolean {
+    if (!this.canvas) {
+      return false;
+    }
+
+    const fabricObject = this.findObjectById(id);
+    if (!fabricObject) {
+      return false;
+    }
+
+    // Get current objects array
+    const objects = this.canvas.getObjects();
+    const currentIndex = objects.indexOf(fabricObject);
+
+    if (currentIndex === -1) {
+      return false;
+    }
+
+    // Clamp index to valid range
+    const targetIndex = Math.max(0, Math.min(index, objects.length - 1));
+
+    // Move object to target position using Fabric's built-in methods
+    if (targetIndex > currentIndex) {
+      // Moving up (to front): use bringObjectForward repeatedly
+      const steps = targetIndex - currentIndex;
+      for (let i = 0; i < steps; i++) {
+        this.canvas.bringObjectForward(fabricObject);
+      }
+    } else if (targetIndex < currentIndex) {
+      // Moving down (to back): use sendObjectBackwards repeatedly
+      const steps = currentIndex - targetIndex;
+      for (let i = 0; i < steps; i++) {
+        this.canvas.sendObjectBackwards(fabricObject);
+      }
+    }
+
+    this.canvas.renderAll();
+    return true;
   }
 
   /**
@@ -1084,7 +1237,7 @@ export class FabricCanvasManager {
         this.handleScrollZoom(event, delta);
       } else {
         // Scroll = Pan (default Figma behavior)
-        this.handleScrollPan(event, delta);
+        this.handleScrollPan(event);
       }
     });
   }
@@ -1096,7 +1249,7 @@ export class FabricCanvasManager {
    * - Horizontal scroll = Pan left/right (trackpad horizontal scroll)
    * - Shift + Vertical Scroll = Pan left/right
    */
-  private handleScrollPan(event: WheelEvent, _delta: number) {
+  private handleScrollPan(event: WheelEvent) {
     if (!this.canvas) return;
 
     // Get both horizontal and vertical deltas

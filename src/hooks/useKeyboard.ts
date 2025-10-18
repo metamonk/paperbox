@@ -1,6 +1,8 @@
 /**
  * Keyboard shortcuts hook
  * Provides keyboard shortcut functionality for canvas operations
+ *
+ * W4.D4: Updated to support handlers that need access to KeyboardEvent for modifier keys
  */
 
 import { useEffect } from 'react';
@@ -8,15 +10,17 @@ import { useEffect } from 'react';
 /**
  * Hook to handle keyboard shortcuts
  * @param handlers - Object mapping keys to handler functions
- * 
+ * Handler functions can optionally receive KeyboardEvent to check modifier keys
+ *
  * @example
  * useKeyboard({
  *   'r': () => addShape('rectangle'),
  *   'c': () => addShape('circle'),
  *   't': () => addShape('text'),
+ *   ']': (e) => { if (e.ctrlKey) moveToFront(); },
  * });
  */
-export function useKeyboard(handlers: Record<string, () => void>) {
+export function useKeyboard(handlers: Record<string, (e?: KeyboardEvent) => void>) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input/textarea
@@ -35,7 +39,7 @@ export function useKeyboard(handlers: Record<string, () => void>) {
       // Check if we have a handler for this key
       if (handlers[key]) {
         e.preventDefault();
-        handlers[key]();
+        handlers[key](e);
       }
     };
 

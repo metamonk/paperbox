@@ -164,17 +164,34 @@ export class CanvasSyncManager {
       },
 
       onSelectionCreated: (targets: FabricObject[]) => {
+        console.log('[CanvasSyncManager] 🎯 onSelectionCreated handler called', {
+          targetCount: targets.length,
+          targets
+        });
         const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
+        console.log('[CanvasSyncManager] Extracted IDs:', ids);
+        console.log('[CanvasSyncManager] Calling store.selectObjects()');
         this.store.getState().selectObjects(ids);
+        console.log('[CanvasSyncManager] Store selectedIds after selection:', this.store.getState().selectedIds);
       },
 
       onSelectionUpdated: (targets: FabricObject[]) => {
+        console.log('[CanvasSyncManager] 🎯 onSelectionUpdated handler called', {
+          targetCount: targets.length,
+          targets
+        });
         const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
+        console.log('[CanvasSyncManager] Extracted IDs:', ids);
+        console.log('[CanvasSyncManager] Calling store.selectObjects()');
         this.store.getState().selectObjects(ids);
+        console.log('[CanvasSyncManager] Store selectedIds after selection:', this.store.getState().selectedIds);
       },
 
       onSelectionCleared: () => {
+        console.log('[CanvasSyncManager] 🎯 onSelectionCleared handler called');
+        console.log('[CanvasSyncManager] Calling store.deselectAll()');
         this.store.getState().deselectAll();
+        console.log('[CanvasSyncManager] Store selectedIds after deselection:', this.store.getState().selectedIds);
       },
     });
   }
@@ -256,10 +273,12 @@ export class CanvasSyncManager {
 
   /**
    * W4.D3: Setup layers visibility/lock sync
+   * W4.D4: Extended to sync z-index changes
    *
-   * Watches layersSlice.layers and syncs visibility/lock to Fabric.js:
+   * Watches layersSlice.layers and syncs visibility/lock/z-index to Fabric.js:
    * - Visibility changes: Update object.visible property
    * - Lock changes: Update object.selectable and evented properties
+   * - Z-index changes: Update object stacking order on canvas
    */
   private setupLayersSync(): void {
     this.store.subscribe(
@@ -269,7 +288,7 @@ export class CanvasSyncManager {
           layerCount: Object.keys(layers).length,
         });
 
-        // Check each layer for visibility/lock changes
+        // Check each layer for visibility/lock/z-index changes
         Object.entries(layers).forEach(([objectId, layer]) => {
           const prevLayer = prevLayers[objectId];
 
@@ -297,6 +316,15 @@ export class CanvasSyncManager {
             console.log(`[CanvasSyncManager] Lock change for ${objectId}:`, layer.locked);
             fabricObj.selectable = !layer.locked;
             fabricObj.evented = !layer.locked;
+          }
+
+          // W4.D4: Handle z-index change
+          if (layer.zIndex !== prevLayer.zIndex) {
+            console.log(`[CanvasSyncManager] Z-index change for ${objectId}:`, {
+              from: prevLayer.zIndex,
+              to: layer.zIndex,
+            });
+            this.fabricManager.setZIndex(objectId, layer.zIndex);
           }
         });
 

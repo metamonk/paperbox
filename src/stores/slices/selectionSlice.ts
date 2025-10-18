@@ -31,6 +31,7 @@ export interface SelectionSlice {
   // Actions
   selectObject: (id: string) => void;
   selectObjects: (ids: string[]) => void;
+  selectAll: () => void;
   deselectObject: (id: string) => void;
   deselectAll: () => void;
   toggleSelection: (id: string) => void;
@@ -83,6 +84,20 @@ export const createSelectionSlice: StateCreator<
       },
       undefined,
       'selection/selectObjects',
+    ),
+
+  /**
+   * W4.D4: Select all objects on canvas (Cmd/Ctrl+A)
+   */
+  selectAll: () =>
+    set(
+      (state) => {
+        const allObjectIds = Object.keys(get().objects);
+        state.selectedIds = allObjectIds;
+        state.activeObjectId = allObjectIds[0] || null;
+      },
+      undefined,
+      'selection/selectAll',
     ),
 
   /**

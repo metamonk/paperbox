@@ -19,29 +19,17 @@ interface ToolsSidebarProps {
   onAddShape: (type: ShapeType) => void;
   onDelete?: () => void;
   hasSelection?: boolean;
-  onTestDirectAdd?: () => void; // W2.D12 DEBUG: Bypass placement mode
+  // W4.D4: Z-index operations
+  onMoveToFront?: () => void;
+  onMoveToBack?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
-export function ToolsSidebar({ onAddShape, onDelete, hasSelection, onTestDirectAdd }: ToolsSidebarProps) {
+export function ToolsSidebar({ onAddShape, onDelete, hasSelection, onMoveToFront, onMoveToBack, onMoveUp, onMoveDown }: ToolsSidebarProps) {
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full">
-        {/* No title - per user request */}
-
-        {/* W2.D12 DEBUG: Test button to bypass placement mode */}
-        {onTestDirectAdd && (
-          <div className="p-4 border-b border-border">
-            <Button
-              onClick={onTestDirectAdd}
-              variant="outline"
-              className="w-full bg-yellow-500 text-black hover:bg-yellow-600 border-yellow-600"
-              size="sm"
-            >
-              🐛 TEST: Add Rect at 100,100
-            </Button>
-          </div>
-        )}
-
         {/* Creation tools */}
         <div className="flex-1 p-4 space-y-3">
           {/* Rectangle */}
@@ -147,6 +135,81 @@ export function ToolsSidebar({ onAddShape, onDelete, hasSelection, onTestDirectA
             <>
               <div className="py-2">
                 <Separator />
+              </div>
+
+              {/* W4.D4: Z-index controls - 2x2 grid */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={onMoveToFront}
+                      className="justify-center h-auto py-2"
+                      variant="secondary"
+                      size="sm"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2 2h8v2H4v6H2V2zm4 4h8v8H6V6z"/>
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Bring to Front (Cmd+])</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={onMoveToBack}
+                      className="justify-center h-auto py-2"
+                      variant="secondary"
+                      size="sm"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M14 14H6v-2h6V6h2v8zM2 2h8v8H2V2z"/>
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Send to Back (Cmd+[)</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={onMoveUp}
+                      className="justify-center h-auto py-2"
+                      variant="secondary"
+                      size="sm"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 3l4 4H4l4-4zm0 6l4 4H4l4-4z"/>
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Bring Forward (Cmd+Shift+])</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={onMoveDown}
+                      className="justify-center h-auto py-2"
+                      variant="secondary"
+                      size="sm"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 13l-4-4h8l-4 4zM8 7L4 3h8L8 7z"/>
+                      </svg>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Send Backward (Cmd+Shift+[)</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
 
               {/* Delete button - only shown when something is selected */}

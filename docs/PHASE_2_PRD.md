@@ -1,21 +1,29 @@
 # Phase II Product Requirements Document (PRD)
 ## Paperbox: Feature-Complete Figma Clone with AI-Ready Architecture
 
-**Document Version**: 1.1
-**Last Updated**: 2025-10-17
+**Document Version**: 1.2
+**Last Updated**: 2025-10-18
 **Phase**: II - Feature-Complete Implementation
 **Migration**: Konva.js → Fabric.js (Big Bang) ✅ COMPLETE
 **Timeline**: 12 weeks (adjusted)
+**Critical Update**: Multi-Canvas Architecture added to Phase II (Week 5)
 
 **Implementation Updates**:
 - ✅ Week 1-2 Complete: Fabric.js + Zustand + Infinite Canvas + Figma-style interactions
 - ⏭️ Week 3 Skipped: Selection/Transform (Fabric.js defaults sufficient)
-- 🔄 Week 4 In Progress: Design System (shadcn/ui + Kibo UI)
+- ✅ Week 4 Complete: Design System (shadcn/ui + Kibo UI)
   - ✅ W4.D0 Complete: Foundation installed (11 shadcn components + Kibo UI + react-colorful)
   - ✅ W4.D1 Complete: Toolbar/Sidebar migrated to shadcn, Toast replaced with Sonner, Click-to-place fixes
   - ✅ W4.D2 Complete: Property panels with real-time Zustand sync + **CRITICAL sync pipeline fix**
   - ✅ W4.D3 Complete: Layers Panel with drag-drop reordering, rename, and context menu operations
-  - 🔜 W4.D4 Next: Advanced UI components (tooltips, enhanced toolbar, z-index commands)
+  - ✅ W4.D4 Complete: Advanced UI components + **CRITICAL collaboration fix** (selection persistence + multi-user object visibility)
+  - ✅ W4.D5 Complete: Testing & Polish (accessibility, keyboard nav, final integration)
+- 🔜 **Week 5 Next**: Multi-Canvas Architecture (CRITICAL - Figma clone foundation)
+  - Database: canvases table, canvas_id scoping
+  - State: Canvas selection, CRUD operations
+  - UI: Canvas picker, management modal
+  - Routing: /canvas/:canvasId
+  - Duration: 5 days (W5.D1-D5)
 - 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---
@@ -42,13 +50,16 @@
 
 Phase II transforms Paperbox from an MVP Figma clone into a **feature-complete collaborative design tool** with 57 production-ready features. This phase focuses on:
 
-1. **Big Bang Migration**: Complete replacement of Konva.js with Fabric.js for superior canvas capabilities
-2. **State Management**: Full Zustand integration with Supabase Realtime for optimized state synchronization
-3. **Feature-Complete**: All 57 features from FOUNDATION.md implemented using DRY principles
-4. **AI-Ready Architecture**: Command pattern system enabling Phase III AI integration with minimal refactoring
-5. **Production Quality**: Performance optimization for 500+ objects and 5+ concurrent users
+1. **Big Bang Migration**: Complete replacement of Konva.js with Fabric.js for superior canvas capabilities ✅
+2. **State Management**: Full Zustand integration with Supabase Realtime for optimized state synchronization ✅
+3. **Multi-Canvas Architecture**: Foundational workspace organization enabling multiple design files (Week 5)
+4. **Feature-Complete**: All 57 features from FOUNDATION.md implemented using DRY principles
+5. **AI-Ready Architecture**: Command pattern system enabling Phase III AI integration with minimal refactoring
+6. **Production Quality**: Performance optimization for 500+ objects and 5+ concurrent users
 
-**Key Architectural Decision**: Pattern-based implementation using 8 core engines instead of 57 separate features, following DRY (Don't Repeat Yourself) principles.
+**Key Architectural Decisions**:
+- Pattern-based implementation using 8 core engines instead of 57 separate features (DRY principles)
+- Multi-canvas architecture in Phase II (before AI) to prevent technical debt and enable proper Figma-like workspace organization
 
 ---
 
@@ -62,15 +73,16 @@ Phase II transforms Paperbox from an MVP Figma clone into a **feature-complete c
 - Authentication: Supabase Auth with protected routes
 - Database: PostgreSQL with RLS policies
 
-### ❌ Not Implemented (Phase II Scope)
+### ❌ Not Implemented (Phase II Scope - Remaining)
+- **Multi-canvas architecture** (Week 5 - CRITICAL FOUNDATION)
 - Multi-select system
 - Undo/redo with history
 - Keyboard shortcuts framework
-- Layer/Z-index management
+- Layer/Z-index management (partially complete)
 - Advanced selection tools (lasso, drag-select)
-- Component system, layers panel, alignment tools
+- Component system, alignment tools
 - Export (PNG/SVG), copy/paste, grouping
-- Text formatting, color picker, design tokens
+- Text formatting, color picker (partially complete), design tokens
 - Snap-to-grid, smart guides, frames/artboards
 - Auto-layout, comments, version history
 - Vector path editing, blend modes
@@ -82,9 +94,10 @@ Phase II transforms Paperbox from an MVP Figma clone into a **feature-complete c
 ### Primary Goals
 1. ✅ **Complete Fabric.js Migration**: 100% removal of Konva.js dependencies
 2. ✅ **Zustand State Management**: Full integration with 6 specialized store slices
-3. ✅ **57 Features Implemented**: All FOUNDATION.md requirements delivered
-4. ✅ **AI-Ready Architecture**: Command pattern enabling Phase III natural language commands
-5. ✅ **Performance Targets**: 500+ objects, 5+ concurrent users, <100ms sync
+3. 🔜 **Multi-Canvas Architecture**: Multiple design files with canvas_id scoping (Week 5)
+4. 📋 **57 Features Implemented**: All FOUNDATION.md requirements delivered
+5. ✅ **AI-Ready Architecture**: Command pattern enabling Phase III natural language commands
+6. ✅ **Performance Targets**: 500+ objects, 5+ concurrent users, <100ms sync
 
 ### Success Criteria
 - **Functionality**: All 57 features working as specified in FOUNDATION.md
@@ -137,9 +150,49 @@ Phase II transforms Paperbox from an MVP Figma clone into a **feature-complete c
 │        LAYER 1: DATA LAYER (Supabase)               │
 │  ┌──────────────────────────────────────────────┐  │
 │  │  PostgreSQL | Realtime | Auth | Storage     │  │
+│  │  Tables: canvases, canvas_objects, locks    │  │
 │  └──────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
+
+### Multi-Canvas Architecture (Week 5)
+
+**Canvas Model**: Multiple design files, each with isolated object space
+
+```
+User's Workspace
+├── Canvas 1: "Homepage Design"
+│   ├── Object 1 (canvas_id: canvas-1)
+│   ├── Object 2 (canvas_id: canvas-1)
+│   └── Object 3 (canvas_id: canvas-1)
+├── Canvas 2: "Mobile App"
+│   ├── Object 4 (canvas_id: canvas-2)
+│   └── Object 5 (canvas_id: canvas-2)
+└── Canvas 3: "Design System"
+    └── Object 6 (canvas_id: canvas-3)
+```
+
+**Database Schema Changes**:
+```sql
+-- New table for canvas metadata
+CREATE TABLE canvases (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  description TEXT,
+  owner_id UUID REFERENCES auth.users(id) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add canvas_id to canvas_objects
+ALTER TABLE canvas_objects
+  ADD COLUMN canvas_id UUID REFERENCES canvases(id) ON DELETE CASCADE;
+```
+
+**Scoping Changes**:
+- Queries filter by `canvas_id` instead of no filter
+- Realtime subscriptions scoped to active canvas
+- RLS policies include canvas ownership/permissions
 
 ### Data Flow
 

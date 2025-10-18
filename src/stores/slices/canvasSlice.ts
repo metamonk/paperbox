@@ -119,6 +119,7 @@ export interface CanvasSlice {
   _setObjects: (objects: Record<string, CanvasObject>) => void;
   _setLoading: (loading: boolean) => void;
   _setError: (error: string | null) => void;
+  _cleanupDeletedObjects: (ids: string[]) => void;
 
   // Utility
   getObjectById: (id: string) => CanvasObject | undefined;
@@ -160,10 +161,13 @@ export const createCanvasSlice: StateCreator<
     set({ loading: true, error: null }, undefined, 'canvas/initialize');
 
     try {
+      // CRITICAL FIX: Remove user filter to enable collaboration
+      // All authenticated users can see all objects (single global canvas model)
+      // Future: Add canvas_id filter when multi-canvas architecture implemented (Phase III)
       const { data, error } = await supabase
         .from('canvas_objects')
-        .select('*')
-        .eq('created_by', userId);
+        .select('*');
+        // Removed: .eq('created_by', userId) - was breaking collaboration!
 
       if (error) throw error;
 
@@ -388,7 +392,8 @@ export const createCanvasSlice: StateCreator<
   /**
    * W1.D4.6: Delete objects with Supabase sync
    *
-   * Pattern: Optimistic delete → Database delete → Restore on error
+   * Pattern: Optimistic delete → Centralized cleanup → Database delete → Restore on error
+   * USES: _cleanupDeletedObjects for consistent state cleanup
    */
   deleteObjects: async (ids: string[]) => {
     // Store objects for potential rollback
@@ -398,7 +403,7 @@ export const createCanvasSlice: StateCreator<
       return;
     }
 
-    // Optimistic delete from objects AND layers
+    // 1. Optimistic delete from objects
     set(
       (state) => {
         ids.forEach((id) => {
@@ -409,18 +414,16 @@ export const createCanvasSlice: StateCreator<
       'canvas/deleteObjectsOptimistic',
     );
 
-    // Remove layers
-    ids.forEach((id) => {
-      get().removeLayer(id);
-    });
+    // 2. Centralized cleanup (layers, selection, active object)
+    get()._cleanupDeletedObjects(ids);
 
     try {
-      // Database delete
+      // 3. Database delete
       const { error } = await supabase.from('canvas_objects').delete().in('id', ids);
 
       if (error) throw error;
     } catch (error) {
-      // Rollback optimistic delete on error - restore objects AND layers
+      // Rollback on error - restore objects AND layers
       set(
         (state) => {
           deletedObjects.forEach((obj) => {
@@ -477,20 +480,25 @@ export const createCanvasSlice: StateCreator<
 
   /**
    * Internal: Remove object (called by SyncManager on realtime DELETE)
+   * USES: _cleanupDeletedObjects for consistent state cleanup
    */
-  _removeObject: (id: string) =>
+  _removeObject: (id: string) => {
     set(
       (state) => {
         delete state.objects[id];
       },
       undefined,
       'canvas/_removeObject',
-    ),
+    );
+    // Centralized cleanup after state update
+    get()._cleanupDeletedObjects([id]);
+  },
 
   /**
    * Internal: Remove multiple objects
+   * USES: _cleanupDeletedObjects for consistent state cleanup
    */
-  _removeObjects: (ids: string[]) =>
+  _removeObjects: (ids: string[]) => {
     set(
       (state) => {
         ids.forEach((id) => {
@@ -499,7 +507,10 @@ export const createCanvasSlice: StateCreator<
       },
       undefined,
       'canvas/_removeObjects',
-    ),
+    );
+    // Centralized cleanup after state update
+    get()._cleanupDeletedObjects(ids);
+  },
 
   /**
    * Internal: Set all objects (bulk replacement)
@@ -525,19 +536,72 @@ export const createCanvasSlice: StateCreator<
   _setError: (error: string | null) =>
     set({ error }, undefined, 'canvas/_setError'),
 
+  /**
+   * CRITICAL: Centralized cleanup for object deletion
+   *
+   * This function MUST be called by ALL deletion code paths to ensure
+   * consistent state cleanup across all slices and components.
+   *
+   * Cleanup cascade order:
+   * 1. Remove from layers slice (layers, layerOrder)
+   * 2. Clean up selection slice (selectedIds, activeObjectId)
+   * 3. (Fabric.js cleanup handled by CanvasSyncManager subscription)
+   *
+   * Called by:
+   * - deleteObjects() - user-initiated deletion
+   * - _removeObject() - real-time sync deletion (single)
+   * - _removeObjects() - real-time sync deletion (bulk)
+   */
+  _cleanupDeletedObjects: (ids: string[]) => {
+    if (ids.length === 0) return;
+
+    // 1. Remove from layers slice
+    ids.forEach(id => {
+      get().removeLayer(id);
+    });
+
+    // 2. Clean up selection slice
+    const currentSelectedIds = get().selectedIds;
+    const validSelectedIds = currentSelectedIds.filter(id => !ids.includes(id));
+
+    if (validSelectedIds.length !== currentSelectedIds.length) {
+      // Selection changed - update it
+      if (validSelectedIds.length === 0) {
+        get().deselectAll();
+      } else {
+        get().selectObjects(validSelectedIds);
+      }
+    }
+
+    // 3. Clean up active object if it was deleted
+    const activeId = get().activeObjectId;
+    if (activeId && ids.includes(activeId)) {
+      get().setActiveObject(validSelectedIds[0] || null);
+    }
+
+    console.log('[canvasSlice] Cleaned up deleted objects:', {
+      deletedIds: ids,
+      cleanedSelections: currentSelectedIds.length - validSelectedIds.length,
+      newActiveObject: get().activeObjectId,
+    });
+  },
+
   // ─── Realtime Subscriptions (W1.D4.7-4.9) ───
 
   /**
    * W1.D4.8: Setup realtime subscription for postgres_changes
    *
    * Subscribes to INSERT, UPDATE, DELETE events on canvas_objects table
-   * Filters by created_by = userId for multi-user support
+   * CRITICAL FIX: Removed user filter to enable realtime collaboration
+   * All authenticated users now see ALL object changes in real-time (single global canvas)
+   * Future: Add canvas_id filter when multi-canvas architecture implemented (Phase III)
    */
-  setupRealtimeSubscription: (userId: string) => {
+  setupRealtimeSubscription: (_userId: string) => {
     // Cleanup existing subscription first
     get().cleanupRealtimeSubscription();
 
-    // Create channel with postgres_changes subscription
+    // CRITICAL FIX: Listen to ALL canvas_objects changes for collaboration
+    // Previously filtered by created_by=eq.${userId} - was breaking multi-user sync!
     const channel = supabase
       .channel('canvas-changes')
       .on(
@@ -546,7 +610,7 @@ export const createCanvasSlice: StateCreator<
           event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'canvas_objects',
-          filter: `created_by=eq.${userId}`,
+          // Removed: filter: `created_by=eq.${userId}` - was breaking realtime collaboration!
         },
         (payload) => {
           const { eventType, new: newRecord, old: oldRecord } = payload;

@@ -16,6 +16,7 @@ import { usePresence } from '../../hooks/usePresence';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
 import { useSidebarState } from '../../hooks/useSidebarState';
+import { useKeyboard } from '../../hooks/useKeyboard';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
 import { UsersPanel } from '../collaboration/UsersPanel';
 import { Header } from '../layout/Header';
@@ -67,61 +68,19 @@ export function Canvas() {
   // Shape creation logic
   const { handleAddShape, createObjectAtPosition } = useShapeCreation({ fabricManager, user });
 
-  // W2.D12 DEBUG: Test button to bypass placement mode completely
-  const handleTestDirectAdd = useCallback(() => {
-    if (!fabricManager || !user) {
-      console.error('[Canvas] Cannot test - fabricManager or user not ready');
-      return;
-    }
-
-    console.log('[Canvas] TEST: Creating rectangle directly at (100, 100)');
-
-    const testObject = {
-      id: `test-rect-${Date.now()}`,
-      type: 'rectangle' as const,
-      x: 100,
-      y: 100,
-      width: 200,
-      height: 150,
-      rotation: 0,
-      opacity: 1,
-      fill: '#FF00FF', // Bright magenta for visibility
-      stroke: '#000000',
-      stroke_width: 3,
-      group_id: null,
-      z_index: 1,
-      style_properties: {},
-      metadata: {},
-      locked_by: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      created_by: user.id,
-      lock_acquired_at: null,
-      type_properties: { corner_radius: 0 },
-    };
-
-    console.log('[Canvas] TEST: Calling fabricManager.addObject with:', testObject);
-    const fabricObject = fabricManager.addObject(testObject as any);
-
-    console.log('[Canvas] TEST: Result:', {
-      fabricObject,
-      visible: (fabricObject as any)?.visible,
-      opacity: (fabricObject as any)?.opacity,
-      fill: (fabricObject as any)?.fill,
-      canvasObjectCount: fabricManager.getCanvas()?.getObjects().length,
-    });
-
-    // Force manual render
-    fabricManager.getCanvas()?.renderAll();
-    console.log('[Canvas] TEST: Manual renderAll() called');
-  }, [fabricManager, user]);
-
   // Sidebar state management
   const { sidebarOpen, sidebarContent, handleToggleTools, handleToggleUsers, handleToggleProperties, handleToggleLayers } = useSidebarState();
 
   // Zustand store for accessing canvas state
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
   const deleteObjects = usePaperboxStore((state) => state.deleteObjects);
+  const selectAll = usePaperboxStore((state) => state.selectAll);
+
+  // W4.D4: Z-index operations from layers slice
+  const moveToFront = usePaperboxStore((state) => state.moveToFront);
+  const moveToBack = usePaperboxStore((state) => state.moveToBack);
+  const moveUp = usePaperboxStore((state) => state.moveUp);
+  const moveDown = usePaperboxStore((state) => state.moveDown);
 
   // W2.D12: Placement mode state for click-to-place pattern
   const isPlacementMode = usePaperboxStore((state) => state.isPlacementMode);
@@ -193,6 +152,56 @@ export function Canvas() {
       deleteObjects(selectedIds);
     }
   };
+
+  /**
+   * W4.D4: Keyboard shortcuts for delete, selection, and z-index operations
+   * - Delete/Backspace: Delete selected objects
+   * - Ctrl/Cmd + A: Select all objects
+   * - Ctrl/Cmd + ]: Bring to front
+   * - Ctrl/Cmd + [: Send to back
+   * - Ctrl/Cmd + Shift + ]: Bring forward (move up)
+   * - Ctrl/Cmd + Shift + [: Send backward (move down)
+   */
+  useKeyboard({
+    'delete': () => {
+      if (selectedIds.length > 0) {
+        deleteObjects(selectedIds);
+      }
+    },
+    'backspace': () => {
+      if (selectedIds.length > 0) {
+        deleteObjects(selectedIds);
+      }
+    },
+    'a': (e) => {
+      if (e && (e.ctrlKey || e.metaKey)) {
+        // Ctrl/Cmd + A: Select all objects
+        selectAll();
+      }
+    },
+    ']': (e) => {
+      if (e && (e.ctrlKey || e.metaKey) && selectedIds.length === 1) {
+        if (e.shiftKey) {
+          // Ctrl/Cmd + Shift + ]: Move up (bring forward)
+          moveUp(selectedIds[0]);
+        } else {
+          // Ctrl/Cmd + ]: Move to front
+          moveToFront(selectedIds[0]);
+        }
+      }
+    },
+    '[': (e) => {
+      if (e && (e.ctrlKey || e.metaKey) && selectedIds.length === 1) {
+        if (e.shiftKey) {
+          // Ctrl/Cmd + Shift + [: Move down (send backward)
+          moveDown(selectedIds[0]);
+        } else {
+          // Ctrl/Cmd + [: Move to back
+          moveToBack(selectedIds[0]);
+        }
+      }
+    },
+  });
 
 
   return (
@@ -326,7 +335,10 @@ export function Canvas() {
               onAddShape={handleAddShape}
               onDelete={handleDelete}
               hasSelection={selectedIds.length > 0}
-              onTestDirectAdd={handleTestDirectAdd}
+              onMoveToFront={selectedIds.length === 1 ? () => moveToFront(selectedIds[0]) : undefined}
+              onMoveToBack={selectedIds.length === 1 ? () => moveToBack(selectedIds[0]) : undefined}
+              onMoveUp={selectedIds.length === 1 ? () => moveUp(selectedIds[0]) : undefined}
+              onMoveDown={selectedIds.length === 1 ? () => moveDown(selectedIds[0]) : undefined}
             />
           )}
         </Sidebar>
