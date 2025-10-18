@@ -31,7 +31,7 @@ export function PropertyPanel() {
 
   // Get active object
   const activeObject = activeObjectId
-    ? objects.find((obj) => obj.id === activeObjectId)
+    ? objects[activeObjectId]
     : null;
 
   // Collapsible section states

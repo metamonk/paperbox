@@ -29,7 +29,7 @@ export function LayersPanel() {
 
   // Create layer nodes from objects (reversed for top-to-bottom display)
   const layerNodes = [...layerOrder].reverse().map((objectId) => {
-    const object = objects.find((obj) => obj.id === objectId);
+    const object = objects[objectId];
     const layerMeta = layers[objectId];
 
     if (!object) return null;
