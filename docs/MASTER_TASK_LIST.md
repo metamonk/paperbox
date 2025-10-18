@@ -957,6 +957,46 @@ Supabase (postgres_changes) ←→ SyncManager ←→ Zustand Store ←→ Canva
   - **Status**: All interactions working as confirmed by user testing
   - **Commit**: Ready for commit after MASTER_TASK_LIST.md + PHASE_2_PRD.md updates
 
+- [✅] **W2.D12.8**: CRITICAL ARCHITECTURE FIXES - Property Update Sync
+  - ✅ **Root Cause Analysis**: Asymmetric sync flag protection in selection handlers
+  - ✅ **Fix #1**: Symmetric sync flag protection (3 selection handlers)
+    - Added `_isSyncingFromStore` flag checks to `onSelectionCreated`, `onSelectionUpdated`, `onSelectionCleared`
+    - Prevents deselection during programmatic property updates
+    - Fixes: Font size/fill color changes now maintain selection
+  - ✅ **Fix #2**: Complete change detection for stroke properties
+    - Added `stroke`, `stroke_width`, `style_properties` to `hasObjectChanged()`
+    - Ensures stroke color updates sync immediately to Fabric.js
+  - ✅ **Files modified**: CanvasSyncManager.ts (L167-168, L182-183, L197-198, L359-363)
+  - ✅ **Testing**: All property updates verified (font size, fill color, stroke color)
+  - 📋 **Documentation**:
+    - [W2.D12_PROPERTY_UPDATE_ROOT_CAUSE.md](../claudedocs/W2.D12_PROPERTY_UPDATE_ROOT_CAUSE.md)
+    - [W2.D12_PROPERTY_UPDATE_ARCHITECTURE.md](../claudedocs/W2.D12_PROPERTY_UPDATE_ARCHITECTURE.md)
+    - [W2.D12_PROPERTY_FIXES_SUMMARY.md](../claudedocs/W2.D12_PROPERTY_FIXES_SUMMARY.md)
+  - **Commit**: ba86d85 (feat/w6-color-text-styling)
+
+- [✅] **W2.D12.9**: CRITICAL ARCHITECTURE FIXES - Multi-User Transform Sync
+  - ✅ **Root Cause Analysis**: Scale transforms not applied to geometric properties
+  - ✅ **Fix #1**: Bake scaleX/scaleY into width/height
+    - `toCanvasObject()`: `width = obj.width * obj.scaleX`
+    - `toCanvasObject()`: `height = obj.height * obj.scaleY`
+    - Ensures scaled dimensions stored in database
+  - ✅ **Fix #2**: Bake scaleX into circle radius
+    - `toCanvasObject()`: `radius = circle.radius * circle.scaleX`
+    - Ensures scaled radius stored in database
+  - ✅ **Fix #3**: Reset scaleX/scaleY to 1 on deserialization
+    - `createFabricObject()`: `scaleX = 1, scaleY = 1`
+    - Prevents double-scaling when objects recreated from database
+  - ✅ **Files modified**: FabricCanvasManager.ts (L402-403, L494-495, L533)
+  - ✅ **Issues resolved**:
+    - Rectangle resize snap-back → Scaled dimensions now persist
+    - Circle enlargement visual discrepancy → Now appears as sizing (not movement)
+    - Multi-user transform sync → User B sees User A's transformations correctly
+  - 📋 **Documentation**:
+    - [W2.D12_MULTI_USER_SYNC_ROOT_CAUSE.md](../claudedocs/W2.D12_MULTI_USER_SYNC_ROOT_CAUSE.md)
+    - [W2.D12_TRANSFORM_SYNC_GAPS.md](../claudedocs/W2.D12_TRANSFORM_SYNC_GAPS.md)
+    - [W2.D12_SYNC_FIXES_PLAN.md](../claudedocs/W2.D12_SYNC_FIXES_PLAN.md)
+  - **Commit**: 9ff54ab (feat/w6-color-text-styling)
+
 ### Day 13: Milestone Validation
 - [ ] **W2.D13.1**: Milestone 1 Validation [VALIDATE]
   - Execute: `/sc:test` with full benchmarks

@@ -227,6 +227,54 @@ Fabric.js Canvas Update
 Visual Rendering
 ```
 
+### Architecture Improvements (W2.D12)
+
+**Critical Sync Architecture Fixes**: Two fundamental issues affecting property updates and multi-user transform synchronization were identified and resolved in W2.D12, strengthening the bidirectional data flow.
+
+#### Issue 1: Property Update Sync (✅ RESOLVED)
+**Problem**: Font size/fill color/stroke color changes caused objects to deselect, breaking UX flow.
+
+**Root Cause**: Asymmetric sync flag protection - selection event handlers lacked `_isSyncingFromStore` guards.
+
+**Fixes**:
+1. **Symmetric Sync Flag Protection**: Added guards to `onSelectionCreated`, `onSelectionUpdated`, `onSelectionCleared`
+2. **Complete Change Detection**: Added `stroke`, `stroke_width`, `style_properties` to `hasObjectChanged()`
+
+**Impact**: All property updates maintain selection state + immediate visual feedback.
+
+#### Issue 2: Multi-User Transform Sync (✅ RESOLVED)
+**Problem**:
+- Rectangle resize snap-back (dimensions not persisted)
+- Circle enlargement appears as movement to other users
+
+**Root Cause**: Fabric.js scale transforms (scaleX, scaleY) not applied to geometric properties before database serialization.
+
+**Data Flow (Before Fix)**:
+```
+User A resizes rectangle (100×100 → 200×150)
+  → Fabric.js: width=100, scaleX=2.0 ❌
+  → Database: width=100 ❌ (scale lost)
+  → User B: width=100 ❌ (snap-back)
+```
+
+**Data Flow (After Fix)**:
+```
+User A resizes rectangle (100×100 → 200×150)
+  → Fabric.js: width=100, scaleX=2.0
+  → toCanvasObject(): width=200 ✅ (scale baked)
+  → Database: width=200 ✅ (correct dimension)
+  → User B: width=200, scaleX=1 ✅ (no double-scale)
+```
+
+**Fixes**:
+1. **Bake Scales into Dimensions**: `width = obj.width * obj.scaleX`, `height = obj.height * obj.scaleY`
+2. **Bake Scale into Circle Radius**: `radius = circle.radius * circle.scaleX`
+3. **Reset Scales on Deserialization**: `scaleX = 1, scaleY = 1` in `createFabricObject()`
+
+**Impact**: All geometric transformations persist correctly across database round-trips and sync to all users.
+
+**Documentation**: 6 comprehensive analysis documents in `claudedocs/W2.D12_*` covering root cause analysis, architecture diagrams, sync gap matrix, and implementation plans.
+
 ---
 
 ## Technical Stack
