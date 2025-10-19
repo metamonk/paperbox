@@ -527,8 +527,8 @@ export class FabricCanvasManager {
       originY: 'center' as const, // W4.D3 FIX: Center object origin for placement
       angle: canvasObject.rotation,
       fill: canvasObject.fill,
-      stroke: canvasObject.stroke || undefined,
-      strokeWidth: canvasObject.stroke_width || undefined,
+      stroke: canvasObject.stroke ?? undefined, // Use ?? to preserve falsy values except null/undefined
+      strokeWidth: canvasObject.stroke_width ?? undefined, // Use ?? to preserve 0 as valid strokeWidth
       opacity: canvasObject.opacity,
       scaleX: 1, // FIX #3: Reset scale to 1 (dimensions already baked into width/height/radius)
       scaleY: 1, // FIX #3: Reset scale to 1 (prevents double-scaling on deserialization)
