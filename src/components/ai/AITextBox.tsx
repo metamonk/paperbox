@@ -26,11 +26,21 @@ export function AITextBox({ onClose }: AITextBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { execute, isLoading, error, streamingText, toolCalls, isStreaming } = useAICommand();
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'executing' | 'success' | 'error'>('idle');
+  
+  // Track which tool calls have been executed (by index)
+  const executedToolCallsRef = useRef<Set<number>>(new Set());
 
   // Auto-focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Reset executed tracking when starting new command
+  useEffect(() => {
+    if (toolCalls.length === 0) {
+      executedToolCallsRef.current.clear();
+    }
+  }, [toolCalls.length]);
 
   // Execute tool calls received from AI
   useEffect(() => {
@@ -38,8 +48,6 @@ export function AITextBox({ onClose }: AITextBoxProps) {
     if (toolCalls.length === 0) return;
 
     const executeToolCalls = async () => {
-      console.log('[AITextBox] 🚀 Starting tool call execution for', toolCalls.length, 'calls');
-      setExecutionStatus('executing');
       const store = usePaperboxStore.getState();
       const userId = store.currentUserId;
 
@@ -49,10 +57,25 @@ export function AITextBox({ onClose }: AITextBoxProps) {
         return;
       }
 
-      console.log('[AITextBox] ✅ User ID:', userId);
+      // Find new tool calls that haven't been executed yet
+      const newToolCalls = toolCalls.filter((_, index) => !executedToolCallsRef.current.has(index));
+      
+      if (newToolCalls.length === 0) {
+        console.log('[AITextBox] ⏭️  All tool calls already executed, skipping');
+        return;
+      }
+
+      console.log('[AITextBox] 🚀 Executing', newToolCalls.length, 'new tool calls (out of', toolCalls.length, 'total)');
+      setExecutionStatus('executing');
 
       try {
-        for (const toolCall of toolCalls) {
+        for (let i = 0; i < toolCalls.length; i++) {
+          // Skip already executed
+          if (executedToolCallsRef.current.has(i)) {
+            continue;
+          }
+
+          const toolCall = toolCalls[i];
           console.log('[AITextBox] 🔨 Executing tool call:', toolCall.toolName, toolCall.parameters);
 
           let command;
@@ -76,12 +99,15 @@ export function AITextBox({ onClose }: AITextBoxProps) {
             console.log('[AITextBox] 📝 Executing command via history store...');
             store.executeCommand(command);
             console.log('[AITextBox] ✅ Command executed successfully');
+            
+            // Mark this tool call as executed
+            executedToolCallsRef.current.add(i);
           } else {
             console.warn('[AITextBox] ⚠️ Command was null/undefined');
           }
         }
 
-        console.log('[AITextBox] 🎉 All tool calls executed successfully!');
+        console.log('[AITextBox] 🎉 All new tool calls executed successfully!');
         setExecutionStatus('success');
 
         // Auto-clear after success
