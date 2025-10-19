@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Logo } from '@/components/ui/Logo';
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -14,8 +15,11 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="w-full max-w-md">
         {/* Logo/Title Section */}
         <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <Logo size={80} useAccent />
+          </div>
           <h1 className="text-4xl font-bold text-foreground mb-2">
-            CollabCanvas
+            Paperbox
           </h1>
           <p className="text-muted-foreground">
             Real-time collaborative design canvas

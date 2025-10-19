@@ -5,6 +5,7 @@
 import type { ShapeDefaults } from '../types/canvas';
 
 // Canvas dimensions and boundaries
+// STATIC CANVAS MIGRATION: Fixed 5000x5000 canvas for simple coordinate system
 export const CANVAS_WIDTH = 5000;
 export const CANVAS_HEIGHT = 5000;
 export const MIN_ZOOM = 0.1;

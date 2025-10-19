@@ -20,6 +20,8 @@ import { usePaperboxStore } from '@/stores';
 import type { Canvas } from '@/types/canvas';
 import { Button } from '@/components/ui/button';
 import { CanvasManagementModal } from '@/components/canvas/CanvasManagementModal';
+import { Logo } from '@/components/ui/Logo';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export function CanvasSelectorPage() {
   const navigate = useNavigate();
@@ -79,11 +81,14 @@ export function CanvasSelectorPage() {
       {/* Header */}
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Your Canvases</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
-            </p>
+          <div className="flex items-center gap-4">
+            <Logo size={40} />
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground">Your Canvases</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <Button onClick={handleCreateCanvas} disabled={isCreating} className="gap-2">
@@ -99,6 +104,7 @@ export function CanvasSelectorPage() {
                 </>
               )}
             </Button>
+            <ThemeToggle />
             <Button variant="outline" onClick={() => signOut()}>
               Sign Out
             </Button>

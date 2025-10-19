@@ -37,17 +37,12 @@ export function Canvas() {
     if (node) {
       console.log('[Canvas] Canvas element mounted, setting state');
 
-      // W2.D12 FIX: Set canvas dimensions BEFORE Fabric.js initialization
-      // Fabric.js needs the canvas element to already have correct dimensions
-      // when it looks it up by ID, otherwise rendering context may not initialize properly
-      const parent = node.parentElement;
-      if (parent) {
-        const width = parent.clientWidth;
-        const height = parent.clientHeight;
-        node.width = width;
-        node.height = height;
-        console.log('[Canvas] Set canvas dimensions before Fabric init:', { width, height });
-      }
+      // STATIC CANVAS MIGRATION: Set fixed 5000x5000 canvas dimensions
+      // Canvas is always 5000x5000, viewport scrolls to show different portions
+      const CANVAS_SIZE = 5000;
+      node.width = CANVAS_SIZE;
+      node.height = CANVAS_SIZE;
+      console.log('[Canvas] Set static canvas dimensions:', { width: CANVAS_SIZE, height: CANVAS_SIZE });
 
       setCanvasElement(node);
     }
@@ -244,9 +239,9 @@ export function Canvas() {
         rightSidebar={<PropertyPanel />}
       >
         <div className="flex flex-1 overflow-hidden">
-        {/* Canvas area */}
+        {/* STATIC CANVAS MIGRATION: Scrollable canvas container for 5000x5000 viewport */}
         <div
-          className="relative flex-1 overflow-hidden bg-muted"
+          className="relative flex-1 overflow-auto bg-muted"
           onMouseMove={handleMouseMove}
         >
           {/* Error banner */}
@@ -259,11 +254,11 @@ export function Canvas() {
             </div>
           )}
 
-          {/* Fabric.js Canvas Element */}
+          {/* STATIC CANVAS MIGRATION: 5000x5000 canvas within scrollable viewport */}
           <canvas
             id="fabric-canvas"
             ref={canvasCallbackRef}
-            className="absolute inset-0"
+            className="absolute top-0 left-0"
             onClick={(e) => {
               // W4.D1 FIX: React onClick fallback for placement mode
               // This ensures clicks are captured even if Fabric.js event listener isn't working
@@ -301,8 +296,8 @@ export function Canvas() {
               }
             }}
             style={{
-              width: '100%',
-              height: '100%',
+              width: '5000px',
+              height: '5000px',
               cursor: isPlacementMode ? 'crosshair' : 'default',
             }}
           />

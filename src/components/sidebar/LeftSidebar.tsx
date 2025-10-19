@@ -1,5 +1,5 @@
 /**
- * LeftSidebar - Combined Pages and Layers panels
+ * LeftSidebar - Combined Canvases and Layers panels
  * Figma-style left sidebar layout
  */
 
@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 export function LeftSidebar() {
   return (
     <div className="flex flex-col h-full">
-      {/* Pages Panel - Top section */}
+      {/* Canvases Panel - Top section */}
       <div className="flex-shrink-0">
         <PagesPanel />
       </div>

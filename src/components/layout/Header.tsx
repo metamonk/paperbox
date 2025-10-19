@@ -1,13 +1,9 @@
 import { PresencePopover } from '../collaboration/PresencePopover';
-import { CanvasPicker } from '../canvas/CanvasPicker';
-import { CanvasManagementModal } from '../canvas/CanvasManagementModal';
 import { ThemeToggle } from './ThemeToggle';
-import { useState } from 'react';
+import { Logo } from '@/components/ui/Logo';
 import { useNavigate } from 'react-router-dom';
-import { Settings, LayoutGrid } from 'lucide-react';
+import { LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { usePaperboxStore } from '@/stores';
-import type { Canvas } from '@/types/canvas';
 import type { PresenceUser } from '@/hooks/usePresence';
 
 interface HeaderProps {
@@ -19,53 +15,37 @@ interface HeaderProps {
 
 /**
  * Header component displays the top navigation bar
- * - W5.D3: Canvas picker prominently placed like Figma (top-left)
- * - App title and presence popover
+ * - Logo and app title
+ * - Browse all canvases button
+ * - Presence popover
  * - User info and sign out button on the right
  */
 export function Header({ onlineUsers, currentUserId, onSignOut, userName }: HeaderProps) {
-  // W5.D3+W5.D5.3: Canvas management modal state + navigation
   const navigate = useNavigate();
-  const [managementModalOpen, setManagementModalOpen] = useState(false);
-  const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
-  const canvases = usePaperboxStore((state) => state.canvases);
-  const activeCanvas = canvases.find((c: Canvas) => c.id === activeCanvasId);
 
   return (
     <header className="h-14 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between gap-4">
-      {/* Left side: Canvas Picker (Figma-style) + Tools + Presence */}
+      {/* Left side: Logo + Browse Canvases */}
       <div className="flex items-center gap-3">
-        {/* W5.D3+W5.D5.3: Canvas Picker + Browse + Settings */}
         <div className="flex items-center gap-2">
-          <CanvasPicker />
-          {/* W5.D5.3: Browse all canvases button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => navigate('/canvases')}
-            title="Browse all canvases"
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          {/* Settings icon to open canvas management modal */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setManagementModalOpen(true)}
-            disabled={!activeCanvas}
-            title="Canvas settings"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          <Logo size={32} />
+          <h1 className="text-xl font-bold text-foreground hidden md:block">
+            Paperbox
+          </h1>
         </div>
 
         <div className="h-6 w-px bg-border" /> {/* Separator */}
 
-        <h1 className="text-xl font-bold text-foreground hidden md:block">
-          CollabCanvas
-        </h1>
+        {/* Browse all canvases button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 cursor-pointer"
+          onClick={() => navigate('/canvases')}
+          title="Browse all canvases"
+        >
+          <LayoutGrid className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Right side: User actions */}
@@ -80,17 +60,11 @@ export function Header({ onlineUsers, currentUserId, onSignOut, userName }: Head
           variant="ghost"
           size="sm"
           onClick={onSignOut}
+          className="cursor-pointer"
         >
           Sign Out
         </Button>
       </div>
-
-      {/* W5.D3: Canvas Management Modal */}
-      <CanvasManagementModal
-        canvas={activeCanvas || null}
-        open={managementModalOpen}
-        onOpenChange={setManagementModalOpen}
-      />
     </header>
   );
 }

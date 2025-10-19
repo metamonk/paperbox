@@ -30,7 +30,7 @@ export function PresencePopover({ users, currentUserId }: PresencePopoverProps) 
     <>
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2">
+          <Button variant="ghost" size="sm" className="gap-2 cursor-pointer">
             <UsersIcon className="h-4 w-4" />
             <span className="hidden sm:inline">{totalCount} online</span>
             <span className="sm:hidden">{totalCount}</span>
@@ -70,7 +70,7 @@ export function PresencePopover({ users, currentUserId }: PresencePopoverProps) 
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full mt-2"
+                    className="w-full mt-2 cursor-pointer"
                     onClick={() => setShowAllModal(true)}
                   >
                     See all {totalCount} users

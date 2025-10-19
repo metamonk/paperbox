@@ -101,11 +101,12 @@ export interface FabricCanvasEventHandlers {
 
 /**
  * Default canvas configuration
+ * STATIC CANVAS MIGRATION: Fixed 5000x5000 canvas for simple coordinate system
  */
 const DEFAULT_CONFIG: Required<FabricCanvasConfig> = {
   backgroundColor: '#f5f5f5', // Light gray background (Figma-style) for white object contrast
-  width: 800,
-  height: 600,
+  width: 5000,  // Static canvas width
+  height: 5000, // Static canvas height
   selection: true,
   renderOnAddRemove: true,
 };
@@ -134,9 +135,7 @@ export class FabricCanvasManager {
   // W2.D8.7: Canvas boundary limits (Figma-style)
   private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
 
-  // W4.D3: Window resize handler for responsive rendering
-  private resizeHandler: (() => void) | null = null;
-  private resizeDebounceTimeout: number | null = null;
+  // STATIC CANVAS MIGRATION: Resize handler properties removed (no longer needed)
 
   // W5.D5++++: Collaborative overlays (lock/selection indicators)
   private overlayManager: CollaborativeOverlayManager | null = null;
@@ -193,12 +192,10 @@ export class FabricCanvasManager {
       hasGetContext: typeof element.getContext !== 'undefined'
     });
 
-    // W4.D3 ARCHITECTURAL FIX: Query canvas element's own dimensions, not parent's
-    // The canvas element is already sized by CSS (absolute inset-0, width: 100%, height: 100%)
-    // By querying the element itself, we get the actual rendered size after CSS layout
-    // This avoids timing issues where parent dimensions might not reflect canvas size
-    const width = element.clientWidth || this.config.width;
-    const height = element.clientHeight || this.config.height;
+    // STATIC CANVAS MIGRATION: Always use fixed 5000x5000 size
+    // No dynamic sizing based on viewport - canvas is always 5000x5000
+    const width = this.config.width;
+    const height = this.config.height;
 
     // W2.D12 FIX: Fabric.js v6 Canvas constructor expects ID string, not HTMLCanvasElement
     // From official docs: new fabric.Canvas('canvasId', options)
@@ -235,8 +232,8 @@ export class FabricCanvasManager {
     (window as any).__fabricCanvas = this.canvas;
     console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
-    // W4.D3: Setup window resize handler for responsive canvas rendering
-    this.setupWindowResizeHandler(element);
+    // STATIC CANVAS MIGRATION: No window resize handler needed (fixed size canvas)
+    // Window resizing only affects the scrollable viewport, not the canvas itself
 
     // W5.D5++++: Initialize collaborative overlay manager
     this.overlayManager = new CollaborativeOverlayManager(this.canvas);
@@ -245,70 +242,8 @@ export class FabricCanvasManager {
     return this.canvas;
   }
 
-  /**
-   * W4.D3: Setup window resize handler for responsive canvas rendering
-   *
-   * Uses simple debounced window resize listener (like Figma, Miro) instead of ResizeObserver.
-   * This is a more foundational, battle-tested approach for canvas resize handling.
-   *
-   * On window resize:
-   * 1. Query container's clientWidth/clientHeight for new dimensions
-   * 2. Update Fabric.js canvas dimensions via setDimensions()
-   * 3. Re-render canvas with requestRenderAll()
-   *
-   * Debouncing (150ms) prevents excessive resize calculations during window drag.
-   *
-   * Fixes white space issue where canvas doesn't expand when DevTools closes.
-   */
-  private setupWindowResizeHandler(canvasElement: HTMLCanvasElement): void {
-    const container = canvasElement.parentElement;
-    if (!container) {
-      console.warn('[FabricCanvasManager] No parent container found for resize handler');
-      return;
-    }
-
-    // Create debounced resize handler
-    this.resizeHandler = () => {
-      // Clear existing timeout
-      if (this.resizeDebounceTimeout !== null) {
-        window.clearTimeout(this.resizeDebounceTimeout);
-      }
-
-      // Schedule resize update
-      this.resizeDebounceTimeout = window.setTimeout(() => {
-        if (!this.canvas) return;
-
-        // W4.D3 CRITICAL FIX: Fabric.js creates a wrapper div that needs explicit sizing
-        // The wrapper has class="canvas-container" and data-fabric="wrapper"
-        // It uses inline styles with hardcoded pixel dimensions that don't auto-update
-        // We must update the wrapper's dimensions, not just the canvas elements
-        const wrapper = (this.canvas as any).wrapperEl;
-        if (!wrapper) {
-          console.warn('[FabricCanvasManager] No Fabric.js wrapper element found');
-          return;
-        }
-
-        // Query the parent container's current dimensions (after viewport change)
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-
-        // Update Fabric.js wrapper element dimensions via inline styles
-        wrapper.style.width = `${width}px`;
-        wrapper.style.height = `${height}px`;
-
-        // Update Fabric.js canvas dimensions (updates both lower and upper canvas)
-        this.canvas.setDimensions({ width, height });
-
-        // Re-render canvas
-        this.canvas.requestRenderAll();
-      }, 150); // 150ms debounce - balance between responsiveness and performance
-    };
-
-    // Attach window resize listener
-    window.addEventListener('resize', this.resizeHandler);
-
-    console.log('[FabricCanvasManager] Window resize handler initialized');
-  }
+  // STATIC CANVAS MIGRATION: Window resize handler removed
+  // Canvas is fixed at 5000x5000, viewport resizing handled by browser scroll container
 
   /**
    * Setup event listeners for Fabric.js canvas events
@@ -1907,22 +1842,13 @@ export class FabricCanvasManager {
     this.pixelGridPattern = [];
     this.pixelGridInitialized = false;
 
-    // W4.D3: Clean up window resize handler
-    if (this.resizeHandler) {
-      window.removeEventListener('resize', this.resizeHandler);
-      this.resizeHandler = null;
-      console.log('[FabricCanvasManager] Window resize handler removed');
-    }
+    // STATIC CANVAS MIGRATION: No resize handler to clean up
 
     // W5.D5++++: Clean up collaborative overlays
     if (this.overlayManager) {
       this.overlayManager.destroy();
       this.overlayManager = null;
       console.log('[FabricCanvasManager] Collaborative overlay manager destroyed');
-    }
-    if (this.resizeDebounceTimeout !== null) {
-      window.clearTimeout(this.resizeDebounceTimeout);
-      this.resizeDebounceTimeout = null;
     }
 
     if (this.canvas) {
