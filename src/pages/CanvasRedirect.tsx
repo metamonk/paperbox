@@ -5,7 +5,7 @@
  */
 
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { usePaperboxStore } from '@/stores';
 
@@ -17,6 +17,7 @@ import { usePaperboxStore } from '@/stores';
  */
 export function CanvasRedirect() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const canvases = usePaperboxStore((state) => state.canvases);
   const canvasesLoading = usePaperboxStore((state) => state.canvasesLoading);
@@ -57,13 +58,18 @@ export function CanvasRedirect() {
   }, [user?.id, loadCanvases, createCanvas, navigate]);
 
   // Also handle case where canvases are already loaded (e.g., coming from another canvas)
+  // W5.D5+ BUG FIX: Only redirect if we're on /canvas route (not /canvas/:canvasId)
+  // Without this check, pasting canvas URLs gets overridden by redirect to activeCanvasId
   useEffect(() => {
+    // CRITICAL: Only run this redirect when on /canvas route (no canvasId param)
+    if (location.pathname !== '/canvas') return;
+
     if (canvasesLoading || !canvases.length) return;
 
     const targetCanvasId = activeCanvasId || canvases[0].id;
     console.log('[CanvasRedirect] Canvases already loaded, redirecting to:', targetCanvasId);
     navigate(`/canvas/${targetCanvasId}`, { replace: true });
-  }, [canvases, canvasesLoading, activeCanvasId, navigate]);
+  }, [location.pathname, canvases, canvasesLoading, activeCanvasId, navigate]);
 
   // Show loading state while redirecting
   return (

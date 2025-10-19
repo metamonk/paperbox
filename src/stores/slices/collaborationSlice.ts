@@ -20,9 +20,20 @@ import type { StateCreator } from 'zustand';
 import { supabase } from '../../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { PaperboxStore } from '../index';
+import { perfMonitor } from '../../lib/monitoring/PerformanceMonitor';
+
+/**
+ * Selection state information
+ * W5.D5++++++ Phase 1: Track what objects each user has selected
+ */
+export interface SelectionState {
+  objectIds: string[]; // Array of selected canvas object IDs
+  updatedAt: number; // Timestamp for conflict resolution (last-touch-wins)
+}
 
 /**
  * User presence information
+ * W5.D5++++++ Extended with selection state for collaborative editing
  */
 export interface UserPresence {
   userId: string;
@@ -31,6 +42,10 @@ export interface UserPresence {
   isActive: boolean;
   lastSeen: number; // Timestamp
   currentTool?: string;
+
+  // W5.D5++++++ NEW: Collaborative selection state
+  selection?: SelectionState; // What objects this user has selected
+  activelyEditing?: string | null; // Object ID currently being modified (Phase 2: edit locks)
 }
 
 /**
@@ -80,6 +95,13 @@ export interface CollaborationSlice {
   removeCursor: (userId: string) => void;
   clearAllCursors: () => void;
   broadcastCursor: (x: number, y: number) => void; // W1.D6: Broadcast cursor via Presence
+
+  // W5.D5++++++ Actions - Selection state (Phase 1: Collaborative selection)
+  updateRemoteSelection: (userId: string, selection: SelectionState) => void;
+  clearRemoteSelection: (userId: string) => void;
+  broadcastSelection: (objectIds: string[]) => void; // Broadcast local selection to others
+  broadcastActivelyEditing: (objectIds: string[] | null) => void; // Broadcast actively editing state
+  handleSelectionConflict: (remoteUserId: string, remoteSelection: SelectionState) => string[]; // Returns conflicting IDs
 
   // Actions - Object locks
   acquireLock: (objectId: string, userId: string, userName: string) => boolean;
@@ -320,6 +342,193 @@ export const createCollaborationSlice: StateCreator<
     );
   },
 
+  // ─── Selection State Actions (W5.D5++++++ Phase 1) ───
+
+  /**
+   * Update remote user's selection state
+   * Called when receiving selection broadcast from another user
+   */
+  updateRemoteSelection: (userId: string, selection: SelectionState) =>
+    set(
+      (state) => {
+        if (state.presence[userId]) {
+          state.presence[userId].selection = selection;
+        }
+      },
+      undefined,
+      'collaboration/updateRemoteSelection',
+    ),
+
+  /**
+   * Clear remote user's selection
+   * Called when receiving empty selection broadcast
+   */
+  clearRemoteSelection: (userId: string) =>
+    set(
+      (state) => {
+        if (state.presence[userId]) {
+          state.presence[userId].selection = undefined;
+        }
+      },
+      undefined,
+      'collaboration/clearRemoteSelection',
+    ),
+
+  /**
+   * Broadcast local selection to all other users
+   * Called from CanvasSyncManager when Fabric selection events fire
+   *
+   * @param objectIds - Array of selected object IDs (empty array = deselect all)
+   */
+  broadcastSelection: (objectIds: string[]) => {
+    const state = get();
+    const channel = state.presenceChannel;
+    const currentUser = state.presence[state.currentUserId ?? ''];
+
+    if (!channel || !currentUser) {
+      console.warn('[Collaboration] Cannot broadcast selection - no channel or current user');
+      return;
+    }
+
+    const now = Date.now();
+
+    console.log('[🎯 DEBUG] broadcastSelection called:', {
+      objectIds,
+      count: objectIds.length,
+      isMultiSelect: objectIds.length > 1,
+      userName: currentUser.userName,
+      channel: !!channel
+    });
+
+    // Broadcast selection state with full presence data
+    channel.track({
+      userId: currentUser.userId,
+      userName: currentUser.userName,
+      userColor: currentUser.userColor,
+      isActive: true,
+      lastSeen: now,
+      currentTool: currentUser.currentTool,
+      cursor: state.cursors[currentUser.userId], // Include cursor if available
+      selection: objectIds.length > 0
+        ? {
+            objectIds,
+            updatedAt: now,
+          }
+        : undefined, // undefined = no selection
+    });
+
+    // Update local presence state
+    set(
+      (state) => {
+        if (state.presence[state.currentUserId ?? '']) {
+          state.presence[state.currentUserId ?? ''].selection = objectIds.length > 0
+            ? {
+                objectIds,
+                updatedAt: now,
+              }
+            : undefined;
+        }
+      },
+      undefined,
+      'collaboration/broadcastSelection',
+    );
+  },
+
+  /**
+   * Handle selection conflict when another user selects objects we have selected
+   * Uses last-touch-wins strategy based on timestamps
+   *
+   * @param remoteUserId - User ID of remote user
+   * @param remoteSelection - Remote user's selection state
+   * @returns Array of object IDs we need to deselect (conflicts)
+   */
+  handleSelectionConflict: (remoteUserId: string, remoteSelection: SelectionState) => {
+    const state = get();
+    const currentUserId = state.currentUserId;
+
+    // No current user or no local selection = no conflict
+    if (!currentUserId) return [];
+
+    const myPresence = state.presence[currentUserId];
+    if (!myPresence?.selection) return [];
+
+    const mySelection = myPresence.selection;
+    const myObjectIds = mySelection.objectIds;
+    const theirObjectIds = remoteSelection.objectIds;
+
+    // Find objects selected by both users
+    const conflicts = myObjectIds.filter((id) => theirObjectIds.includes(id));
+
+    if (conflicts.length === 0) return [];
+
+    // Last-touch-wins: If their selection is newer, we lose those objects
+    if (remoteSelection.updatedAt > mySelection.updatedAt) {
+      console.log('[Collaboration] Selection conflict:', {
+        conflicts,
+        myTime: new Date(mySelection.updatedAt).toISOString(),
+        theirTime: new Date(remoteSelection.updatedAt).toISOString(),
+        result: 'They win (newer timestamp)',
+      });
+
+      return conflicts; // Return conflicting IDs that need to be deselected
+    }
+
+    // We win (our timestamp is newer or equal)
+    console.log('[Collaboration] Selection conflict:', {
+      conflicts,
+      myTime: new Date(mySelection.updatedAt).toISOString(),
+      theirTime: new Date(remoteSelection.updatedAt).toISOString(),
+      result: 'We win (newer/equal timestamp)',
+    });
+
+    return []; // No deselection needed
+  },
+
+  /**
+   * Broadcast "actively editing" state during object manipulation
+   * Shows other users which objects are currently being moved/modified
+   *
+   * @param objectIds - Array of object IDs being edited (null = stopped editing)
+   */
+  broadcastActivelyEditing: (objectIds: string[] | null) => {
+    const state = get();
+    const channel = state.presenceChannel;
+    const currentUser = state.presence[state.currentUserId ?? ''];
+
+    if (!channel || !currentUser) return;
+
+    console.log('[🎯 DEBUG] broadcastActivelyEditing called:', {
+      objectIds,
+      isEditing: !!objectIds,
+      count: objectIds?.length || 0
+    });
+
+    // Broadcast actively editing state with full presence data
+    channel.track({
+      userId: currentUser.userId,
+      userName: currentUser.userName,
+      userColor: currentUser.userColor,
+      isActive: true,
+      lastSeen: Date.now(),
+      currentTool: currentUser.currentTool,
+      cursor: state.cursors[currentUser.userId],
+      selection: currentUser.selection,
+      activelyEditing: objectIds && objectIds.length > 0 ? objectIds[0] : null, // Track first object for simplicity
+    });
+
+    // Update local presence state
+    set(
+      (state) => {
+        if (state.presence[state.currentUserId ?? '']) {
+          state.presence[state.currentUserId ?? ''].activelyEditing = 
+            objectIds && objectIds.length > 0 ? objectIds[0] : null;
+        }
+      },
+      undefined,
+      'collaboration/broadcastActivelyEditing',
+    );
+  },
+
   // Object lock actions
 
   /**
@@ -412,10 +621,14 @@ export const createCollaborationSlice: StateCreator<
    * Returns true if lock acquired, false if already locked by another user
    */
   requestLock: async (objectId: string) => {
+    // W5.D5++ Performance monitoring
+    const stopTimer = perfMonitor.startTimer('lock_acquisition');
+
     const userId = get().currentUserId;
     const userName = get().presence[userId ?? '']?.userName ?? 'Unknown';
 
     if (!userId) {
+      stopTimer();
       return false; // No current user
     }
 
@@ -434,15 +647,18 @@ export const createCollaborationSlice: StateCreator<
 
       if (error || !data) {
         // Lock failed - object already locked by someone else
+        stopTimer();
         return false;
       }
 
       // Update local state
       get().acquireLock(objectId, userId, userName);
 
+      stopTimer();
       return true;
     } catch (error) {
       console.error('Failed to acquire database lock:', error);
+      stopTimer();
       return false;
     }
   },
@@ -452,15 +668,20 @@ export const createCollaborationSlice: StateCreator<
    * Only releases if current user owns the lock
    */
   releaseDbLock: async (objectId: string) => {
+    // W5.D5++ Performance monitoring
+    const stopTimer = perfMonitor.startTimer('lock_release');
+
     const userId = get().currentUserId;
 
     if (!userId) {
+      stopTimer();
       return; // No current user
     }
 
     // Check if we own the lock locally before attempting database release
     const existingLock = get().locks[objectId];
     if (!existingLock || existingLock.userId !== userId) {
+      stopTimer();
       return; // Don't own the lock, nothing to release
     }
 
@@ -479,8 +700,11 @@ export const createCollaborationSlice: StateCreator<
         // Update local state
         get().releaseLock(objectId);
       }
+
+      stopTimer();
     } catch (error) {
       console.error('Failed to release database lock:', error);
+      stopTimer();
     }
   },
 
@@ -621,6 +845,9 @@ export const createCollaborationSlice: StateCreator<
               isActive: presence.isActive ?? true,
               lastSeen: presence.lastSeen ?? Date.now(),
               currentTool: presence.currentTool,
+              // W5.D5++++++ Extract selection state if present
+              selection: presence.selection,
+              activelyEditing: presence.activelyEditing,
             };
 
             // W1.D6: Extract cursor data if present
@@ -656,6 +883,9 @@ export const createCollaborationSlice: StateCreator<
             userColor: presence.userColor,
             isActive: presence.isActive ?? true,
             currentTool: presence.currentTool,
+            // W5.D5++++++ Include selection state
+            selection: presence.selection,
+            activelyEditing: presence.activelyEditing,
           });
         }
       })

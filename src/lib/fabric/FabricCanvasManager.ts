@@ -21,6 +21,7 @@ import { Canvas, Rect, Circle, Textbox, FabricObject, Path, Point, Text } from '
 
 import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
 import type { CursorPosition, UserPresence } from '@/stores/slices/collaborationSlice';
+import { CollaborativeOverlayManager } from './CollaborativeOverlayManager';
 
 /**
  * Extended FabricObject type with custom data property
@@ -66,8 +67,15 @@ export interface FabricCanvasConfig {
 export interface FabricCanvasEventHandlers {
   /**
    * Called when an object is modified (moved, scaled, rotated)
+   * Fires AFTER mouse release - use for final position updates
    */
   onObjectModified?: (target: FabricObject) => void;
+
+  /**
+   * W5.D5+ Real-time collaboration: Called DURING object movement
+   * Fires continuously while dragging - use for real-time position broadcasts
+   */
+  onObjectMoving?: (target: FabricObject) => void;
 
   /**
    * Called when selection is created
@@ -129,6 +137,9 @@ export class FabricCanvasManager {
   // W4.D3: Window resize handler for responsive rendering
   private resizeHandler: (() => void) | null = null;
   private resizeDebounceTimeout: number | null = null;
+
+  // W5.D5++++: Collaborative overlays (lock/selection indicators)
+  private overlayManager: CollaborativeOverlayManager | null = null;
 
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -226,6 +237,10 @@ export class FabricCanvasManager {
 
     // W4.D3: Setup window resize handler for responsive canvas rendering
     this.setupWindowResizeHandler(element);
+
+    // W5.D5++++: Initialize collaborative overlay manager
+    this.overlayManager = new CollaborativeOverlayManager(this.canvas);
+    console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
 
     return this.canvas;
   }
@@ -336,12 +351,16 @@ export class FabricCanvasManager {
       }
     });
 
+    // W5.D5+ Real-time collaboration: Fire during movement for live updates
+    this.canvas.on('object:moving', (event) => {
+      const target = event.target;
+      if (target && this.eventHandlers.onObjectMoving) {
+        this.eventHandlers.onObjectMoving(target);
+      }
+    });
+
     // Selection events
     this.canvas.on('selection:created', (event) => {
-      console.log('[FabricCanvasManager] 🎯 selection:created event fired', {
-        selectedCount: event.selected?.length || 0,
-        selected: event.selected
-      });
       const targets = event.selected || [];
       if (this.eventHandlers.onSelectionCreated) {
         console.log('[FabricCanvasManager] Calling onSelectionCreated handler');
@@ -414,6 +433,13 @@ export class FabricCanvasManager {
     switch (canvasObject.type) {
       case 'rectangle': {
         const cornerRadius = canvasObject.type_properties.corner_radius || 0;
+        console.log('[FabricCanvasManager] Creating rectangle:', {
+          width: canvasObject.width,
+          height: canvasObject.height,
+          cornerRadius,
+          hasRectConstructor: typeof Rect === 'function'
+        });
+        
         fabricObject = new Rect({
           ...commonProps,
           width: canvasObject.width,
@@ -426,6 +452,11 @@ export class FabricCanvasManager {
 
       case 'circle': {
         const radius = canvasObject.type_properties.radius;
+        console.log('[FabricCanvasManager] Creating circle:', {
+          radius,
+          hasCircleConstructor: typeof Circle === 'function'
+        });
+        
         fabricObject = new Circle({
           ...commonProps,
           radius,
@@ -443,6 +474,12 @@ export class FabricCanvasManager {
           text_align,
         } = canvasObject.type_properties;
 
+        console.log('[FabricCanvasManager] Creating text:', {
+          text_content,
+          width: canvasObject.width,
+          hasTextboxConstructor: typeof Textbox === 'function'
+        });
+
         fabricObject = new Textbox(text_content, {
           ...commonProps,
           width: canvasObject.width,
@@ -457,9 +494,22 @@ export class FabricCanvasManager {
 
       default:
         // Unknown type, return null
+        console.error('[FabricCanvasManager] Unknown object type:', (canvasObject as any).type);
         return null;
     }
 
+    // Validate the created object
+    if (!fabricObject || typeof (fabricObject as any)._set !== 'function') {
+      console.error('[FabricCanvasManager] ❌ Object creation failed - invalid Fabric.js object!', {
+        type: canvasObject.type,
+        fabricObject,
+        hasSetMethod: fabricObject ? typeof (fabricObject as any)._set : 'object is null',
+        constructor: fabricObject?.constructor?.name,
+      });
+      return null;
+    }
+
+    console.log('[FabricCanvasManager] ✅ Successfully created', canvasObject.type, 'object');
     return fabricObject;
   }
 
@@ -477,7 +527,7 @@ export class FabricCanvasManager {
    */
   toCanvasObject(fabricObject: FabricObject | null): CanvasObject | null {
     const obj = fabricObject as FabricObjectWithData;
-    if (!obj || !obj.data) {
+    if (!obj || !obj.data || !this.canvas) {
       return null;
     }
 
@@ -485,6 +535,11 @@ export class FabricCanvasManager {
     // These were set when the object was created via createFabricObject()
     const dbType = obj.data.type as ShapeType;
     const dbId = obj.data.id as string;
+
+    // W5.D5+++++ Calculate actual z-index from canvas stacking order
+    // Objects later in the array are rendered on top (higher z-index)
+    const canvasObjects = this.canvas.getObjects();
+    const zIndex = canvasObjects.indexOf(obj);
 
     // Extract common properties from Fabric.js object
     // Maps Fabric.js property names to our database schema
@@ -497,7 +552,7 @@ export class FabricCanvasManager {
       height: (obj.height || 0) * (obj.scaleY || 1), // FIX #1: Bake scaleY into height
       rotation: obj.angle || 0,
       group_id: null, // TODO: Implement group support in W1.D3
-      z_index: 1, // TODO: Calculate from canvas.getObjects() index in W1.D3
+      z_index: zIndex >= 0 ? zIndex : 0, // W5.D5+++++ Use actual canvas position
       fill: obj.fill as string,
       stroke: (obj.stroke as string) || null,
       stroke_width: obj.strokeWidth || null,
@@ -581,11 +636,23 @@ export class FabricCanvasManager {
       return null;
     }
 
+    // Validate that fabricObject is actually a Fabric.js object
+    if (typeof fabricObject._set !== 'function') {
+      console.error('[FabricCanvasManager] ❌ Created object is not a valid Fabric.js object!', {
+        fabricObject,
+        hasSet: typeof fabricObject._set,
+        constructor: fabricObject.constructor?.name,
+        type: canvasObject.type
+      });
+      return null;
+    }
+
     console.log('[FabricCanvasManager] Adding object to canvas:', {
       id: canvasObject.id,
       type: canvasObject.type,
       x: canvasObject.x,
       y: canvasObject.y,
+      z_index: canvasObject.z_index,
       objectCount: this.canvas.getObjects().length
     });
 
@@ -599,10 +666,43 @@ export class FabricCanvasManager {
       fill: (fabricObject as any).fill,
       visible: (fabricObject as any).visible,
       opacity: (fabricObject as any).opacity,
+      hasSetMethod: typeof fabricObject._set === 'function',
+      constructor: fabricObject.constructor?.name,
     });
 
-    // Add to canvas and render
-    this.canvas.add(fabricObject);
+    // W5.D5+++++ Add to canvas at correct z-index position
+    // Insert at specific index to maintain stacking order from database
+    try {
+      const targetIndex = canvasObject.z_index ?? 0; // Default to 0 if undefined
+      const currentObjects = this.canvas.getObjects();
+
+      console.log('[FabricCanvasManager] 🎯 Attempting to add object:', {
+        targetIndex,
+        currentObjectCount: currentObjects.length,
+        willInsert: targetIndex >= 0 && targetIndex < currentObjects.length,
+        fabricObjectType: typeof fabricObject,
+        hasSetMethod: typeof (fabricObject as any)._set
+      });
+
+      // Always use simple add() to avoid insertAt() issues
+      // Z-index will be managed through bringToFront/sendToBack operations
+      this.canvas.add(fabricObject);
+      console.log(`[FabricCanvasManager] ✅ Added object to canvas (z-index: ${targetIndex})`);
+      
+    } catch (error) {
+      console.error('[FabricCanvasManager] ❌ Error adding object to canvas:', error);
+      console.error('[FabricCanvasManager] Error details:', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        canvasObject,
+        fabricObject: {
+          type: fabricObject.type,
+          constructor: fabricObject.constructor?.name,
+          hasSetMethod: typeof (fabricObject as any)._set
+        }
+      });
+      return null;
+    }
 
     // W2.D12 FIX: Use synchronous renderAll() instead of requestRenderAll()
     // requestRenderAll() schedules render on next animation frame (async)
@@ -1755,6 +1855,41 @@ export class FabricCanvasManager {
   }
 
   /**
+   * W5.D5++++: Update collaborative overlays (lock/selection indicators)
+   *
+   * Call this whenever presence data changes to update visual indicators
+   * showing who's editing and who has what selected.
+   *
+   * @param presence - User presence data from collaboration store
+   * @param currentUserId - Current user's ID (to skip their own overlays)
+   */
+  updateCollaborativeOverlays(
+    presence: Record<string, UserPresence>,
+    currentUserId: string
+  ): void {
+    if (!this.overlayManager) {
+      console.warn('[FabricCanvasManager] Overlay manager not initialized');
+      return;
+    }
+
+    this.overlayManager.updateOverlays(presence, currentUserId);
+  }
+
+  /**
+   * W5.D5++++: Update overlay positions during object movement
+   *
+   * Call this during object:modified or object:moving events to keep
+   * overlays synchronized with their target objects.
+   */
+  updateOverlayPositions(): void {
+    if (!this.overlayManager) {
+      return;
+    }
+
+    this.overlayManager.updateOverlaysForMovement();
+  }
+
+  /**
    * Dispose of the canvas and clean up resources
    */
   dispose(): void {
@@ -1777,6 +1912,13 @@ export class FabricCanvasManager {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;
       console.log('[FabricCanvasManager] Window resize handler removed');
+    }
+
+    // W5.D5++++: Clean up collaborative overlays
+    if (this.overlayManager) {
+      this.overlayManager.destroy();
+      this.overlayManager = null;
+      console.log('[FabricCanvasManager] Collaborative overlay manager destroyed');
     }
     if (this.resizeDebounceTimeout !== null) {
       window.clearTimeout(this.resizeDebounceTimeout);

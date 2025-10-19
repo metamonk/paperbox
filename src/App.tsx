@@ -9,6 +9,7 @@ const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login }
 const Signup = lazy(() => import('./pages/Signup').then(m => ({ default: m.Signup })));
 const CanvasPage = lazy(() => import('./pages/CanvasPage').then(m => ({ default: m.CanvasPage })));
 const CanvasRedirect = lazy(() => import('./pages/CanvasRedirect').then(m => ({ default: m.CanvasRedirect })));
+const CanvasSelectorPage = lazy(() => import('./pages/CanvasSelectorPage').then(m => ({ default: m.CanvasSelectorPage })));
 
 /**
  * W2.D10: Loading fallback component for code splitting
@@ -105,6 +106,16 @@ function App() {
           />
 
           {/* Protected Routes - require authentication */}
+          {/* W5.D5.3: Canvas Selector Dashboard - Browse all canvases */}
+          <Route
+            path="/canvases"
+            element={
+              <ProtectedRoute>
+                <CanvasSelectorPage />
+              </ProtectedRoute>
+            }
+          />
+
           {/* W5.D4: Canvas routing with dynamic canvasId parameter */}
           <Route
             path="/canvas/:canvasId"

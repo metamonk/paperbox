@@ -18,6 +18,9 @@ import type { StoreApi } from 'zustand';
 import type { FabricCanvasManager } from '../fabric/FabricCanvasManager';
 import type { PaperboxStore } from '../../stores';
 import type { CanvasObject } from '../../types/canvas';
+import { UpdateQueue } from './UpdateQueue';
+import { perfMonitor } from '../monitoring/PerformanceMonitor';
+import { toast } from 'sonner';
 
 /**
  * Extended FabricObject type with custom data property
@@ -51,6 +54,12 @@ export class CanvasSyncManager {
   private _isSyncingFromCanvas = false;
   private _isSyncingFromStore = false;
 
+  // W5.D5+++++: Update queue to prevent race conditions during rapid edits
+  private updateQueue: UpdateQueue = new UpdateQueue();
+
+  // W5.D5+++++: Track actively editing state (during drag, not just selected)
+  private activelyEditingIds: Set<string> = new Set();
+
   constructor(fabricManager: FabricCanvasManager, store: any) {
     this.fabricManager = fabricManager;
     this.store = store;
@@ -61,11 +70,134 @@ export class CanvasSyncManager {
    * Call this after both fabricManager and store are ready
    */
   initialize(): void {
-    this.setupCanvasToStateSync();
-    this.setupStateToCanvasSync();
-    this.setupLayersSync(); // W4.D3: Sync layer visibility/lock to Fabric
-    this.setupViewportSync(); // W2.D6-D7: Initialize viewport controls
-    this.syncInitialState(); // W4.D3 FIX: Sync existing objects on initialization
+    try {
+      console.log('[CanvasSyncManager] Starting initialization...');
+
+      console.log('[CanvasSyncManager] 1/6 Setting up Canvas → State sync...');
+      this.setupCanvasToStateSync();
+
+      console.log('[CanvasSyncManager] 2/6 Setting up State → Canvas sync...');
+      this.setupStateToCanvasSync();
+
+      console.log('[CanvasSyncManager] 3/6 Setting up layers sync...');
+      this.setupLayersSync(); // W4.D3: Sync layer visibility/lock to Fabric
+
+      console.log('[CanvasSyncManager] 4/6 Setting up viewport sync...');
+      this.setupViewportSync(); // W2.D6-D7: Initialize viewport controls
+
+      console.log('[CanvasSyncManager] 5/6 Syncing initial state...');
+      this.syncInitialState(); // W4.D3 FIX: Sync existing objects on initialization
+
+      console.log('[CanvasSyncManager] 6/6 Setting up collaborative selection sync...');
+      this.setupCollaborativeSelectionSync(); // W5.D5++++++ PHASE 1: Collaborative selection
+
+      console.log('[CanvasSyncManager] ✅ Initialization complete');
+    } catch (error) {
+      console.error('[CanvasSyncManager] ❌ Initialization failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * W5.D5++++++ PHASE 1: Setup collaborative selection synchronization
+   *
+   * Subscribes to remote users' selection state changes and applies conflict resolution
+   * to prevent ghost selections and simultaneous editing conflicts.
+   */
+  private setupCollaborativeSelectionSync(): void {
+    // Subscribe to presence changes (remote users' selection updates)
+    const unsubscribePresence = this.store.subscribe(
+      (state) => state.presence,
+      (presence, prevPresence) => {
+        console.log('[🎯 DEBUG] Presence changed, checking for remote selections:', {
+          userCount: Object.keys(presence).length,
+          users: Object.keys(presence).map(userId => ({
+            userId: userId.slice(0, 8),
+            userName: presence[userId].userName,
+            hasSelection: !!presence[userId].selection,
+            selectionCount: presence[userId].selection?.objectIds.length || 0
+          }))
+        });
+
+        // Check each user's selection for conflicts
+        Object.keys(presence).forEach((userId) => {
+          const user = presence[userId];
+          const prevUser = prevPresence[userId];
+
+          // Skip if no selection or selection unchanged
+          if (!user.selection) return;
+          if (prevUser?.selection?.updatedAt === user.selection.updatedAt) return;
+
+          console.log('[🎯 DEBUG] Remote selection detected:', {
+            userId: userId.slice(0, 8),
+            userName: user.userName,
+            objectIds: user.selection.objectIds,
+            count: user.selection.objectIds.length
+          });
+
+          // Handle selection conflict with this user
+          const conflictingIds = this.store.getState().handleSelectionConflict(userId, user.selection);
+
+          if (conflictingIds.length > 0) {
+            console.log('[CanvasSyncManager] Selection conflict detected, auto-deselecting:', conflictingIds);
+
+            // Get current selected IDs
+            const currentSelectedIds = this.store.getState().selectedIds;
+
+            // Remove conflicting IDs from selection
+            const newSelectedIds = currentSelectedIds.filter(id => !conflictingIds.includes(id));
+
+            // Update local selection state
+            this.store.getState().selectObjects(newSelectedIds);
+
+            // Update Fabric.js canvas selection to match
+            this._isSyncingFromStore = true;
+            try {
+              const canvas = this.fabricManager.getCanvas();
+              if (canvas) {
+                // Get currently selected objects
+                const activeObjects = canvas.getActiveObjects();
+
+                // Find objects that should be deselected
+                const objectsToDeselect = activeObjects.filter(obj => {
+                  const data = (obj as FabricObjectWithData).data;
+                  return data?.id && conflictingIds.includes(data.id);
+                });
+
+                if (objectsToDeselect.length > 0) {
+                  // Remove conflicting objects from selection
+                  const newSelection = activeObjects.filter(obj => !objectsToDeselect.includes(obj));
+
+                  // Update canvas selection
+                  if (newSelection.length > 0) {
+                    canvas.setActiveObject(newSelection.length === 1
+                      ? newSelection[0]
+                      : new (canvas.constructor as any).ActiveSelection(newSelection, { canvas })
+                    );
+                  } else {
+                    canvas.discardActiveObject();
+                  }
+
+                  canvas.renderAll();
+                  console.log('[CanvasSyncManager] Canvas selection updated after conflict resolution');
+                }
+              }
+            } finally {
+              this._isSyncingFromStore = false;
+            }
+          }
+        });
+      }
+    );
+
+    // Store unsubscribe function for cleanup
+    const prevUnsubscribe = this.unsubscribe;
+    this.unsubscribe = () => {
+      prevUnsubscribe?.();
+      unsubscribePresence();
+    };
+
+    console.log('[CanvasSyncManager] Collaborative selection sync initialized');
   }
 
   /**
@@ -95,12 +227,21 @@ export class CanvasSyncManager {
     this._isSyncingFromStore = true;
     try {
       Object.values(objects).forEach((obj: any) => {
-        console.log('[CanvasSyncManager] Adding initial object to Fabric:', {
-          id: obj.id.slice(0, 8),
-          type: obj.type,
-          position: `(${obj.x}, ${obj.y})`,
-        });
-        this.fabricManager.addObject(obj);
+        try {
+          console.log('[CanvasSyncManager] Adding initial object to Fabric:', {
+            id: obj.id.slice(0, 8),
+            type: obj.type,
+            position: `(${obj.x}, ${obj.y})`,
+          });
+          const result = this.fabricManager.addObject(obj);
+          if (!result) {
+            console.warn('[CanvasSyncManager] Failed to add object (returned null):', obj.id);
+          }
+        } catch (error) {
+          console.error('[CanvasSyncManager] Error adding individual object:', error);
+          console.error('[CanvasSyncManager] Problematic object data:', obj);
+          // Continue with next object instead of crashing
+        }
       });
     } finally {
       this._isSyncingFromStore = false;
@@ -148,59 +289,152 @@ export class CanvasSyncManager {
    */
   private setupCanvasToStateSync(): void {
     this.fabricManager.setupEventListeners({
+      // W5.D5+++++: Track active editing during drag (for future locking)
+      onObjectMoving: (target: FabricObject) => {
+        if (this._isSyncingFromStore) return;
+
+        // Track which objects are being actively edited
+        const objects = (target as any)._objects || [target];
+        const ids = objects
+          .map((obj: FabricObject) => (obj as any).data?.id)
+          .filter(Boolean) as string[];
+
+        this.activelyEditingIds = new Set(ids);
+        this.store.getState().broadcastActivelyEditing(ids);
+      },
+
       onObjectModified: (target: FabricObject) => {
         if (this._isSyncingFromStore) return; // Prevent loop
 
         this._isSyncingFromCanvas = true;
         try {
-          const canvasObject = this.fabricManager.toCanvasObject(target);
-          if (canvasObject) {
-            // Use updateObject() which handles optimistic updates + DB sync
-            this.store.getState().updateObject(canvasObject.id, canvasObject);
+          // W5.D5++++ UNIFIED STATE MANAGEMENT FIX: Handle ActiveSelection (group) movements
+          // When moving multiple objects, Fabric.js fires object:modified with ActiveSelection
+          // Use batchUpdateObjects() for atomic group updates instead of individual updateObject() calls
+
+          // CRITICAL FIX: Check for ._objects property instead of constructor name
+          // Constructor names get minified in production (e.g., 'ActiveSelection' → '_Jo')
+          // The ._objects property is reliably present on ActiveSelection instances and won't be minified
+          const objects = (target as any)._objects || [];
+          const isGroupSelection = objects.length > 0;
+
+          if (isGroupSelection) {
+            console.log(`[CanvasSyncManager] 🎯 Group modification detected - batch updating ${objects.length} objects`);
+
+            // CRITICAL FIX: Use Fabric.js getBoundingRect for TRUE absolute coordinates
+            // Previous approach was wrong - Fabric.js internal coordinates are complex
+            const batchUpdates: Array<{ id: string; updates: Partial<CanvasObject> }> = [];
+
+            objects.forEach((obj: FabricObject) => {
+              // CORRECT: Use getBoundingRect to get absolute canvas coordinates
+              // absolute=true means canvas coordinates, not viewport coordinates
+              // withTransform=true includes object's own transformations
+              const rect = obj.getBoundingRect(true, true);
+              
+              console.log('[CanvasSyncManager] 🎯 Object absolute position:', {
+                id: (obj as any).data?.id?.slice(0, 8),
+                absoluteRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+              });
+
+              // Convert to CanvasObject with CORRECT absolute coords
+              const canvasObject = this.fabricManager.toCanvasObject(obj);
+              if (canvasObject) {
+                batchUpdates.push({
+                  id: canvasObject.id,
+                  updates: {
+                    ...canvasObject,
+                    // Use bounding rect for accurate position
+                    // Note: Fabric's bounding rect gives top-left corner
+                    // But our canvas objects store center position
+                    // So we need to adjust
+                    x: rect.left + (rect.width / 2),   // Center X
+                    y: rect.top + (rect.height / 2),   // Center Y
+                    width: rect.width,
+                    height: rect.height,
+                  },
+                });
+              }
+            });
+
+            // Single atomic batch update (prevents stale broadcasts)
+            // W5.D5+++++: Use update queue to prevent race conditions
+            if (batchUpdates.length > 0) {
+              console.log(`[CanvasSyncManager] ⚡ Batch updating ${batchUpdates.length} objects atomically`);
+              
+              // Queue the batch update to ensure proper ordering
+              this.updateQueue.enqueue(async () => {
+                await this.store.getState().batchUpdateObjects(batchUpdates);
+              }).catch((error) => {
+                console.error('[CanvasSyncManager] ❌ Batch update failed:', error);
+              });
+            }
+          } else {
+            // Single object path
+            const canvasObject = this.fabricManager.toCanvasObject(target);
+            if (canvasObject) {
+              // W5.D5+++++: Queue single update to prevent race conditions
+              this.updateQueue.enqueue(async () => {
+                await this.store.getState().updateObject(canvasObject.id, canvasObject);
+              }).catch((error) => {
+                console.error('[CanvasSyncManager] ❌ Update failed:', error);
+              });
+            }
           }
+
+          // Clear active editing state after drag ends
+          this.activelyEditingIds.clear();
+          this.store.getState().broadcastActivelyEditing([]);
         } finally {
           this._isSyncingFromCanvas = false;
         }
+
+        // W5.D5++++: Update collaborative overlays after any modification
+        // This keeps lock/selection indicators positioned correctly during movement
+        this.fabricManager.updateOverlayPositions();
       },
 
       onSelectionCreated: (targets: FabricObject[]) => {
         // CRITICAL FIX: Prevent selection events during programmatic updates
         if (this._isSyncingFromStore) return;
 
-        console.log('[CanvasSyncManager] 🎯 onSelectionCreated handler called', {
-          targetCount: targets.length,
-          targets
-        });
+        console.log('[CanvasSyncManager] ✅ Selection created:', { count: targets.length });
+        
         const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
-        console.log('[CanvasSyncManager] Extracted IDs:', ids);
-        console.log('[CanvasSyncManager] Calling store.selectObjects()');
+
+        // Simple immediate selection (no locks, no visual customization)
+        // Focus on correctness first, visual polish later
         this.store.getState().selectObjects(ids);
-        console.log('[CanvasSyncManager] Store selectedIds after selection:', this.store.getState().selectedIds);
+        this.store.getState().broadcastSelection(ids);
+
+        console.log('[CanvasSyncManager] ✅ Selection set immediately:', { ids });
       },
 
       onSelectionUpdated: (targets: FabricObject[]) => {
         // CRITICAL FIX: Prevent selection events during programmatic updates
         if (this._isSyncingFromStore) return;
 
-        console.log('[CanvasSyncManager] 🎯 onSelectionUpdated handler called', {
-          targetCount: targets.length,
-          targets
-        });
+        console.log('[CanvasSyncManager] ✅ Selection updated:', { count: targets.length });
+        
         const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
-        console.log('[CanvasSyncManager] Extracted IDs:', ids);
-        console.log('[CanvasSyncManager] Calling store.selectObjects()');
+
+        // EMERGENCY FIX: Simple immediate selection (no locks)
         this.store.getState().selectObjects(ids);
-        console.log('[CanvasSyncManager] Store selectedIds after selection:', this.store.getState().selectedIds);
+        this.store.getState().broadcastSelection(ids);
+        
+        console.log('[CanvasSyncManager] ✅ Selection updated immediately:', { ids });
       },
 
       onSelectionCleared: () => {
         // CRITICAL FIX: Prevent selection events during programmatic updates
         if (this._isSyncingFromStore) return;
 
-        console.log('[CanvasSyncManager] 🎯 onSelectionCleared handler called');
-        console.log('[CanvasSyncManager] Calling store.deselectAll()');
+        console.log('[CanvasSyncManager] ✅ Selection cleared');
+
+        // EMERGENCY FIX: Simple immediate deselection
         this.store.getState().deselectAll();
-        console.log('[CanvasSyncManager] Store selectedIds after deselection:', this.store.getState().selectedIds);
+        this.store.getState().broadcastSelection([]);
+        
+        console.log('[CanvasSyncManager] ✅ Selection cleared immediately');
       },
     });
   }
@@ -234,6 +468,16 @@ export class CanvasSyncManager {
 
         this._isSyncingFromStore = true;
         try {
+          const canvas = this.fabricManager.getCanvas();
+          const activeObjects = canvas?.getActiveObjects() || [];
+          const selectedIds = this.store.getState().selectedIds;
+
+          console.log('[🎯 DEBUG] State→Canvas sync - BEFORE updates:', {
+            fabricSelection: activeObjects.length,
+            zustandSelection: selectedIds.length,
+            selectedIds
+          });
+
           // Detect additions, updates, deletions
           const currentIds = new Set(Object.keys(objects));
           const prevIds = new Set(Object.keys(prevObjects));
@@ -273,6 +517,61 @@ export class CanvasSyncManager {
               }
             }
           });
+
+          // CRITICAL FIX: Restore ActiveSelection after updates
+          // When objects are removed and re-added, Fabric.js loses the selection
+          // We need to restore it based on Zustand state
+          const selectedIdsAfter = this.store.getState().selectedIds;
+
+          if (canvas && selectedIdsAfter.length > 0) {
+            // Find the updated Fabric objects by ID
+            const objectsToSelect = selectedIdsAfter
+              .map(id => {
+                const fabricObj = canvas.getObjects().find(obj => 
+                  (obj as FabricObjectWithData).data?.id === id
+                );
+                return fabricObj;
+              })
+              .filter(Boolean) as FabricObject[];
+
+            console.log('[🎯 DEBUG] Restoring selection after updates:', {
+              zustandSelection: selectedIdsAfter.length,
+              fabricObjectsFound: objectsToSelect.length,
+              selectedIds: selectedIdsAfter
+            });
+
+            // Restore selection if we found matching objects
+            if (objectsToSelect.length > 0) {
+              if (objectsToSelect.length === 1) {
+                // Single object selection
+                canvas.setActiveObject(objectsToSelect[0]);
+              } else {
+                // Multi-object selection (ActiveSelection)
+                // Import fabric for ActiveSelection constructor
+                const fabric = (window as any).fabric;
+                if (fabric && fabric.ActiveSelection) {
+                  const activeSelection = new fabric.ActiveSelection(objectsToSelect, { canvas });
+                  canvas.setActiveObject(activeSelection);
+                  console.log('[🎯 DEBUG] Restored ActiveSelection with', objectsToSelect.length, 'objects');
+                }
+              }
+              canvas.renderAll();
+            }
+          }
+
+          // DEBUG: Check selection state AFTER updates and restoration
+          const activeObjectsAfter = canvas?.getActiveObjects() || [];
+
+          console.log('[🎯 DEBUG] State→Canvas sync - AFTER updates & restoration:', {
+            fabricSelection: activeObjectsAfter.length,
+            zustandSelection: selectedIdsAfter.length,
+            selectedIds: selectedIdsAfter,
+            selectionRestored: selectedIdsAfter.length > 0 && activeObjectsAfter.length > 0
+          });
+
+          if (selectedIdsAfter.length > 0 && activeObjectsAfter.length === 0) {
+            console.warn('[🎯 DEBUG] ⚠️ SELECTION RESTORATION FAILED - objects may not exist yet');
+          }
         } finally {
           this._isSyncingFromStore = false;
         }
@@ -346,21 +645,26 @@ export class CanvasSyncManager {
   /**
    * Check if canvas object has meaningful changes
    * Compares key properties that affect rendering
+   *
+   * W5.D5+++++ Uses precision tolerance to prevent false positives from database rounding
    */
   private hasObjectChanged(current: CanvasObject, prev: CanvasObject): boolean {
+    // Round to 2 decimal places (0.01 pixel precision)
+    const round = (n: number) => Math.round(n * 100) / 100;
+
     return (
-      current.x !== prev.x ||
-      current.y !== prev.y ||
-      current.width !== prev.width ||
-      current.height !== prev.height ||
-      current.rotation !== prev.rotation ||
+      round(current.x) !== round(prev.x) ||
+      round(current.y) !== round(prev.y) ||
+      round(current.width) !== round(prev.width) ||
+      round(current.height) !== round(prev.height) ||
+      round(current.rotation) !== round(prev.rotation) ||
       current.opacity !== prev.opacity ||
       current.fill !== prev.fill ||
-      current.stroke !== prev.stroke || // FIX #2: Add stroke detection
-      current.stroke_width !== prev.stroke_width || // FIX #2: Add stroke_width detection
+      current.stroke !== prev.stroke ||
+      current.stroke_width !== prev.stroke_width ||
       current.locked_by !== prev.locked_by ||
       JSON.stringify(current.type_properties) !== JSON.stringify(prev.type_properties) ||
-      JSON.stringify(current.style_properties) !== JSON.stringify(prev.style_properties) // FIX #2: Add style_properties detection
+      JSON.stringify(current.style_properties) !== JSON.stringify(prev.style_properties)
     );
   }
 
@@ -373,5 +677,11 @@ export class CanvasSyncManager {
       this.unsubscribe();
       this.unsubscribe = null;
     }
+
+    // W5.D5+++++: Clear update queue and active editing state
+    this.updateQueue.clear();
+    this.activelyEditingIds.clear();
+
+    console.log('[CanvasSyncManager] Cleanup complete');
   }
 }

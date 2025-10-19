@@ -12,6 +12,12 @@ export type ShapeType = 'rectangle' | 'circle' | 'text';
 export type ToolMode = 'select' | 'hand';
 
 /**
+ * Canvas permission level
+ * Defines what actions a user can perform on a canvas
+ */
+export type CanvasPermission = 'owner' | 'editor' | 'viewer';
+
+/**
  * Canvas workspace metadata
  * Each canvas is an isolated design workspace (Figma-style multi-canvas architecture)
  */
@@ -22,6 +28,7 @@ export interface Canvas {
   owner_id: string;
   created_at: string;
   updated_at: string;
+  is_public: boolean; // Phase 1: Public/private toggle for sharing
 }
 
 /**
@@ -198,4 +205,17 @@ export interface BatchOperationResult {
   success: boolean;
   affectedIds: string[];
   error?: string;
+}
+
+/**
+ * Canvas permission record (Phase 2: Granular permissions)
+ * Tracks user access levels for shared canvases
+ */
+export interface CanvasPermissionRecord {
+  id: string;
+  canvas_id: string;
+  user_id: string;
+  permission: CanvasPermission;
+  granted_at: string;
+  granted_by: string | null;
 }

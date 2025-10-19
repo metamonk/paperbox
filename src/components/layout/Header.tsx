@@ -2,7 +2,8 @@ import { PresenceBadge } from '../collaboration/PresenceBadge';
 import { CanvasPicker } from '../canvas/CanvasPicker';
 import { CanvasManagementModal } from '../canvas/CanvasManagementModal';
 import { useState } from 'react';
-import { Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Settings, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePaperboxStore } from '@/stores';
 import type { Canvas } from '@/types/canvas';
@@ -26,7 +27,8 @@ interface HeaderProps {
  * - User info and sign out button on the right
  */
 export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarContent, onToggleTools, onToggleUsers, onToggleProperties, onToggleLayers }: HeaderProps) {
-  // W5.D3: Canvas management modal state
+  // W5.D3+W5.D5.3: Canvas management modal state + navigation
+  const navigate = useNavigate();
   const [managementModalOpen, setManagementModalOpen] = useState(false);
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const canvases = usePaperboxStore((state) => state.canvases);
@@ -36,9 +38,19 @@ export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarCon
     <header className="h-16 bg-white border-b border-gray-200 px-4 md:px-6 flex items-center justify-between gap-4">
       {/* Left side: Canvas Picker (Figma-style) + Tools + Presence */}
       <div className="flex items-center gap-3">
-        {/* W5.D3: Canvas Picker - prominently placed like Figma */}
+        {/* W5.D3+W5.D5.3: Canvas Picker + Browse + Settings */}
         <div className="flex items-center gap-2">
           <CanvasPicker />
+          {/* W5.D5.3: Browse all canvases button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => navigate('/canvases')}
+            title="Browse all canvases"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
           {/* Settings icon to open canvas management modal */}
           <Button
             variant="ghost"

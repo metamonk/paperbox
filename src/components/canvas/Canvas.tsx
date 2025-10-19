@@ -13,11 +13,13 @@ import { useState, useCallback, useEffect } from 'react';
 import { useCanvasSync } from '../../hooks/useCanvasSync';
 import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
 import { usePresence } from '../../hooks/usePresence';
+import { useCollaborativeOverlays } from '../../hooks/useCollaborativeOverlays';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
 import { useSidebarState } from '../../hooks/useSidebarState';
 import { useKeyboard } from '../../hooks/useKeyboard';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
+// TEMP DISABLED: import { RemoteSelectionOverlay } from '../collaboration/RemoteSelectionOverlay';
 import { UsersPanel } from '../collaboration/UsersPanel';
 import { Header } from '../layout/Header';
 import { Sidebar } from '../layout/Sidebar';
@@ -56,11 +58,17 @@ export function Canvas() {
   // W1.D10: Initialize complete sync pipeline (Supabase ↔ Zustand ↔ Fabric.js)
   const { initialized: canvasInitialized, error: syncError, fabricManager } = useCanvasSync(canvasElement);
 
-  // Multiplayer cursors via Broadcast
-  const { cursors, sendCursorUpdate } = useBroadcastCursors();
+  // W5.D5.1: Get active canvas ID for scoped realtime channels (cursors + presence)
+  const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
 
-  // Presence tracking and online users
-  const { onlineUsers, updateActivity, currentUserId } = usePresence();
+  // Multiplayer cursors via Broadcast (canvas-scoped)
+  const { cursors, sendCursorUpdate } = useBroadcastCursors(activeCanvasId);
+
+  // Presence tracking and online users (canvas-scoped)
+  const { onlineUsers, updateActivity, currentUserId } = usePresence(activeCanvasId);
+
+  // W5.D5++++: Collaborative overlays (lock/selection indicators)
+  useCollaborativeOverlays(fabricManager);
 
   // Auth for logout
   const { signOut, user } = useAuth();
@@ -85,9 +93,7 @@ export function Canvas() {
   // W2.D12: Placement mode state for click-to-place pattern
   const isPlacementMode = usePaperboxStore((state) => state.isPlacementMode);
 
-  // Canvas transform state (for cursor overlay)
-  const [scale] = useState(1);
-  const [position] = useState({ x: 0, y: 0 });
+  // W5.D5+: Removed dummy scale/position - CursorOverlay now gets viewport from Fabric.js directly
 
   /**
    * W2.D12: Wire up placement click handler to fabricManager
@@ -133,13 +139,46 @@ export function Canvas() {
 
   /**
    * Handle mouse movement to broadcast cursor position
+   *
+   * W5.D5+: Convert screen coordinates to canvas world coordinates
+   * before broadcasting to ensure consistent cursor positions across
+   * users with different viewports (zoom/pan)
    */
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
 
-    sendCursorUpdate(canvasX, canvasY);
+    // Get Fabric.js canvas instance
+    const fabricCanvas = fabricManager?.getCanvas();
+
+    if (fabricCanvas) {
+      // Convert screen coordinates to canvas world coordinates
+      // This accounts for zoom and pan transformations
+      // Inverse transformation: canvas = (screen - pan) / zoom
+      const vpt = fabricCanvas.viewportTransform;
+      const zoom = fabricCanvas.getZoom();
+
+      const canvasX = (screenX - vpt[4]) / zoom;
+      const canvasY = (screenY - vpt[5]) / zoom;
+
+      // Broadcast canvas coordinates (same system as canvas objects)
+      sendCursorUpdate(canvasX, canvasY);
+
+      // console.log('[Canvas] Cursor broadcast:', {
+      //   screen: { x: screenX, y: screenY },
+      //   canvas: { x: canvasX, y: canvasY },
+      //   viewport: {
+      //     zoom: zoom,
+      //     pan: { x: vpt[4], y: vpt[5] }
+      //   }
+      // });
+    } else {
+      // Fallback: broadcast screen coordinates if Fabric.js not ready
+      // This maintains current behavior during initialization
+      sendCursorUpdate(screenX, screenY);
+    }
+
     updateActivity();
   };
 
@@ -282,12 +321,15 @@ export function Canvas() {
             }}
           />
 
-          {/* Multiplayer Cursors Overlay */}
+          {/* Multiplayer Cursors Overlay - W5.D5+: Now uses Fabric.js viewport */}
           <CursorOverlay
             cursors={cursors}
-            scale={scale}
-            stagePosition={position}
+            fabricManager={fabricManager}
           />
+
+          {/* TEMP DISABLED: Remote Selection Overlay - coordinate system issues
+          <RemoteSelectionOverlay />
+          */}
 
           {/* W2.D12+: Navigation indicator (zoom, pan position) */}
           <CanvasNavigationIndicator />
