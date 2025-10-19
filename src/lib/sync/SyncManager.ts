@@ -22,6 +22,8 @@ import { supabase } from '../supabase';
 import { usePaperboxStore } from '../../stores';
 import type { Database } from '../../types/database';
 import { dbToCanvasObject } from './coordinateConversion';
+import { ConnectionMonitor } from './ConnectionMonitor';
+import { OperationQueue } from './OperationQueue';
 
 type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
 
@@ -93,15 +95,25 @@ export class SyncManager {
             this.handleDelete(payload.old as DbCanvasObject);
           },
         )
-        .subscribe((status) => {
+        .subscribe(async (status) => {
+          // Notify ConnectionMonitor of status change
+          ConnectionMonitor.getInstance().handleStatusChange(status);
+
           if (status === 'SUBSCRIBED') {
             this.isSubscribed = true;
-          } else if (status === 'CHANNEL_ERROR') {
-            console.error('[SyncManager] Subscription error');
+            
+            // Flush operation queue on successful connection
+            const queue = OperationQueue.getInstance();
+            if (queue.hasOperations()) {
+              console.log('[SyncManager] Connection restored, flushing operation queue');
+              await queue.flush();
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            console.error(`[SyncManager] Subscription ${status.toLowerCase().replace('_', ' ')}`);
             this.isSubscribed = false;
-          } else if (status === 'TIMED_OUT') {
-            console.error('[SyncManager] Subscription timed out');
-            this.isSubscribed = false;
+            
+            // Start reconnection process
+            ConnectionMonitor.getInstance().startReconnection();
           }
         });
     } catch (error) {

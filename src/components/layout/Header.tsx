@@ -3,6 +3,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/button';
 import type { PresenceUser } from '@/hooks/usePresence';
+import { ConnectionStatusDot } from './ConnectionStatusDot';
 
 interface HeaderProps {
   onlineUsers: PresenceUser[];
@@ -32,8 +33,10 @@ export function Header({ onlineUsers, currentUserId, onSignOut, userName }: Head
       <div className="flex items-center gap-3">
         {/* Presence Popover */}
         <PresencePopover users={onlineUsers} currentUserId={currentUserId} />
-        <div className="text-sm text-muted-foreground hidden sm:block">
+        <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{userName}</span>
+          {/* Connection Status Indicator */}
+          <ConnectionStatusDot />
         </div>
         <ThemeToggle />
         <Button
