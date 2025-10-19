@@ -116,7 +116,11 @@ export type CommandType =
   // Copy/Paste
   | 'COPY_OBJECTS'
   | 'PASTE_OBJECTS'
-  | 'DUPLICATE_OBJECTS';
+  | 'DUPLICATE_OBJECTS'
+  
+  // Complex
+  | 'COMPOSITE'
+  | 'GRID_LAYOUT';
 
 /**
  * Abstract base command class

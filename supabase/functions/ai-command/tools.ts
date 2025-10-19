@@ -121,6 +121,57 @@ export const changeStyleTool = tool({
 });
 
 /**
+ * Tool: Align Objects
+ * Aligns multiple selected objects along a specified axis
+ */
+export const alignObjectsTool = tool({
+  description: 'Align multiple selected objects along a specified edge or center. Use for "align left", "center horizontally", "align bottom", etc.',
+  inputSchema: z.object({
+    objectIds: z.array(z.string()).min(2).describe('Array of object IDs to align. Use context.selectedObjects to get IDs. Need at least 2 objects.'),
+    alignment: z.enum(['left', 'center', 'right', 'top', 'middle', 'bottom']).describe(
+      'Alignment type: left/center/right (horizontal), top/middle/bottom (vertical)'
+    ),
+  }),
+});
+
+/**
+ * Tool: Distribute Objects
+ * Distributes multiple objects with even spacing
+ */
+export const distributeObjectsTool = tool({
+  description: 'Distribute multiple objects with even spacing horizontally or vertically. Use for "space evenly", "distribute horizontally", etc.',
+  inputSchema: z.object({
+    objectIds: z.array(z.string()).min(3).describe('Array of object IDs to distribute. Use context.selectedObjects to get IDs. Need at least 3 objects.'),
+    direction: z.enum(['horizontal', 'vertical']).describe('Distribution direction: horizontal (left to right) or vertical (top to bottom)'),
+    spacing: z.number().positive().optional().describe('Fixed spacing between objects in pixels. If not provided, objects are distributed evenly between first and last object.'),
+  }),
+});
+
+/**
+ * Tool: Grid Layout
+ * Create a grid of shapes (circles, rectangles, or text)
+ */
+export const gridLayoutTool = tool({
+  description: 'Create a grid of identical shapes arranged in rows and columns. Use for "create a 3x3 grid of circles", "make a 2x4 grid of squares", etc.',
+  inputSchema: z.object({
+    rows: z.number().int().positive().describe('Number of rows in the grid'),
+    cols: z.number().int().positive().describe('Number of columns in the grid'),
+    shapeType: z.enum(['circle', 'rectangle', 'text']).describe('Type of shape to create in the grid'),
+    startX: z.number().describe('X coordinate of the top-left corner of the grid (use viewport center if not specified)'),
+    startY: z.number().describe('Y coordinate of the top-left corner of the grid (use viewport center if not specified)'),
+    spacing: z.number().positive().describe('Space between shapes in pixels. For circles: center-to-center distance. For rectangles/text: edge-to-edge distance.'),
+    radius: z.number().positive().optional().describe('Radius for circles (default: 30px)'),
+    width: z.number().positive().optional().describe('Width for rectangles (default: 80px)'),
+    height: z.number().positive().optional().describe('Height for rectangles (default: 80px)'),
+    fill: z.string().optional().describe('Fill color in hex format (default: blue for circles, green for rectangles)'),
+    stroke: z.string().optional().describe('Stroke color in hex format'),
+    strokeWidth: z.number().optional().describe('Stroke width in pixels'),
+    text: z.string().optional().describe('Text content for text shapes (default: numbered 1, 2, 3...)'),
+    fontSize: z.number().positive().optional().describe('Font size for text shapes (default: 20px)'),
+  }),
+});
+
+/**
  * All available tools for the AI
  */
 export const tools = {
@@ -131,4 +182,7 @@ export const tools = {
   resizeObject: resizeObjectTool,
   rotateObject: rotateObjectTool,
   changeStyle: changeStyleTool,
+  alignObjects: alignObjectsTool,
+  distributeObjects: distributeObjectsTool,
+  gridLayout: gridLayoutTool,
 };

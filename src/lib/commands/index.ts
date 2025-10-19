@@ -11,6 +11,10 @@ import { MoveCommand } from './MoveCommand';
 import { ResizeCommand } from './ResizeCommand';
 import { RotateCommand } from './RotateCommand';
 import { ChangeStyleCommand } from './ChangeStyleCommand';
+import { AlignObjectsCommand } from './AlignObjectsCommand';
+import { DistributeObjectsCommand } from './DistributeObjectsCommand';
+import { CompositeCommand } from './CompositeCommand';
+import { GridLayoutCommand } from './GridLayoutCommand';
 
 // Register creation commands
 registerCommand('CREATE_CIRCLE', CreateCircleCommand);
@@ -25,6 +29,14 @@ registerCommand('ROTATE_OBJECT', RotateCommand);
 // Register style commands
 registerCommand('CHANGE_FILL', ChangeStyleCommand);
 
+// Register layout commands
+registerCommand('ALIGN_OBJECTS', AlignObjectsCommand);
+registerCommand('DISTRIBUTE_OBJECTS', DistributeObjectsCommand);
+
+// Register complex commands
+registerCommand('COMPOSITE', CompositeCommand);
+registerCommand('GRID_LAYOUT', GridLayoutCommand);
+
 // Export everything
 export * from './Command';
 export * from './CreateCircleCommand';
@@ -34,6 +46,10 @@ export * from './MoveCommand';
 export * from './ResizeCommand';
 export * from './RotateCommand';
 export * from './ChangeStyleCommand';
+export * from './AlignObjectsCommand';
+export * from './DistributeObjectsCommand';
+export * from './CompositeCommand';
+export * from './GridLayoutCommand';
 
-console.log('[Commands] Registered 7 commands (3 creation, 3 manipulation, 1 style)');
+console.log('[Commands] Registered 11 commands (3 creation, 3 manipulation, 1 style, 2 layout, 2 complex)');
 

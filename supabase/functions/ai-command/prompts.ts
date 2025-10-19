@@ -75,6 +75,11 @@ Note: The canvas center is always at (0, 0), but users may be panned away from i
 - **moveObject**: REQUIRES objectId (from selectedObjects or allObjects)
 - **resizeObject**: REQUIRES objectId (from selectedObjects or allObjects)
 - **rotateObject**: REQUIRES objectId (from selectedObjects or allObjects)
+- **changeStyle**: REQUIRES objectId (from selectedObjects or allObjects)
+
+### Required for Layout:
+- **alignObjects**: REQUIRES objectIds array (at least 2 objects from selectedObjects)
+- **distributeObjects**: REQUIRES objectIds array (at least 3 objects from selectedObjects)
 
 ### IMPORTANT Selection Rules:
 - If user says "make this bigger" but nothing is selected → Tell them to select an object first
@@ -137,6 +142,45 @@ ${context.selectedObjects.length > 0 ? `→ Call changeStyle with objectId="${co
 
 User: "Add a red border" or "Give it a red stroke"
 ${context.selectedObjects.length > 0 ? `→ Call changeStyle with objectId="${context.selectedObjects[0].id}", stroke="#ff0000", stroke_width=2` : '→ Respond: "Please select an object first, then I can add a border for you."'}
+
+## Layout Commands Examples
+
+**SELECTED OBJECTS:** ${context.selectedObjects.length} selected
+
+User: "Align these to the left" or "Align left"
+${context.selectedObjects.length >= 2 ? `→ Call alignObjects with objectIds=[${context.selectedObjects.map(o => `"${o.id}"`).join(', ')}], alignment="left"` : '→ Respond: "Please select at least 2 objects to align them."'}
+
+User: "Center them horizontally" or "Align center"
+${context.selectedObjects.length >= 2 ? `→ Call alignObjects with objectIds=[${context.selectedObjects.map(o => `"${o.id}"`).join(', ')}], alignment="center"` : '→ Respond: "Please select at least 2 objects to align them."'}
+
+User: "Align to the top" or "Align top"
+${context.selectedObjects.length >= 2 ? `→ Call alignObjects with objectIds=[${context.selectedObjects.map(o => `"${o.id}"`).join(', ')}], alignment="top"` : '→ Respond: "Please select at least 2 objects to align them."'}
+
+User: "Center vertically" or "Align middle"
+${context.selectedObjects.length >= 2 ? `→ Call alignObjects with objectIds=[${context.selectedObjects.map(o => `"${o.id}"`).join(', ')}], alignment="middle"` : '→ Respond: "Please select at least 2 objects to align them."'}
+
+User: "Distribute horizontally" or "Space them evenly"
+${context.selectedObjects.length >= 3 ? `→ Call distributeObjects with objectIds=[${context.selectedObjects.map(o => `"${o.id}"`).join(', ')}], direction="horizontal"` : '→ Respond: "Please select at least 3 objects to distribute them."'}
+
+User: "Distribute vertically" or "Space vertically"
+${context.selectedObjects.length >= 3 ? `→ Call distributeObjects with objectIds=[${context.selectedObjects.map(o => `"${o.id}"`).join(', ')}], direction="vertical"` : '→ Respond: "Please select at least 3 objects to distribute them."'}
+
+User: "Space them 50 pixels apart horizontally"
+${context.selectedObjects.length >= 3 ? `→ Call distributeObjects with objectIds=[${context.selectedObjects.map(o => `"${o.id}"`).join(', ')}], direction="horizontal", spacing=50` : '→ Respond: "Please select at least 3 objects to distribute them."'}
+
+## Complex Commands (Grids & Patterns)
+
+User: "Create a 3x3 grid of circles"
+→ Call gridLayout with rows=3, cols=3, shapeType="circle", startX=${Math.round(context.viewport.centerX)}, startY=${Math.round(context.viewport.centerY)}, spacing=100
+→ Respond: "Creating a 3x3 grid of circles at the center..."
+
+User: "Make a 2x4 grid of squares" or "Create a 2x4 grid of rectangles"
+→ Call gridLayout with rows=2, cols=4, shapeType="rectangle", startX=${Math.round(context.viewport.centerX)}, startY=${Math.round(context.viewport.centerY)}, spacing=120
+→ Respond: "Creating a 2x4 grid of squares..."
+
+User: "Create a 4x4 grid of small red circles"
+→ Call gridLayout with rows=4, cols=4, shapeType="circle", startX=${Math.round(context.viewport.centerX)}, startY=${Math.round(context.viewport.centerY)}, spacing=80, radius=20, fill="#ff0000"
+→ Respond: "Creating a 4x4 grid of small red circles..."
 
 Now, respond to the user's request using the available tools. Execute the command directly without asking for confirmation.`;
 }

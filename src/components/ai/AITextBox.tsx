@@ -15,6 +15,9 @@ import {
   ResizeCommand,
   RotateCommand,
   ChangeStyleCommand,
+  AlignObjectsCommand,
+  DistributeObjectsCommand,
+  GridLayoutCommand,
   type CreateCircleParams,
   type CreateRectangleParams,
   type CreateTextParams,
@@ -22,6 +25,9 @@ import {
   type ResizeCommandParams,
   type RotateCommandParams,
   type ChangeStyleCommandParams,
+  type AlignObjectsCommandParams,
+  type DistributeObjectsCommandParams,
+  type GridLayoutCommandParams,
 } from '@/lib/commands';
 import { Button } from '@/components/ui/button';
 
@@ -108,6 +114,15 @@ export function AITextBox({ onClose }: AITextBoxProps) {
               break;
             case 'changeStyle':
               command = new ChangeStyleCommand(toolCall.parameters as ChangeStyleCommandParams);
+              break;
+            case 'alignObjects':
+              command = new AlignObjectsCommand(toolCall.parameters as AlignObjectsCommandParams);
+              break;
+            case 'distributeObjects':
+              command = new DistributeObjectsCommand(toolCall.parameters as DistributeObjectsCommandParams);
+              break;
+            case 'gridLayout':
+              command = new GridLayoutCommand({...(toolCall.parameters as Omit<GridLayoutCommandParams, 'userId'>), userId});
               break;
             default:
               console.warn('[AITextBox] Unknown tool:', toolCall.toolName);
