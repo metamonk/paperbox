@@ -129,6 +129,15 @@ ${context.selectedObjects.length > 0 ? `→ Call resizeObject with objectId="${c
 User: "Double the size"
 ${context.selectedObjects.length > 0 ? `→ Call resizeObject with objectId="${context.selectedObjects[0].id}", scaleX=2, scaleY=2` : '→ Respond: "Please select an object first, then I can resize it for you."'}
 
+User: "Change the color to red" or "Make it red"
+${context.selectedObjects.length > 0 ? `→ Call changeStyle with objectId="${context.selectedObjects[0].id}", fill="#ff0000"` : '→ Respond: "Please select an object first, then I can change its color for you."'}
+
+User: "Make it semi-transparent" or "Set opacity to 50%"
+${context.selectedObjects.length > 0 ? `→ Call changeStyle with objectId="${context.selectedObjects[0].id}", opacity=0.5` : '→ Respond: "Please select an object first, then I can change its opacity for you."'}
+
+User: "Add a red border" or "Give it a red stroke"
+${context.selectedObjects.length > 0 ? `→ Call changeStyle with objectId="${context.selectedObjects[0].id}", stroke="#ff0000", stroke_width=2` : '→ Respond: "Please select an object first, then I can add a border for you."'}
+
 Now, respond to the user's request using the available tools. Execute the command directly without asking for confirmation.`;
 }
 

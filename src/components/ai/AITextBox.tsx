@@ -14,12 +14,14 @@ import {
   MoveCommand,
   ResizeCommand,
   RotateCommand,
+  ChangeStyleCommand,
   type CreateCircleParams,
   type CreateRectangleParams,
   type CreateTextParams,
   type MoveCommandParams,
   type ResizeCommandParams,
   type RotateCommandParams,
+  type ChangeStyleCommandParams,
 } from '@/lib/commands';
 import { Button } from '@/components/ui/button';
 
@@ -103,6 +105,9 @@ export function AITextBox({ onClose }: AITextBoxProps) {
               break;
             case 'rotateObject':
               command = new RotateCommand(toolCall.parameters as RotateCommandParams);
+              break;
+            case 'changeStyle':
+              command = new ChangeStyleCommand(toolCall.parameters as ChangeStyleCommandParams);
               break;
             default:
               console.warn('[AITextBox] Unknown tool:', toolCall.toolName);

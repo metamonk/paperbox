@@ -10,6 +10,7 @@ import { CreateTextCommand } from './CreateTextCommand';
 import { MoveCommand } from './MoveCommand';
 import { ResizeCommand } from './ResizeCommand';
 import { RotateCommand } from './RotateCommand';
+import { ChangeStyleCommand } from './ChangeStyleCommand';
 
 // Register creation commands
 registerCommand('CREATE_CIRCLE', CreateCircleCommand);
@@ -21,6 +22,9 @@ registerCommand('MOVE_OBJECT', MoveCommand);
 registerCommand('RESIZE_OBJECT', ResizeCommand);
 registerCommand('ROTATE_OBJECT', RotateCommand);
 
+// Register style commands
+registerCommand('CHANGE_FILL', ChangeStyleCommand);
+
 // Export everything
 export * from './Command';
 export * from './CreateCircleCommand';
@@ -29,6 +33,7 @@ export * from './CreateTextCommand';
 export * from './MoveCommand';
 export * from './ResizeCommand';
 export * from './RotateCommand';
+export * from './ChangeStyleCommand';
 
-console.log('[Commands] Registered 6 commands (3 creation, 3 manipulation)');
+console.log('[Commands] Registered 7 commands (3 creation, 3 manipulation, 1 style)');
 

@@ -106,6 +106,21 @@ export const rotateObjectTool = tool({
 });
 
 /**
+ * Tool: Change Style
+ * Changes styling properties of an object (color, stroke, opacity)
+ */
+export const changeStyleTool = tool({
+  description: 'Change the styling of a selected object: fill color, stroke color, stroke width, or opacity',
+  inputSchema: z.object({
+    objectId: z.string().describe('ID of the object to style. Use context.selectedObjects to get IDs of selected objects.'),
+    fill: z.string().optional().describe('New fill color in hex format (e.g., #ff0000 for red, #00ff00 for green)'),
+    stroke: z.string().optional().describe('New stroke/border color in hex format'),
+    stroke_width: z.number().optional().describe('New stroke/border width in pixels'),
+    opacity: z.number().min(0).max(1).optional().describe('New opacity from 0 (transparent) to 1 (opaque)'),
+  }),
+});
+
+/**
  * All available tools for the AI
  */
 export const tools = {
@@ -115,4 +130,5 @@ export const tools = {
   moveObject: moveObjectTool,
   resizeObject: resizeObjectTool,
   rotateObject: rotateObjectTool,
+  changeStyle: changeStyleTool,
 };
