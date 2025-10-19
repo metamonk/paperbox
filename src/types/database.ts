@@ -254,7 +254,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      batch_update_z_index: {
+        Args: {
+          layer_ids: string[]
+          new_z_indices: number[]
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       canvas_permission: "owner" | "editor" | "viewer"

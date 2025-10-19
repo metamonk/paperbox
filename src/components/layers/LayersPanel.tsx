@@ -58,6 +58,7 @@ export function LayersPanel() {
   // Drag-drop state
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
 
   // Rename state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -74,47 +75,77 @@ export function LayersPanel() {
   const handleDragOver = (e: React.DragEvent, objectId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    
+    if (!draggedId || draggedId === objectId) return;
+    
+    // Calculate if cursor is in top or bottom half of item
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const isTopHalf = e.clientY < midpoint;
+    
     setDropTargetId(objectId);
+    setDropPosition(isTopHalf ? 'before' : 'after');
   };
 
-  const handleDragLeave = () => {
-    setDropTargetId(null);
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the entire item, not child elements
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (!relatedTarget || !(e.currentTarget as HTMLElement).contains(relatedTarget)) {
+      setDropTargetId(null);
+      setDropPosition(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
-
-    if (!draggedId || draggedId === targetId) {
+    
+    if (!draggedId || draggedId === targetId || !dropPosition) {
       setDraggedId(null);
       setDropTargetId(null);
+      setDropPosition(null);
       return;
     }
 
-    // Get z-index of target layer
-    const targetIndex = layerOrder.indexOf(targetId);
-
-    // In reversed display, we need to convert back to actual layerOrder index
-    // layerOrder is bottom-to-top, but display is top-to-bottom
-    const actualTargetIndex = layerOrder.length - 1 - targetIndex;
-
-    console.log('[LayersPanel] Drag-drop:', {
+    // Work with display order (top-to-bottom, reversed from layerOrder)
+    const displayOrder = [...layerOrder].reverse();
+    const draggedIdx = displayOrder.indexOf(draggedId);
+    const targetIdx = displayOrder.indexOf(targetId);
+    
+    // Calculate insertion index
+    let insertIdx = targetIdx;
+    if (dropPosition === 'after') {
+      insertIdx = targetIdx + 1;
+    }
+    
+    // Adjust if dragging from above (item will shift down)
+    if (draggedIdx < insertIdx) {
+      insertIdx -= 1;
+    }
+    
+    // Convert display index back to layerOrder index (bottom-to-top)
+    const newZIndex = layerOrder.length - 1 - insertIdx;
+    
+    console.log('[LayersPanel] Drop:', {
       draggedId,
       targetId,
-      targetIndex,
-      actualTargetIndex,
-      layerOrderBefore: [...layerOrder]
+      dropPosition,
+      draggedIdx,
+      targetIdx,
+      insertIdx,
+      newZIndex,
     });
-
-    // Update z-index using layersSlice action
-    setZIndex(draggedId, actualTargetIndex);
-
+    
+    setZIndex(draggedId, newZIndex);
+    
     setDraggedId(null);
     setDropTargetId(null);
+    setDropPosition(null);
   };
 
   const handleDragEnd = () => {
     setDraggedId(null);
     setDropTargetId(null);
+    setDropPosition(null);
   };
 
   // Rename handlers
@@ -220,22 +251,22 @@ export function LayersPanel() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="p-3">
-        {/* Header */}
-        <div className="mb-3 pb-2 border-b border-border">
-          <h3 className="font-semibold text-sm">Layers</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {layerNodes.length} {layerNodes.length === 1 ? 'layer' : 'layers'}
-          </p>
-        </div>
+    <div className="flex-1 flex flex-col">
+      {/* Fixed Header - Always visible */}
+      <div className="flex-shrink-0 px-3 py-3 pb-2 border-b border-border">
+        <h3 className="font-semibold text-sm">Layers</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {layerNodes.length} {layerNodes.length === 1 ? 'layer' : 'layers'}
+        </p>
+      </div>
 
-        {/* Layer List - Proper Kibo UI Structure */}
+      {/* Scrollable Body - items extend to edges */}
+      <div className="flex-1 overflow-y-auto">
         <TreeProvider
           selectedIds={selectedIds}
           onSelectionChange={(ids) => {
             if (ids.length > 0) {
-              selectObjects(ids); // Actually call the store!
+              selectObjects(ids);
             }
           }}
           selectable={true}
@@ -246,16 +277,23 @@ export function LayersPanel() {
         >
           <TreeView>
             {layerNodes.map((node, index) => (
-              <div
-                key={node!.id}
-                draggable={!node!.locked}
-                onDragStart={(e) => handleDragStart(e, node!.id)}
-                onDragOver={(e) => handleDragOver(e, node!.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, node!.id)}
-                onDragEnd={handleDragEnd}
-              >
-                <ContextMenu>
+              <div key={node!.id} className="relative">
+                {/* Top insertion line - shows when dropping BEFORE this item */}
+                {dropTargetId === node!.id && 
+                 dropPosition === 'before' && 
+                 draggedId !== node!.id && (
+                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary z-10 pointer-events-none" />
+                )}
+                
+                <div
+                  draggable={!node!.locked}
+                  onDragStart={(e) => handleDragStart(e, node!.id)}
+                  onDragOver={(e) => handleDragOver(e, node!.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, node!.id)}
+                  onDragEnd={handleDragEnd}
+                >
+                  <ContextMenu>
                   <ContextMenuTrigger asChild>
                     <TreeNode
                       nodeId={node!.id}
@@ -266,8 +304,7 @@ export function LayersPanel() {
                           'group relative',
                           !node!.locked && 'cursor-move',
                           node!.locked && 'cursor-not-allowed opacity-60',
-                          draggedId === node!.id && 'opacity-40',
-                          dropTargetId === node!.id && 'ring-2 ring-primary'
+                          draggedId === node!.id && 'opacity-40'
                         )}
                       >
                         {/* No expander for flat list (no children) */}
@@ -389,6 +426,14 @@ export function LayersPanel() {
                     </ContextMenuItem>
                   </ContextMenuContent>
                 </ContextMenu>
+                </div>
+                
+                {/* Bottom insertion line - shows when dropping AFTER this item */}
+                {dropTargetId === node!.id && 
+                 dropPosition === 'after' && 
+                 draggedId !== node!.id && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary z-10 pointer-events-none" />
+                )}
               </div>
             ))}
           </TreeView>

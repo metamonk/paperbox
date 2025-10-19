@@ -135,6 +135,8 @@ function hasSignificantChange(current: CanvasObject, updated: CanvasObject): boo
     current.stroke !== updated.stroke ||
     current.stroke_width !== updated.stroke_width ||
     current.locked_by !== updated.locked_by ||
+    current.z_index !== updated.z_index || // ✅ Check z_index for layer order changes
+    JSON.stringify(current.metadata) !== JSON.stringify(updated.metadata) || // ✅ Check metadata for layer names
     JSON.stringify(current.type_properties) !== JSON.stringify(updated.type_properties) ||
     JSON.stringify(current.style_properties) !== JSON.stringify(updated.style_properties)
   );
@@ -179,7 +181,7 @@ export const createCanvasSlice: StateCreator<
       // Auto-select first canvas or create default if none exists
       const canvases = get().canvases;
       if (canvases.length === 0) {
-        console.log('[canvasSlice] No canvases found, creating default canvas...');
+        // console.log('[canvasSlice] No canvases found, creating default canvas...');
         const defaultCanvas = await get().createCanvas('My Canvas', 'Default canvas');
         await get().setActiveCanvas(defaultCanvas.id);
         return;
@@ -187,7 +189,7 @@ export const createCanvasSlice: StateCreator<
 
       // Select first canvas
       const firstCanvas = canvases[0];
-      console.log('[canvasSlice] Auto-selecting first canvas:', firstCanvas.id.slice(0, 8));
+      // console.log('[canvasSlice] Auto-selecting first canvas:', firstCanvas.id.slice(0, 8));
       await get().setActiveCanvas(firstCanvas.id);
 
       // Note: setActiveCanvas handles object loading and realtime subscription
@@ -229,12 +231,12 @@ export const createCanvasSlice: StateCreator<
 
       set({ canvases: data || [], canvasesLoading: false }, undefined, 'canvas/loadCanvasesSuccess');
 
-      console.log('[canvasSlice] Loaded canvases:', {
-        count: data?.length || 0,
-        owned: data?.filter(c => c.owner_id === userId).length || 0,
-        public: data?.filter(c => c.is_public && c.owner_id !== userId).length || 0,
-        canvasIds: data?.map(c => c.id.slice(0, 8)) || [],
-      });
+      // console.log('[canvasSlice] Loaded canvases:', {
+      //   count: data?.length || 0,
+      //   owned: data?.filter(c => c.owner_id === userId).length || 0,
+      //   public: data?.filter(c => c.is_public && c.owner_id !== userId).length || 0,
+      //   canvasIds: data?.map(c => c.id.slice(0, 8)) || [],
+      // });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load canvases';
       set({ error: errorMessage, canvasesLoading: false }, undefined, 'canvas/loadCanvasesError');
@@ -268,10 +270,10 @@ export const createCanvasSlice: StateCreator<
         state.canvases.push(data);
       }, undefined, 'canvas/createCanvasSuccess');
 
-      console.log('[canvasSlice] Created canvas:', {
-        id: data.id.slice(0, 8),
-        name: data.name,
-      });
+      // console.log('[canvasSlice] Created canvas:', {
+      //   id: data.id.slice(0, 8),
+      //   name: data.name,
+      // });
 
       return data;
     } catch (error) {
@@ -303,10 +305,10 @@ export const createCanvasSlice: StateCreator<
         }
       }, undefined, 'canvas/updateCanvasSuccess');
 
-      console.log('[canvasSlice] Updated canvas:', {
-        id: id.slice(0, 8),
-        updates,
-      });
+      // console.log('[canvasSlice] Updated canvas:', {
+      //   id: id.slice(0, 8),
+      //   updates,
+      // });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update canvas';
       set({ error: errorMessage }, undefined, 'canvas/updateCanvasError');
@@ -339,9 +341,9 @@ export const createCanvasSlice: StateCreator<
         }
       }, undefined, 'canvas/deleteCanvasSuccess');
 
-      console.log('[canvasSlice] Deleted canvas:', {
-        id: id.slice(0, 8),
-      });
+      // console.log('[canvasSlice] Deleted canvas:', {
+      //   id: id.slice(0, 8),
+      // });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete canvas';
       set({ error: errorMessage }, undefined, 'canvas/deleteCanvasError');
@@ -378,17 +380,21 @@ export const createCanvasSlice: StateCreator<
 
       set({ objects: objectsMap, loading: false }, undefined, 'canvas/setActiveCanvasSuccess');
 
-      console.log('[canvasSlice] Switched to canvas:', {
-        canvasId: canvasId.slice(0, 8),
-        objectCount: Object.keys(objectsMap).length,
-      });
+      // console.log('[canvasSlice] Switched to canvas:', {
+      //   canvasId: canvasId.slice(0, 8),
+      //   objectCount: Object.keys(objectsMap).length,
+      // });
 
       // LAYER ORDERING FIX: Add layer metadata for all loaded objects in z_index order
       // Sort objects by z_index before adding layers to ensure consistent ordering
-      const sortedObjects = Object.values(objectsMap).sort((a, b) => a.z_index - b.z_index);
+      const sortedObjects = Object.values(objectsMap).sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
       sortedObjects.forEach((obj) => {
+        // Load layer name from metadata or use default
+        const layerName = obj.metadata?.layer_name || `${obj.type} ${obj.id.slice(0, 6)}`;
+        
         get().addLayer(obj.id, {
-          name: `${obj.type} ${obj.id.slice(0, 6)}`,
+          name: layerName,
+          zIndex: obj.z_index || 0,
           visible: true,
           locked: false,
         });
@@ -428,10 +434,10 @@ export const createCanvasSlice: StateCreator<
         }
       }, undefined, 'canvas/toggleCanvasPublicSuccess');
 
-      console.log('[canvasSlice] Toggled canvas public status:', {
-        canvasId: canvasId.slice(0, 8),
-        isPublic,
-      });
+      // console.log('[canvasSlice] Toggled canvas public status:', {
+      //   canvasId: canvasId.slice(0, 8),
+      //   isPublic,
+      // });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to toggle canvas public status';
       set({ error: errorMessage }, undefined, 'canvas/toggleCanvasPublicError');
@@ -632,7 +638,7 @@ export const createCanvasSlice: StateCreator<
   batchUpdateObjects: async (updates: Array<{ id: string; updates: Partial<CanvasObject> }>) => {
     if (updates.length === 0) return;
 
-    console.log(`[canvasSlice] Batch updating ${updates.length} objects`);
+    // console.log(`[canvasSlice] Batch updating ${updates.length} objects`);
 
     // Store previous states for rollback
     const previousStates: Record<string, CanvasObject> = {};
@@ -697,7 +703,7 @@ export const createCanvasSlice: StateCreator<
         throw new Error(`Batch update failed: ${errors.map(e => e!.message).join(', ')}`);
       }
 
-      console.log(`[canvasSlice] ✅ Batch update successful: ${updates.length} objects`);
+      // console.log(`[canvasSlice] ✅ Batch update successful: ${updates.length} objects`);
     } catch (error) {
       // Rollback ALL optimistic updates on error
       console.error('[canvasSlice] ❌ Batch update failed, rolling back:', error);
@@ -919,11 +925,11 @@ export const createCanvasSlice: StateCreator<
       get().setActiveObject(validSelectedIds[0] || null);
     }
 
-    console.log('[canvasSlice] Cleaned up deleted objects:', {
-      deletedIds: ids,
-      cleanedSelections: currentSelectedIds.length - validSelectedIds.length,
-      newActiveObject: get().activeObjectId,
-    });
+    // console.log('[canvasSlice] Cleaned up deleted objects:', {
+    //   deletedIds: ids,
+    //   cleanedSelections: currentSelectedIds.length - validSelectedIds.length,
+    //   newActiveObject: get().activeObjectId,
+    // });
   },
 
   // ─── Realtime Subscriptions (W1.D4.7-4.9) ───
@@ -946,7 +952,7 @@ export const createCanvasSlice: StateCreator<
       return;
     }
 
-    console.log('[canvasSlice] Setting up realtime subscription for canvas:', activeCanvasId.slice(0, 8));
+    // console.log('[canvasSlice] Setting up realtime subscription for canvas:', activeCanvasId.slice(0, 8));
 
     // W5.D2.3: Listen to canvas_objects changes for active canvas only
     const channel = supabase
@@ -967,6 +973,15 @@ export const createCanvasSlice: StateCreator<
               // Add new object to state
               const insertedObj = dbToCanvasObject(newRecord as DbCanvasObject);
               get()._addObject(insertedObj);
+              
+              // Add layer metadata
+              const layerName = insertedObj.metadata?.layer_name || `${insertedObj.type} ${insertedObj.id.slice(0, 6)}`;
+              get().addLayer(insertedObj.id, {
+                name: layerName,
+                zIndex: insertedObj.z_index || 0,
+                visible: true,
+                locked: false,
+              });
               break;
             }
 
@@ -984,6 +999,40 @@ export const createCanvasSlice: StateCreator<
 
               // Apply update from other users or genuinely different data
               get()._updateObject(updatedObj.id, updatedObj);
+              
+              // Sync layer metadata (z-index and name) in a single state update
+              set((state) => {
+                const layer = state.layers[updatedObj.id];
+                if (!layer) return;
+                
+                let shouldRebuildOrder = false;
+                
+                // Update layer name if changed
+                const newName = updatedObj.metadata?.layer_name;
+                if (newName && layer.name !== newName) {
+                  layer.name = newName;
+                }
+                
+                // Update z-index if changed
+                if (updatedObj.z_index !== undefined && layer.zIndex !== updatedObj.z_index) {
+                  layer.zIndex = updatedObj.z_index;
+                  shouldRebuildOrder = true;
+                }
+                
+                // Rebuild entire layer order from all layers' z_index values
+                // This is necessary because batch updates send multiple events
+                // and splicing during intermediate states causes inconsistencies
+                if (shouldRebuildOrder) {
+                  const allLayers = Object.entries(state.layers)
+                    .map(([id, layer]) => ({ id, zIndex: layer.zIndex }))
+                    .sort((a, b) => a.zIndex - b.zIndex);
+                  
+                  state.layerOrder = allLayers.map(l => l.id);
+                  
+                  // console.log('[canvasSlice] 🔄 Rebuilt layer order from realtime z_index update:', state.layerOrder);
+                }
+              }, undefined, 'layers/syncLayerOrderFromRealtime');
+              
               break;
             }
 
@@ -1052,7 +1101,7 @@ export const createCanvasSlice: StateCreator<
       // TODO W5.D3: Re-implement viewport persistence for multi-canvas architecture
       // Need to save viewport per canvas, not per user
       // Will be implemented as part of canvas-scoped viewport persistence
-      console.log('[canvasSlice] Viewport persistence disabled - will be reimplemented for multi-canvas');
+      // console.log('[canvasSlice] Viewport persistence disabled - will be reimplemented for multi-canvas');
 
       // try {
       //   const { data: { user } } = await supabase.auth.getUser();
@@ -1125,7 +1174,7 @@ export const createCanvasSlice: StateCreator<
    * Falls back to localStorage only for now
    */
   loadViewportFromPostgreSQL: async () => {
-    console.log('[canvasSlice] PostgreSQL viewport load disabled - will be reimplemented for multi-canvas');
+    // console.log('[canvasSlice] PostgreSQL viewport load disabled - will be reimplemented for multi-canvas');
     return;
 
     // try {
@@ -1173,7 +1222,7 @@ export const createCanvasSlice: StateCreator<
     // }
 
     // Always start at origin for now
-    console.log('[canvasSlice] Viewport initialized to origin (0, 0)');
+    // console.log('[canvasSlice] Viewport initialized to origin (0, 0)');
   },
 
   // ─── Utility selectors ───
