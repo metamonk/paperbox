@@ -75,7 +75,7 @@ export function BottomToolbar({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+      <div className={`fixed left-1/2 -translate-x-1/2 z-50 transition-all duration-200 ${isAIOpen ? 'bottom-32' : 'bottom-6'}`}>
         <div className="flex items-center gap-1 bg-card border border-border rounded-xl px-2 py-2 shadow-xl backdrop-blur-sm">
           {tools.map((tool) => {
             const Icon = tool.icon;
