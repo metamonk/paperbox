@@ -12,7 +12,7 @@
 
 import * as React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ChevronsUpDown, Plus, Loader2 } from 'lucide-react';
+import { Check, ChevronsUpDown, Plus, Loader2, Crown, Globe, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePaperboxStore } from '@/stores';
 import type { Canvas } from '@/types/canvas';
@@ -113,6 +113,21 @@ export function CanvasPicker({ className }: CanvasPickerProps) {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  // Get canvas status icon
+  const getCanvasIcon = (canvas: Canvas) => {
+    const isOwner = user?.id === canvas.owner_id;
+    
+    if (isOwner) {
+      return <Crown className="h-3 w-3 text-primary" />;
+    }
+    
+    if (canvas.is_public) {
+      return <Globe className="h-3 w-3 text-blue-500" />;
+    }
+    
+    return <Users className="h-3 w-3 text-muted-foreground" />;
+  };
+
   // Render canvas item
   const renderCanvasItem = (canvas: Canvas, isActive: boolean) => (
     <div className="flex items-center justify-between w-full">
@@ -124,7 +139,10 @@ export function CanvasPicker({ className }: CanvasPickerProps) {
           )}
         />
         <div className="flex flex-col">
-          <span className="text-sm font-medium">{canvas.name}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-medium">{canvas.name}</span>
+            {getCanvasIcon(canvas)}
+          </div>
           <span className="text-xs text-muted-foreground">
             {formatDate(canvas.created_at)}
           </span>
@@ -163,7 +181,7 @@ export function CanvasPicker({ className }: CanvasPickerProps) {
             <CommandInput placeholder="Search canvases..." value={search} onValueChange={setSearch} />
             <CommandList>
               <CommandEmpty>No canvas found.</CommandEmpty>
-              <CommandGroup heading="Your Canvases">
+              <CommandGroup heading="Workspace">
                 {canvases.map((canvas) => (
                   <CommandItem
                     key={canvas.id}

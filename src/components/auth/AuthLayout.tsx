@@ -33,7 +33,15 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
         {/* Footer */}
         <p className="text-center text-sm text-muted-foreground mt-6">
-          Built with Supabase, React, and Fabric.js
+          Built with ❤️ + 🤖 for{' '}
+          <a
+            href="https://gauntletai.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline font-medium"
+          >
+            Gauntlet AI
+          </a>
         </p>
       </div>
     </div>

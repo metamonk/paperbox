@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,17 +10,12 @@ import { PasswordStrength } from './PasswordStrength';
 import { mapAuthError, validatePasswordStrength } from '@/utils/auth-errors';
 
 /**
- * Signup form component
- * - Email and password inputs
- * - Auto-generates display name from email (no input needed)
- * - Form validation
- * - Error handling
- * - Link to login page
+ * Reset password form component
+ * Updates user password after clicking reset link
  */
-export function SignupForm() {
+export function ResetPasswordForm() {
   const navigate = useNavigate();
-  const { signUp, loading } = useAuth();
-  const [email, setEmail] = useState('');
+  const { updatePassword } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +26,7 @@ export function SignupForm() {
     setError(null);
 
     // Basic validation
-    if (!email || !password || !confirmPassword) {
+    if (!password || !confirmPassword) {
       setError('Please fill in all fields');
       return;
     }
@@ -51,52 +46,33 @@ export function SignupForm() {
     setIsSubmitting(true);
 
     try {
-      await signUp(email, password);
-      // Show success toast and redirect
-      toast.success('Account created!', {
-        description: 'Please check your email to verify your account before signing in.',
+      await updatePassword(password);
+      toast.success('Password updated!', {
+        description: 'You can now sign in with your new password.',
       });
       navigate('/login');
     } catch (err) {
-      const authError = mapAuthError(err instanceof Error ? err : new Error('Failed to sign up'));
+      const authError = mapAuthError(err instanceof Error ? err : new Error('Failed to update password'));
       setError(authError.message);
+      toast.error(authError.message, {
+        description: authError.suggestedAction,
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Extract display name from email for preview
-  const displayNamePreview = email ? email.split('@')[0] : '';
-
   return (
     <div>
-      <h2 className="text-2xl font-bold text-foreground mb-6 text-center">
-        Create Account
-      </h2>
+      <h2 className="text-2xl font-bold text-foreground mb-2 text-center">Create new password</h2>
+      <p className="text-muted-foreground text-center mb-6">
+        Enter a new password for your account
+      </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email Input */}
+        {/* New Password Input */}
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            disabled={isSubmitting}
-            required
-          />
-          {displayNamePreview && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Your display name will be: <span className="font-medium text-foreground">{displayNamePreview}</span>
-            </p>
-          )}
-        </div>
-
-        {/* Password Input */}
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">New Password</Label>
           <Input
             id="password"
             type="password"
@@ -105,12 +81,13 @@ export function SignupForm() {
             placeholder="••••••••"
             disabled={isSubmitting}
             required
+            autoFocus
           />
         </div>
 
         {/* Confirm Password Input */}
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+          <Label htmlFor="confirmPassword">Confirm New Password</Label>
           <Input
             id="confirmPassword"
             type="password"
@@ -133,25 +110,10 @@ export function SignupForm() {
         )}
 
         {/* Submit Button */}
-        <Button
-          type="submit"
-          disabled={isSubmitting || loading}
-          className="w-full"
-        >
-          {isSubmitting ? 'Creating account...' : 'Sign Up'}
+        <Button type="submit" disabled={isSubmitting} className="w-full">
+          {isSubmitting ? 'Updating password...' : 'Update password'}
         </Button>
       </form>
-
-      {/* Link to Login */}
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        Already have an account?{' '}
-        <Link
-          to="/login"
-          className="text-primary hover:underline font-medium cursor-pointer"
-        >
-          Sign in
-        </Link>
-      </p>
     </div>
   );
 }
