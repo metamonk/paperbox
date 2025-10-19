@@ -33,8 +33,8 @@ export function AITextBox({ isOpen, onClose }: AITextBoxProps) {
   if (!isOpen) return null;
 
   return (
-    // Overlay above toolbar (bottom-20 = 80px above bottom)
-    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 w-[600px]">
+    // Overlay above toolbar with slide-up and fade-in animation
+    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-40 w-[600px] animate-in slide-in-from-bottom-4 fade-in duration-200">
       <div className="bg-card border border-border rounded-xl shadow-2xl backdrop-blur-sm">
         {/* Input Area */}
         <div className="flex items-center gap-2 px-4 py-3">
