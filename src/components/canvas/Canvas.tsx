@@ -128,46 +128,27 @@ export function Canvas() {
   }, [fabricManager, isPlacementMode, createObjectAtPosition]);
 
   /**
-   * Handle mouse movement to broadcast cursor position
-   *
-   * W5.D5+: Convert screen coordinates to canvas world coordinates
-   * before broadcasting to ensure consistent cursor positions across
-   * users with different viewports (zoom/pan)
+   * STATIC CANVAS MIGRATION: Handle mouse movement to broadcast cursor position
+   * 
+   * Simplified coordinate system - direct pixel coordinates on 5000x5000 canvas
+   * All users share the same coordinate space, no viewport transforms needed
    */
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-
-    // Get Fabric.js canvas instance
-    const fabricCanvas = fabricManager?.getCanvas();
-
-    if (fabricCanvas) {
-      // Convert screen coordinates to canvas world coordinates
-      // This accounts for zoom and pan transformations
-      // Inverse transformation: canvas = (screen - pan) / zoom
-      const vpt = fabricCanvas.viewportTransform;
-      const zoom = fabricCanvas.getZoom();
-
-      const canvasX = (screenX - vpt[4]) / zoom;
-      const canvasY = (screenY - vpt[5]) / zoom;
-
-      // Broadcast canvas coordinates (same system as canvas objects)
-      sendCursorUpdate(canvasX, canvasY);
-
-      // console.log('[Canvas] Cursor broadcast:', {
-      //   screen: { x: screenX, y: screenY },
-      //   canvas: { x: canvasX, y: canvasY },
-      //   viewport: {
-      //     zoom: zoom,
-      //     pan: { x: vpt[4], y: vpt[5] }
-      //   }
-      // });
-    } else {
-      // Fallback: broadcast screen coordinates if Fabric.js not ready
-      // This maintains current behavior during initialization
-      sendCursorUpdate(screenX, screenY);
+    // Get canvas element position
+    const canvasElement = document.getElementById('fabric-canvas');
+    if (!canvasElement) {
+      updateActivity();
+      return;
     }
+
+    const rect = canvasElement.getBoundingClientRect();
+    
+    // Direct pixel coordinates on the 5000x5000 canvas
+    const canvasX = e.clientX - rect.left;
+    const canvasY = e.clientY - rect.top;
+
+    // Broadcast direct canvas coordinates (simple!)
+    sendCursorUpdate(canvasX, canvasY);
 
     updateActivity();
   };
@@ -260,25 +241,19 @@ export function Canvas() {
             ref={canvasCallbackRef}
             className="absolute top-0 left-0"
             onClick={(e) => {
-              // W4.D1 FIX: React onClick fallback for placement mode
-              // This ensures clicks are captured even if Fabric.js event listener isn't working
+              // STATIC CANVAS MIGRATION: React onClick fallback for placement mode
+              // Simplified coordinate system - direct pixel coordinates on 5000x5000 canvas
               if (isPlacementMode && fabricManager) {
-                const canvas = fabricManager.getCanvas();
-                if (!canvas) return;
-
-                // Get click position relative to canvas element
+                // Direct pixel coordinates - no transforms needed
                 const rect = e.currentTarget.getBoundingClientRect();
-                const clientX = e.clientX - rect.left;
-                const clientY = e.clientY - rect.top;
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
 
-                // Convert to Fabric.js viewport coordinates (accounting for zoom/pan)
-                const pointer = canvas.getPointer(e.nativeEvent, true);
-
-                console.log('[Canvas] React onClick placement:', {
-                  clientX,
-                  clientY,
-                  canvasX: pointer.x,
-                  canvasY: pointer.y,
+                console.log('[Canvas] React onClick placement (static canvas):', {
+                  canvasX,
+                  canvasY,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
                   isPlacementMode
                 });
 
@@ -287,8 +262,8 @@ export function Canvas() {
                 if (config) {
                   createObjectAtPosition(
                     config.type,
-                    pointer.x,
-                    pointer.y,
+                    canvasX,
+                    canvasY,
                     config.defaultSize.width,
                     config.defaultSize.height
                   );

@@ -1130,23 +1130,28 @@ export class FabricCanvasManager {
 
     // Mouse down - handle placement mode OR start panning if spacebar held
     this.canvas.on('mouse:down', (opt: any) => {
-      // W2.D12: Check for placement mode first (higher priority than panning)
+      // STATIC CANVAS MIGRATION: Check for placement mode first (higher priority than panning)
       // Only trigger placement if clicking empty canvas (no target object)
       if (!opt.target && this.eventHandlers.onPlacementClick) {
-        // Get fabric space coordinates (accounts for pan/zoom)
-        // ignoreZoom: false = fabric space coordinates (correct for object placement)
-        // This ensures objects are placed at the correct position regardless of zoom level
-        const pointer = this.canvas!.getPointer(opt.e, false);
+        // STATIC CANVAS MIGRATION: Simple direct coordinate calculation
+        // No viewport transforms needed - canvas coordinates = click coordinates
+        const canvasElement = this.canvas!.getElement();
+        const rect = canvasElement.getBoundingClientRect();
+        
+        // Direct pixel coordinates on the 5000x5000 canvas
+        const canvasX = opt.e.clientX - rect.left;
+        const canvasY = opt.e.clientY - rect.top;
 
-        console.log('[FabricCanvasManager] Placement click detected:', {
-          fabricX: pointer.x,
-          fabricY: pointer.y,
-          zoom: this.canvas!.getZoom(),
-          vpt: this.canvas!.viewportTransform,
+        console.log('[FabricCanvasManager] Placement click detected (static canvas):', {
+          canvasX,
+          canvasY,
+          clientX: opt.e.clientX,
+          clientY: opt.e.clientY,
+          rect,
         });
 
-        // Trigger placement handler with fabric space coordinates
-        this.eventHandlers.onPlacementClick(pointer.x, pointer.y);
+        // Trigger placement handler with direct canvas coordinates
+        this.eventHandlers.onPlacementClick(canvasX, canvasY);
         return; // Don't process as pan event
       }
 

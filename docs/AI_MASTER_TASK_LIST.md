@@ -5,6 +5,9 @@
 **Testing**: Manual validation with AI.md requirements (8+ commands, sub-2s performance)
 **Quality**: Production-ready AI assistant for collaborative canvas editing
 
+**UI Design**: Scira-style chat interface (https://github.com/zaidmukaddam/scira)
+**Prerequisites**: Frontend polish complete (dark theme, BottomToolbar, 3-column layout)
+
 ---
 
 ## Architecture Overview
@@ -18,7 +21,9 @@
 
 ### **Integration Pattern**
 ```
-User Input (Command Palette / Toolbar)
+User Input (Scira-Style Text Box - Bottom Center)
+    ↓
+Toggle Mode: Tools ⇄ AI (Cmd+/)
     ↓
 Supabase Edge Function (/functions/ai-command)
     ↓
@@ -51,24 +56,55 @@ Visual Update on Canvas
 | Sub-2s responses | Streaming + GPT-4 Turbo optimization | Week 1 |
 | 90%+ accuracy | Golden test set validation | Week 2 |
 | Multi-user support | AI-powered locking integration | Week 1 |
-| Natural UX | Command Palette + Toolbar + Feedback | Week 1 |
+| Natural UX | Scira-style text box + Streaming + Feedback | Week 1 |
 
 ---
 
 ## Key Design Decisions
 
 ### **Decision 1: AI Input Interface**
-**Choice**: Hybrid - Command Palette (Primary) + Toolbar (Secondary)
+**Choice**: Scira-Style Toggleable Text Box (Bottom-Centered)
 
 **Rationale**:
-- Command Palette (Cmd+K): Fast, keyboard-centric, non-intrusive
-- Toolbar AI Input: Discoverable for new users, single-line with "Ask AI..." placeholder
-- Matches professional design tools (Figma, Adobe)
+- Chat-style interface familiar to all users
+- Minimalist aesthetic matching Figma-style UI redesign
+- Bottom-centered positioning aligns with existing BottomToolbar design
+- Toggle between Tools mode and AI mode (Cmd+/) for focused interaction
+- Simpler implementation (1 component vs 2)
 
 **Implementation**:
-- Command Palette: Modal overlay component
-- Toolbar: Expandable input that triggers palette
-- Both share same AI endpoint
+- Bottom-centered floating text box (600px width)
+- Dark theme with OKLch colors from UI redesign
+- Toggle mechanism: Tools ⇄ AI mode (keyboard shortcut Cmd+/)
+- Sparkles icon (✨) as AI indicator
+- Placeholder: "Ask AI to create, modify, or arrange..."
+- Built with shadcn/ui components (Input, Button, Popover)
+
+**Visual Reference**:
+```tsx
+// Scira-Style AI Text Box Component Structure
+<div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-[600px]">
+  <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-4 py-3 shadow-lg">
+    <Sparkles className="h-5 w-5 text-primary" />
+    <input
+      placeholder="Ask AI to create, modify, or arrange..."
+      className="flex-1 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
+    />
+    <kbd className="px-2 py-1 text-xs bg-muted rounded">⏎</kbd>
+  </div>
+</div>
+
+// Mode Toggle (in Header)
+<Button onClick={() => setMode(mode === 'tools' ? 'ai' : 'tools')}>
+  {mode === 'tools' ? <Sparkles /> : <Wrench />}
+  <span>{mode === 'tools' ? 'AI Mode' : 'Tools Mode'}</span>
+  <kbd>Cmd+/</kbd>
+</Button>
+
+// Conditional Bottom Area Rendering (in CanvasPage)
+{mode === 'tools' && <BottomToolbar />}
+{mode === 'ai' && <AITextBox />}
+```
 
 ---
 
@@ -365,94 +401,106 @@ interface CanvasContext {
 
 ---
 
-## ─── Day 6: UI Components (Command Palette) ───
+## ─── Day 6: UI Components (Scira-Style AI Text Box) ───
 
 ### Morning Block (4 hours)
 
-- [ ] **W1.D6.1**: Create Command Palette base component
-  - Create: `src/components/ai/CommandPalette.tsx`
-  - UI: Modal overlay with backdrop blur
-  - UI: Input field with "Ask AI to..." placeholder
-  - UI: Keyboard shortcut (Cmd+K) to open/close
-  - State: Open/closed, input value
+- [ ] **W1.D6.1**: Create AITextBox base component
+  - Create: `src/components/ai/AITextBox.tsx`
+  - UI: Bottom-centered floating box (`absolute bottom-4 left-1/2 -translate-x-1/2 z-50`)
+  - UI: Max width 600px for readability
+  - UI: Dark theme with `bg-card border border-border rounded-xl shadow-lg`
+  - Container: `flex items-center gap-2 px-4 py-3`
+  - State: Input value, streaming response
 
-- [ ] **W1.D6.2**: Add streaming response display
-  - Add: Response area below input
-  - Display: Streaming text with typing animation
-  - Display: Tool calls with icons (create, move, align, etc.)
-  - Display: Progress indicators for multi-step commands
+- [ ] **W1.D6.2**: Implement Scira-style input design
+  - Add: Sparkles icon (`<Sparkles className="h-5 w-5 text-primary" />`) as AI indicator
+  - Add: Text input with `placeholder="Ask AI to create, modify, or arrange..."`
+  - Style: `bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none`
+  - Add: Enter hint (`<kbd className="px-2 py-1 text-xs bg-muted rounded">⏎</kbd>`)
+  - Focus: Auto-focus input when AI mode activated
 
-- [ ] **W1.D6.3**: Implement command history
-  - Add: Recent commands list (localStorage)
-  - UI: Show recent 5 commands below input
-  - Action: Click recent command to re-execute
-  - Action: Arrow up/down to navigate history
+- [ ] **W1.D6.3**: Create mode toggle mechanism
+  - Create: `src/components/ai/AIModeSwitcher.tsx`
+  - Toggle: Tools mode ⇄ AI mode state
+  - Keyboard: Cmd+/ to switch modes
+  - UI: Toggle button in Header with current mode indicator
+  - Visual: Show either `<BottomToolbar />` OR `<AITextBox />` (not both)
 
 ### Afternoon Block (4 hours)
 
-- [ ] **W1.D6.4**: Add suggestion prompts
-  - UI: Placeholder suggestions when input empty
-  - Examples: "Create a circle...", "Move selected to...", "Arrange in grid..."
-  - Rotate: Cycle through suggestions every 3s
-  - Action: Click suggestion to fill input
+- [ ] **W1.D6.4**: Add streaming response popover
+  - Add: Popover component above text box (when response streaming)
+  - Display: Streaming text with typing animation
+  - Display: Tool calls with icons (create, move, align, etc.)
+  - Display: Progress indicators for multi-step commands
+  - Auto-height: Expand based on content, max 400px
+  - Position: `bottom-16` (16px above text box) with arrow pointing down
 
 - [ ] **W1.D6.5**: Implement error/lock conflict UI
-  - Display: Lock conflict errors gracefully
+  - Display: Lock conflict errors in popover
   - Message: "Cannot modify - locked by [UserName]"
   - Action: "Try again" button
   - Action: "Create copy instead" suggestion
+  - Style: Error state with red border and destructive colors
 
-- [ ] **W1.D6.6**: Add keyboard navigation
-  - Cmd+K: Open/close palette
-  - Esc: Close palette
+- [ ] **W1.D6.6**: Add keyboard navigation and shortcuts
+  - Cmd+/: Toggle between Tools and AI mode
+  - Esc: Close AI mode, return to Tools
   - Enter: Submit command
-  - Up/Down: Navigate history
   - Cmd+L: Clear input
+  - Focus management: Auto-focus input on mode switch
 
 ---
 
-## ─── Day 7: UI Components (Toolbar & Integration) ───
+## ─── Day 7: AI Integration & Visual Feedback ───
 
 ### Morning Block (4 hours)
 
-- [ ] **W1.D7.1**: Create toolbar AI input component
-  - Create: `src/components/ai/ToolbarAIInput.tsx`
-  - UI: Single-line input in header
-  - UI: "Ask AI..." placeholder with sparkle icon ✨
-  - Behavior: Focus → expand and open Command Palette
+- [ ] **W1.D7.1**: Integrate AITextBox with CanvasPage
+  - Update: `src/pages/CanvasPage.tsx`
+  - Add: Mode state (`const [mode, setMode] = useState<'tools' | 'ai'>('tools')`)
+  - Conditional render: `{mode === 'tools' && <BottomToolbar />}`
+  - Conditional render: `{mode === 'ai' && <AITextBox />}`
+  - Share: Canvas context between both modes
 
-- [ ] **W1.D7.2**: Integrate toolbar with Command Palette
-  - Logic: Toolbar input focuses → open Command Palette
-  - Logic: Command Palette shows → toolbar input blurs
-  - Logic: Share same AI execution hook
-  - Style: Consistent styling between both
+- [ ] **W1.D7.2**: Create mode toggle UI in Header
+  - Update: `src/components/layout/Header.tsx`
+  - Add: Toggle button with icons (Wrench for tools, Sparkles for AI)
+  - Display: Current mode indicator
+  - Shortcut: Cmd+/ keyboard binding
+  - Visual: Highlight active mode with primary color
 
 - [ ] **W1.D7.3**: Add visual feedback for AI processing
-  - Add: Loading spinner in input during execution
-  - Add: Progress bar for multi-step commands
-  - Add: Success animation when complete
+  - Add: Loading spinner in text box during execution
+  - Add: Progress bar for multi-step commands in popover
+  - Add: Success animation (green checkmark) when complete
   - Add: Error shake animation on failure
+  - Add: Pulse animation on AI mode indicator when processing
 
 ### Afternoon Block (4 hours)
 
 - [ ] **W1.D7.4**: Implement AI execution integration
-  - Connect: Command Palette → useAICommand hook
+  - Connect: AITextBox → useAICommand hook
   - Logic: Submit → call Edge Function with canvas context
-  - Logic: Stream response → update UI in real-time
+  - Logic: Stream response → update popover in real-time
   - Logic: Tool calls → execute commands → update canvas
+  - Error handling: Display errors in popover with retry button
 
 - [ ] **W1.D7.5**: Add multi-user coordination to UI
-  - Display: "Acquiring lock..." during lock acquisition
-  - Display: Lock conflict errors with user name
+  - Display: "Acquiring lock..." status in popover
+  - Display: Lock conflict errors with user name and avatar
   - Toast: Show notification when AI completes command
   - Toast: Show notification on errors
+  - Visual: Dim locked objects during AI processing
 
 - [ ] **W1.D7.6**: Test full UI flow end-to-end
-  - Test: Open palette (Cmd+K)
-  - Test: Type command → submit
-  - Test: See streaming response
+  - Test: Toggle to AI mode (Cmd+/)
+  - Test: Type command → submit (Enter)
+  - Test: See streaming response in popover
   - Test: Canvas updates in real-time
   - Test: Undo/redo works correctly
+  - Test: Toggle back to Tools mode (Cmd+/ or Esc)
 
 ---
 
@@ -650,9 +698,11 @@ interface CanvasContext {
 - `src/types/ai.ts` - AI-specific TypeScript types
 
 ### UI Components
-- `src/components/ai/CommandPalette.tsx` - Main AI interface
-- `src/components/ai/ToolbarAIInput.tsx` - Toolbar integration
+- `src/components/ai/AITextBox.tsx` - Scira-style bottom-centered text box
+- `src/components/ai/AIModeSwitcher.tsx` - Tools ⇄ AI mode toggle
 - `src/hooks/useAICommand.ts` - AI execution hook
+- Updated: `src/pages/CanvasPage.tsx` - Mode state and conditional rendering
+- Updated: `src/components/layout/Header.tsx` - Mode toggle button
 
 ### Tests
 - `src/lib/commands/__tests__/creation.test.ts`
