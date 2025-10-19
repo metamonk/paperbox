@@ -22,11 +22,12 @@ import { CursorOverlay } from '../collaboration/CursorOverlay';
 // TEMP DISABLED: import { RemoteSelectionOverlay } from '../collaboration/RemoteSelectionOverlay';
 import { UsersPanel } from '../collaboration/UsersPanel';
 import { Header } from '../layout/Header';
+import { CanvasLayout } from '../layout/CanvasLayout';
+import { LeftSidebar } from '../sidebar/LeftSidebar';
 import { Sidebar } from '../layout/Sidebar';
 import { ToolsSidebar } from './ToolsSidebar';
 import { BottomToolbar } from '../toolbar/BottomToolbar';
 import { PropertyPanel } from '../properties/PropertyPanel';
-import { LayersPanel } from '../layers/LayersPanel';
 import { CanvasLoadingOverlay } from './CanvasLoadingOverlay';
 import { CanvasNavigationIndicator } from './CanvasNavigationIndicator';
 import { usePaperboxStore } from '../../stores';
@@ -258,7 +259,11 @@ export function Canvas() {
         onToggleLayers={handleToggleLayers}
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      <CanvasLayout
+        leftSidebar={<LeftSidebar />}
+        rightSidebar={<PropertyPanel />}
+      >
+        <div className="flex flex-1 overflow-hidden">
         {/* Canvas area */}
         <div
           className="relative flex-1 overflow-hidden bg-muted"
@@ -347,12 +352,11 @@ export function Canvas() {
           )}
         </div>
 
-        {/* Backdrop for mobile sidebar overlay */}
-        {sidebarOpen && (
+        {/* Backdrop for mobile sidebar overlay (users/tools only) */}
+        {sidebarOpen && (sidebarContent === 'users' || sidebarContent === 'tools') && (
           <div
             className="fixed inset-0 bg-black/50 z-40 md:hidden"
             onClick={() => {
-              // Toggle based on current sidebar content to close
               if (sidebarContent === 'tools') handleToggleTools();
               else handleToggleUsers();
             }}
@@ -360,40 +364,32 @@ export function Canvas() {
           />
         )}
 
-        {/* Sidebar with dynamic content */}
-        <Sidebar
-          isOpen={sidebarOpen}
-          onClose={() => {
-            // On mobile, close the sidebar when backdrop is clicked
-            // Desktop behavior handled by useSidebarState
-            if (window.innerWidth < 768) {
-              // Toggle based on current sidebar content to close
+        {/* Mobile overlay sidebar for users/tools only */}
+        {(sidebarContent === 'users' || sidebarContent === 'tools') && (
+          <Sidebar
+            isOpen={sidebarOpen}
+            onClose={() => {
               if (sidebarContent === 'tools') handleToggleTools();
-              else if (sidebarContent === 'users') handleToggleUsers();
-              else if (sidebarContent === 'properties') handleToggleProperties();
-              else handleToggleLayers();
-            }
-          }}
-        >
-          {sidebarContent === 'users' ? (
-            <UsersPanel users={onlineUsers} currentUserId={currentUserId} />
-          ) : sidebarContent === 'properties' ? (
-            <PropertyPanel />
-          ) : sidebarContent === 'layers' ? (
-            <LayersPanel />
-          ) : (
-            <ToolsSidebar
-              onAddShape={handleAddShape}
-              onDelete={handleDelete}
-              hasSelection={selectedIds.length > 0}
-              onMoveToFront={selectedIds.length === 1 ? () => moveToFront(selectedIds[0]) : undefined}
-              onMoveToBack={selectedIds.length === 1 ? () => moveToBack(selectedIds[0]) : undefined}
-              onMoveUp={selectedIds.length === 1 ? () => moveUp(selectedIds[0]) : undefined}
-              onMoveDown={selectedIds.length === 1 ? () => moveDown(selectedIds[0]) : undefined}
-            />
-          )}
-        </Sidebar>
+              else handleToggleUsers();
+            }}
+          >
+            {sidebarContent === 'users' ? (
+              <UsersPanel users={onlineUsers} currentUserId={currentUserId} />
+            ) : (
+              <ToolsSidebar
+                onAddShape={handleAddShape}
+                onDelete={handleDelete}
+                hasSelection={selectedIds.length > 0}
+                onMoveToFront={selectedIds.length === 1 ? () => moveToFront(selectedIds[0]) : undefined}
+                onMoveToBack={selectedIds.length === 1 ? () => moveToBack(selectedIds[0]) : undefined}
+                onMoveUp={selectedIds.length === 1 ? () => moveUp(selectedIds[0]) : undefined}
+                onMoveDown={selectedIds.length === 1 ? () => moveDown(selectedIds[0]) : undefined}
+              />
+            )}
+          </Sidebar>
+        )}
       </div>
+      </CanvasLayout>
     </div>
   );
 }
