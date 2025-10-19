@@ -40,7 +40,7 @@ export function Header({ onlineUsers, currentUserId, onSignOut, userName }: Head
         </div>
         <ThemeToggle />
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={onSignOut}
           className="cursor-pointer"

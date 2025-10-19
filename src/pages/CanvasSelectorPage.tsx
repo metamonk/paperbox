@@ -122,7 +122,7 @@ export function CanvasSelectorPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={handleCreateCanvas} disabled={isCreating} className="gap-2">
+            <Button size="sm" onClick={handleCreateCanvas} disabled={isCreating} className="gap-2">
               {isCreating ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -136,7 +136,7 @@ export function CanvasSelectorPage() {
               )}
             </Button>
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={() => signOut()}>
+            <Button variant="outline" size="sm" onClick={() => signOut()}>
               Sign Out
             </Button>
           </div>
