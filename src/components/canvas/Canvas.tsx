@@ -1,6 +1,5 @@
 /**
- * Main canvas component
- * W1.D10: Fabric.js integration with complete sync pipeline
+ * Main canvas component with Fabric.js integration
  *
  * Architecture:
  * Supabase ←→ SyncManager ←→ Zustand Store ←→ CanvasSyncManager ←→ Fabric.js
@@ -54,26 +53,25 @@ export function Canvas() {
     }
   }, []);
 
-  // W1.D10: Initialize complete sync pipeline (Supabase ↔ Zustand ↔ Fabric.js)
+  // Initialize complete sync pipeline (Supabase ↔ Zustand ↔ Fabric.js)
   const { initialized: canvasInitialized, error: syncError, fabricManager } = useCanvasSync(canvasElement);
 
-  // W5.D5.1: Get active canvas ID for scoped realtime channels (cursors + presence)
+  // Get active canvas ID for scoped realtime channels
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
 
-  // Multiplayer cursors via Broadcast (canvas-scoped)
+  // Multiplayer cursors (canvas-scoped)
   const { cursors, sendCursorUpdate } = useBroadcastCursors(activeCanvasId);
 
-  // Presence tracking and online users (canvas-scoped)
+  // Presence tracking (canvas-scoped)
   const { onlineUsers, updateActivity, currentUserId } = usePresence(activeCanvasId);
 
-  // W5.D5++++: Collaborative overlays (lock/selection indicators)
+  // Collaborative overlays (lock/selection indicators)
   useCollaborativeOverlays(fabricManager);
 
-  // Auth for logout
+  // Auth
   const { signOut, user } = useAuth();
 
-  // COLLABORATIVE EDITING: Setup presence channel for selection broadcasting
-  // This enables real-time selection sync between users
+  // Setup presence channel for selection broadcasting
   const setupPresenceChannel = usePaperboxStore((state) => state.setupPresenceChannel);
   const cleanupPresenceChannel = usePaperboxStore((state) => state.cleanupPresenceChannel);
   const setCurrentUser = usePaperboxStore((state) => state.setCurrentUser);
@@ -124,19 +122,17 @@ export function Canvas() {
   const deleteObjects = usePaperboxStore((state) => state.deleteObjects);
   const selectAll = usePaperboxStore((state) => state.selectAll);
 
-  // W4.D4: Z-index operations from layers slice
+  // Z-index operations
   const moveToFront = usePaperboxStore((state) => state.moveToFront);
   const moveToBack = usePaperboxStore((state) => state.moveToBack);
   const moveUp = usePaperboxStore((state) => state.moveUp);
   const moveDown = usePaperboxStore((state) => state.moveDown);
 
-  // W2.D12: Placement mode state for click-to-place pattern
+  // Placement mode state
   const isPlacementMode = usePaperboxStore((state) => state.isPlacementMode);
 
-  // W5.D5+: Removed dummy scale/position - CursorOverlay now gets viewport from Fabric.js directly
-
   /**
-   * W2.D12: Wire up placement click handler to fabricManager
+   * Wire up placement click handler to fabricManager
    *
    * When fabricManager is ready and we're in placement mode,
    * the onPlacementClick handler will be called when user clicks canvas.
@@ -235,7 +231,7 @@ export function Canvas() {
 
 
   /**
-   * W4.D4: Keyboard shortcuts for delete, selection, and z-index operations
+   * Keyboard shortcuts for delete, selection, and z-index operations
    * - Delete/Backspace: Delete selected objects
    * - Ctrl/Cmd + A: Select all objects
    * - Ctrl/Cmd + ]: Bring to front
@@ -364,16 +360,16 @@ export function Canvas() {
             }}
           />
 
-          {/* Multiplayer Cursors Overlay - W5.D5+: Now uses Fabric.js viewport */}
+          {/* Multiplayer Cursors Overlay */}
           <CursorOverlay
             cursors={cursors}
             fabricManager={fabricManager}
           />
 
-          {/* COLLABORATIVE EDITING: Remote Selection Overlay - shows other users' selections */}
-          <RemoteSelectionOverlay />
+          {/* Remote Selection Overlay - shows other users' selections */}
+          <RemoteSelectionOverlay fabricManager={fabricManager} />
 
-          {/* W2.D12+: Navigation indicator (zoom, pan position) */}
+          {/* Navigation indicator (zoom, pan position) */}
           <CanvasNavigationIndicator />
 
           {/* Loading overlay - shown until canvas initializes */}

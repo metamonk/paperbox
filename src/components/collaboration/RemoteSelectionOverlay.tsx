@@ -12,13 +12,16 @@
  */
 
 import { usePaperboxStore } from '../../stores';
-import { useCanvas } from '../../hooks/useCanvas';
+import type { FabricCanvasManager } from '../../lib/fabric/FabricCanvasManager';
 
-export function RemoteSelectionOverlay() {
+interface RemoteSelectionOverlayProps {
+  fabricManager: FabricCanvasManager | null;
+}
+
+export function RemoteSelectionOverlay({ fabricManager }: RemoteSelectionOverlayProps) {
   const presence = usePaperboxStore(state => state.presence);
   const currentUserId = usePaperboxStore(state => state.currentUserId);
   const objects = usePaperboxStore(state => state.objects);
-  const fabricManager = useCanvas();
 
   const canvas = fabricManager?.getCanvas();
   if (!canvas) {
