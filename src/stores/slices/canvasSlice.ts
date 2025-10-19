@@ -24,6 +24,8 @@ import type {
 import type { PaperboxStore } from '../index';
 import type { Database } from '../../types/database';
 import { dbToCanvasObject } from '../../lib/sync/coordinateConversion';
+import { ConnectionMonitor, type ConnectionStatus } from '../../lib/sync/ConnectionMonitor';
+import { OperationQueue } from '../../lib/sync/OperationQueue';
 
 type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
 
@@ -53,6 +55,12 @@ export interface CanvasSlice {
   realtimeChannel: RealtimeChannel | null;
   viewport: ViewportState;
 
+  // Connection State (Network Resilience)
+  connectionStatus: ConnectionStatus;
+  offlineOperationsCount: number;
+  _updateConnectionStatus: (status: ConnectionStatus) => void;
+  _updateOfflineOperationsCount: (count: number) => void;
+
   // Lifecycle
   initialize: (userId: string) => Promise<void>;
   cleanup: () => void;
@@ -70,6 +78,7 @@ export interface CanvasSlice {
   updateObject: (id: string, updates: Partial<CanvasObject>) => Promise<void>;
   batchUpdateObjects: (updates: Array<{ id: string; updates: Partial<CanvasObject> }>) => Promise<void>;
   deleteObjects: (ids: string[]) => Promise<void>;
+  duplicateObjects: (objectIds: string[], userId: string) => Promise<string[]>;
 
   // Realtime Subscriptions (W1.D4.7-4.9)
   setupRealtimeSubscription: () => void;
@@ -148,17 +157,21 @@ export const createCanvasSlice: StateCreator<
   [],
   CanvasSlice
 > = (set, get) => ({
-  // Multi-Canvas Initial State (W5.D2)
-  activeCanvasId: null,
-  canvases: [],
-  canvasesLoading: false,
+    // Multi-Canvas Initial State (W5.D2)
+    activeCanvasId: null,
+    canvases: [],
+    canvasesLoading: false,
 
-  // Object Initial State
-  objects: {},
-  loading: false,
-  error: null,
-  realtimeChannel: null,
-  viewport: { zoom: 1, panX: 0, panY: 0 }, // W2.D6.2: Default viewport state
+    // Object Initial State
+    objects: {},
+    loading: false,
+    error: null,
+    realtimeChannel: null,
+    viewport: { zoom: 1, panX: 0, panY: 0 }, // W2.D6.2: Default viewport state
+
+    // Connection State Initial Values
+    connectionStatus: 'connecting',
+    offlineOperationsCount: 0,
 
   // ─── Lifecycle ───
 
@@ -506,6 +519,23 @@ export const createCanvasSlice: StateCreator<
       locked: false,
     });
 
+    // Check connection status - queue if offline
+    const connectionStatus = get().connectionStatus;
+    if (connectionStatus === 'disconnected' || connectionStatus === 'reconnecting') {
+      console.log('[canvasSlice] Offline - queuing create operation');
+      OperationQueue.getInstance().enqueue({
+        type: 'create',
+        objectId: id,
+        canvasId: activeCanvasId,
+        payload: fullObject,
+      });
+      
+      // Update offline operations count
+      get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      
+      return id;
+    }
+
     try {
       // Database write
       // @ts-expect-error - Supabase generated types have issues with discriminated unions
@@ -534,18 +564,21 @@ export const createCanvasSlice: StateCreator<
 
       return id;
     } catch (error) {
-      // Rollback optimistic update on error
-      set(
-        (state) => {
-          delete state.objects[id];
-        },
-        undefined,
-        'canvas/createObjectRollback',
-      );
-
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create object';
-      console.error('Create object error:', error);
-      throw new Error(errorMessage);
+      // On error, queue operation and mark as disconnected
+      console.error('[canvasSlice] Database error - queuing operation:', error);
+      ConnectionMonitor.getInstance().handleSyncFailure(error);
+      
+      OperationQueue.getInstance().enqueue({
+        type: 'create',
+        objectId: id,
+        canvasId: activeCanvasId,
+        payload: fullObject,
+      });
+      
+      get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      
+      // Keep optimistic update - don't rollback since we queued
+      return id;
     }
   },
 
@@ -560,9 +593,6 @@ export const createCanvasSlice: StateCreator<
       throw new Error(`Object ${id} not found`);
     }
 
-    // Store previous state for rollback
-    const previousState = { ...existing };
-
     // Optimistic update
     set(
       (state) => {
@@ -575,6 +605,24 @@ export const createCanvasSlice: StateCreator<
       undefined,
       'canvas/updateObjectOptimistic',
     );
+
+    // Check connection status - queue if offline
+    const connectionStatus = get().connectionStatus;
+    if (connectionStatus === 'disconnected' || connectionStatus === 'reconnecting') {
+      console.log('[canvasSlice] Offline - queuing update operation');
+      const activeCanvasId = get().activeCanvasId;
+      if (activeCanvasId) {
+        OperationQueue.getInstance().enqueue({
+          type: 'update',
+          objectId: id,
+          canvasId: activeCanvasId,
+          payload: updates,
+        });
+        
+        get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      }
+      return;
+    }
 
     try {
       // Database write
@@ -602,18 +650,23 @@ export const createCanvasSlice: StateCreator<
 
       if (error) throw error;
     } catch (error) {
-      // Rollback optimistic update on error
-      set(
-        (state) => {
-          state.objects[id] = previousState;
-        },
-        undefined,
-        'canvas/updateObjectRollback',
-      );
-
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update object';
-      console.error('Update object error:', error);
-      throw new Error(errorMessage);
+      // On error, queue operation and mark as disconnected
+      console.error('[canvasSlice] Database error - queuing update operation:', error);
+      ConnectionMonitor.getInstance().handleSyncFailure(error);
+      
+      const activeCanvasId = get().activeCanvasId;
+      if (activeCanvasId) {
+        OperationQueue.getInstance().enqueue({
+          type: 'update',
+          objectId: id,
+          canvasId: activeCanvasId,
+          payload: updates,
+        });
+        
+        get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      }
+      
+      // Keep optimistic update - don't rollback since we queued
     }
   },
 
@@ -752,35 +805,180 @@ export const createCanvasSlice: StateCreator<
     // 2. Centralized cleanup (layers, selection, active object)
     get()._cleanupDeletedObjects(ids);
 
+    // Check connection status - queue if offline
+    const connectionStatus = get().connectionStatus;
+    if (connectionStatus === 'disconnected' || connectionStatus === 'reconnecting') {
+      console.log('[canvasSlice] Offline - queuing delete operations');
+      const activeCanvasId = get().activeCanvasId;
+      if (activeCanvasId) {
+        ids.forEach((id) => {
+          OperationQueue.getInstance().enqueue({
+            type: 'delete',
+            objectId: id,
+            canvasId: activeCanvasId,
+            payload: {},
+          });
+        });
+        
+        get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      }
+      return;
+    }
+
     try {
       // 3. Database delete
       const { error } = await supabase.from('canvas_objects').delete().in('id', ids);
 
       if (error) throw error;
     } catch (error) {
-      // Rollback on error - restore objects AND layers
-      set(
-        (state) => {
-          deletedObjects.forEach((obj) => {
-            state.objects[obj.id] = obj;
+      // On error, queue operations and mark as disconnected
+      console.error('[canvasSlice] Database error - queuing delete operations:', error);
+      ConnectionMonitor.getInstance().handleSyncFailure(error);
+      
+      const activeCanvasId = get().activeCanvasId;
+      if (activeCanvasId) {
+        ids.forEach((id) => {
+          OperationQueue.getInstance().enqueue({
+            type: 'delete',
+            objectId: id,
+            canvasId: activeCanvasId,
+            payload: {},
           });
-        },
-        undefined,
-        'canvas/deleteObjectsRollback',
-      );
+        });
+        
+        get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      }
+      
+      // Keep optimistic delete - don't rollback since we queued
+    }
+  },
 
-      // Restore layers
-      deletedObjects.forEach((obj) => {
-        get().addLayer(obj.id, {
-          name: `${obj.type} ${obj.id.slice(0, 6)}`,
-          visible: true,
-          locked: false,
+  /**
+   * Duplicate selected objects
+   * Creates clones with new UUIDs, preserves group structure, places at same position
+   * Uses efficient batch operations for performance
+   */
+  duplicateObjects: async (objectIds: string[], userId: string) => {
+    const activeCanvasId = get().activeCanvasId;
+    if (!activeCanvasId) {
+      console.error('[canvasSlice] No active canvas');
+      return [];
+    }
+
+    // 1. Validate objects exist and filter valid ones
+    const objectsToDuplicate = objectIds
+      .map((id) => get().objects[id])
+      .filter(Boolean);
+
+    if (objectsToDuplicate.length === 0) {
+      console.warn('[canvasSlice] No valid objects to duplicate');
+      return [];
+    }
+
+    // 2. Build group ID map for preserving group structure
+    // Map old group_id -> new group_id
+    const groupIdMap = new Map<string, string>();
+    
+    objectsToDuplicate.forEach((obj) => {
+      if (obj.group_id && !groupIdMap.has(obj.group_id)) {
+        groupIdMap.set(obj.group_id, crypto.randomUUID());
+      }
+    });
+
+    // 3. Clone all objects with new IDs and updated group_ids
+    const now = new Date().toISOString();
+    const clones: CanvasObject[] = objectsToDuplicate.map((original) => {
+      const newId = crypto.randomUUID();
+      
+      // Update group_id if object was in a group
+      let newGroupId = original.group_id;
+      if (newGroupId) {
+        newGroupId = groupIdMap.get(newGroupId) || null;
+      }
+
+      return {
+        ...original,
+        id: newId,
+        group_id: newGroupId,
+        canvas_id: activeCanvasId,
+        created_by: userId,
+        created_at: now,
+        updated_at: now,
+        locked_by: null,
+        lock_acquired_at: null,
+      };
+    });
+
+    const newIds = clones.map((clone) => clone.id);
+
+    // 4. Optimistic update - add all clones to state at once
+    set(
+      (state) => {
+        clones.forEach((clone) => {
+          state.objects[clone.id] = clone;
+        });
+      },
+      undefined,
+      'canvas/duplicateObjects',
+    );
+
+    // 5. Add layers for each duplicate
+    clones.forEach((clone) => {
+      get().addLayer(clone.id, {
+        name: `${clone.type} ${clone.id.slice(0, 6)} (copy)`,
+        visible: true,
+        locked: false,
+      });
+    });
+
+    // 6. Select the new duplicates (deselect originals)
+    get().selectObjects(newIds);
+
+    // 7. Handle offline mode - queue all create operations
+    const connectionStatus = get().connectionStatus;
+    if (connectionStatus === 'disconnected' || connectionStatus === 'reconnecting') {
+      console.log('[canvasSlice] Offline - queuing duplicate operations');
+      
+      clones.forEach((clone) => {
+        OperationQueue.getInstance().enqueue({
+          type: 'create',
+          objectId: clone.id,
+          canvasId: activeCanvasId,
+          payload: clone,
         });
       });
+      
+      get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      return newIds;
+    }
 
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete objects';
-      console.error('Delete objects error:', error);
-      throw new Error(errorMessage);
+    // 8. Batch insert to database
+    try {
+      const { error } = await supabase
+        .from('canvas_objects')
+        .insert(clones as any);
+
+      if (error) throw error;
+
+      return newIds;
+    } catch (error) {
+      // On error, queue operations and mark as disconnected
+      console.error('[canvasSlice] Database error - queuing duplicate operations:', error);
+      ConnectionMonitor.getInstance().handleSyncFailure(error);
+      
+      clones.forEach((clone) => {
+        OperationQueue.getInstance().enqueue({
+          type: 'create',
+          objectId: clone.id,
+          canvasId: activeCanvasId,
+          payload: clone,
+        });
+      });
+      
+      get()._updateOfflineOperationsCount(OperationQueue.getInstance().getCount());
+      
+      // Keep optimistic update - don't rollback since we queued
+      return newIds;
     }
   },
 
@@ -1238,5 +1436,27 @@ export const createCanvasSlice: StateCreator<
    */
   getAllObjects: () => {
     return Object.values(get().objects);
+  },
+
+  // ─── Connection State Management ───
+
+  /**
+   * Internal method to update connection status
+   * Called by ConnectionMonitor via subscription
+   */
+  _updateConnectionStatus: (status: ConnectionStatus) => {
+    set((state) => {
+      state.connectionStatus = status;
+    });
+  },
+
+  /**
+   * Internal method to update offline operations count
+   * Called by ConnectionMonitor/OperationQueue
+   */
+  _updateOfflineOperationsCount: (count: number) => {
+    set((state) => {
+      state.offlineOperationsCount = count;
+    });
   },
 });

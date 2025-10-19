@@ -27,6 +27,8 @@ import { createHistorySlice, type HistorySlice } from './slices/historySlice';
 import { createLayersSlice, type LayersSlice } from './slices/layersSlice';
 import { createToolsSlice, type ToolsSlice } from './slices/toolsSlice';
 import { createCollaborationSlice, type CollaborationSlice } from './slices/collaborationSlice';
+import { ConnectionMonitor } from '../lib/sync/ConnectionMonitor';
+import { OperationQueue } from '../lib/sync/OperationQueue';
 
 /**
  * Combined store type with all slices
@@ -62,6 +64,22 @@ export const usePaperboxStore = create<PaperboxStore>()(
     ),
   ),
 );
+
+/**
+ * Initialize ConnectionMonitor subscription
+ * This runs after the store is created to avoid state update issues during initialization
+ */
+ConnectionMonitor.getInstance().onStatusChange((status) => {
+  usePaperboxStore.setState((state) => {
+    state.connectionStatus = status;
+  });
+  
+  // Update offline operations count
+  const queue = OperationQueue.getInstance();
+  usePaperboxStore.setState((state) => {
+    state.offlineOperationsCount = queue.getCount();
+  });
+});
 
 /**
  * Selector hooks for optimized component re-renders

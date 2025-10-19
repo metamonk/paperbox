@@ -35,6 +35,9 @@ import { getSyncManager, cleanupSyncManager } from '../lib/sync/SyncManager';
 import { CanvasSyncManager } from '../lib/sync/CanvasSyncManager';
 import { FabricCanvasManager } from '../lib/fabric/FabricCanvasManager';
 import { NavigationShortcuts } from '../features/shortcuts/NavigationShortcuts';
+import { EditingShortcuts } from '../features/shortcuts/EditingShortcuts';
+import { OperationQueue } from '../lib/sync/OperationQueue';
+import { toast } from 'sonner';
 
 // Debug flag - set to true to enable verbose sync logs
 const DEBUG = false;
@@ -68,6 +71,7 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
   const canvasSyncManagerRef = useRef<CanvasSyncManager | null>(null);
   const fabricManagerRef = useRef<FabricCanvasManager | null>(null);
   const navigationShortcutsRef = useRef<NavigationShortcuts | null>(null);
+  const editingShortcutsRef = useRef<EditingShortcuts | null>(null);
 
   // W5: Multi-canvas API (loadCanvases + setActiveCanvas replaces deprecated initialize)
   const loadCanvases = usePaperboxStore((state) => state.loadCanvases);
@@ -88,6 +92,18 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
     const setup = async () => {
       try {
         if (DEBUG) console.log('[useCanvasSync] Starting initialization for user:', user.id);
+
+        // Step 0: Check for queued operations from previous session
+        const queue = OperationQueue.getInstance();
+        queue.loadFromStorage();
+        
+        if (queue.hasOperations()) {
+          console.log(`[useCanvasSync] Found ${queue.getCount()} queued operations from previous session`);
+          toast.info('Offline Changes Detected', {
+            description: `${queue.getCount()} operations from previous session will sync`,
+            duration: 4000,
+          });
+        }
 
         // Step 1: Initialize FabricCanvasManager
         if (DEBUG) console.log('[useCanvasSync] Initializing FabricCanvasManager...');
@@ -180,6 +196,22 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         navigationShortcutsRef.current = navShortcuts;
         if (DEBUG) console.log('[useCanvasSync] NavigationShortcuts initialized');
 
+        // Step 5.5: Setup editing shortcuts (CMD+D for duplicate)
+        if (DEBUG) console.log('[useCanvasSync] Setting up editing shortcuts...');
+        const editShortcuts = new EditingShortcuts({ userId: user.id });
+        editShortcuts.initialize();
+
+        if (!mounted) {
+          editShortcuts.dispose();
+          navShortcuts.dispose();
+          canvasSync.dispose();
+          fabric.dispose();
+          return;
+        }
+
+        editingShortcutsRef.current = editShortcuts;
+        if (DEBUG) console.log('[useCanvasSync] EditingShortcuts initialized');
+
         // Step 6: Setup scroll pan and zoom (W2.D12+: Figma-style interactions)
         if (DEBUG) console.log('[useCanvasSync] Setting up scroll pan and zoom...');
         fabric.setupSpacebarPan();
@@ -220,6 +252,12 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
     return () => {
       mounted = false;
       if (DEBUG) console.log('[useCanvasSync] Cleaning up');
+
+      // Cleanup EditingShortcuts
+      if (editingShortcutsRef.current) {
+        editingShortcutsRef.current.dispose();
+        editingShortcutsRef.current = null;
+      }
 
       // Cleanup NavigationShortcuts (W2.D8)
       if (navigationShortcutsRef.current) {

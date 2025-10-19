@@ -17,6 +17,7 @@ import type { PaperboxStore } from '../../stores';
 import type { CanvasObject } from '../../types/canvas';
 import { UpdateQueue } from './UpdateQueue';
 import { toast } from 'sonner';
+import { TransformCommand } from '../commands/TransformCommand';
 
 interface FabricObjectWithData extends FabricObject {
   data?: { id: string; type: string };
@@ -48,6 +49,17 @@ export class CanvasSyncManager {
 
   // Track actively editing state (during drag, not just selected)
   private activelyEditingIds: Set<string> = new Set();
+
+  // Capture object state before transformations for undo/redo
+  private transformStartState: Map<string, {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+    type_properties?: any;
+  }> = new Map();
 
   constructor(fabricManager: FabricCanvasManager, store: any) {
     this.fabricManager = fabricManager;
@@ -187,7 +199,7 @@ export class CanvasSyncManager {
    */
   private setupCanvasToStateSync(): void {
     const handlers = {
-      // Track active editing during drag
+      // Track active editing during drag and capture initial state
       onObjectMoving: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
 
@@ -198,6 +210,27 @@ export class CanvasSyncManager {
 
         this.activelyEditingIds = new Set(ids);
         this.store.getState().broadcastActivelyEditing(ids);
+
+        // Capture initial state on first movement for undo/redo
+        objects.forEach((obj: FabricObject) => {
+          const objWithData = obj as FabricObjectWithData;
+          const id = objWithData.data?.id;
+          if (id && !this.transformStartState.has(id)) {
+            // Get current state from store (before transformation)
+            const storeObj = this.store.getState().objects[id];
+            if (storeObj) {
+              this.transformStartState.set(id, {
+                id: id,
+                x: storeObj.x,
+                y: storeObj.y,
+                width: storeObj.width,
+                height: storeObj.height,
+                rotation: storeObj.rotation,
+                type_properties: storeObj.type_properties,
+              });
+            }
+          }
+        });
       },
 
       onObjectModified: (target: FabricObject) => {
@@ -209,42 +242,59 @@ export class CanvasSyncManager {
           // Constructor names get minified in production
           const objects = (target as any)._objects || [];
           const isGroupSelection = objects.length > 0;
+          
+          const objectsToProcess = isGroupSelection ? objects : [target];
 
-          if (isGroupSelection) {
-            // Process group selection (multiple objects)
-            const batchUpdates: Array<{ id: string; updates: Partial<CanvasObject> }> = [];
+          // Create transform commands for undo/redo
+          objectsToProcess.forEach((obj: FabricObject) => {
+            const canvasObject = this.fabricManager.toCanvasObject(obj);
+            if (!canvasObject) return;
 
-            objects.forEach((obj: FabricObject) => {
-              // toCanvasObject() handles Fabric→center-origin translation
-              const canvasObject = this.fabricManager.toCanvasObject(obj);
-              
-              if (canvasObject) {
-                batchUpdates.push({
-                  id: canvasObject.id,
-                  updates: canvasObject, // Already in center-origin coordinates
+            const id = canvasObject.id;
+            const beforeState = this.transformStartState.get(id);
+
+            if (beforeState) {
+              // We have before state, create undo-able command
+              const afterState = {
+                id: id,
+                x: canvasObject.x,
+                y: canvasObject.y,
+                width: canvasObject.width,
+                height: canvasObject.height,
+                rotation: canvasObject.rotation,
+                type_properties: canvasObject.type_properties,
+              };
+
+              // Check if there's a meaningful change
+              const hasChanged = 
+                Math.abs(beforeState.x - afterState.x) > 0.01 ||
+                Math.abs(beforeState.y - afterState.y) > 0.01 ||
+                Math.abs(beforeState.width - afterState.width) > 0.01 ||
+                Math.abs(beforeState.height - afterState.height) > 0.01 ||
+                Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+
+              if (hasChanged) {
+                // Create and execute transform command
+                const command = new TransformCommand(id, beforeState, afterState);
+                this.updateQueue.enqueue(async () => {
+                  await this.store.getState().executeCommand(command);
+                }).catch((error) => {
+                  console.error('[CanvasSyncManager] Transform command failed:', error);
                 });
               }
-            });
 
-            // Single atomic batch update
-            if (batchUpdates.length > 0) {
+              // Clear the captured state
+              this.transformStartState.delete(id);
+            } else {
+              // No before state captured (shouldn't happen in normal use)
+              // Fall back to direct update without undo
               this.updateQueue.enqueue(async () => {
-                await this.store.getState().batchUpdateObjects(batchUpdates);
-              }).catch((error) => {
-                console.error('[CanvasSyncManager] Batch update failed:', error);
-              });
-            }
-          } else {
-            // Single object path
-            const canvasObject = this.fabricManager.toCanvasObject(target);
-            if (canvasObject) {
-              this.updateQueue.enqueue(async () => {
-                await this.store.getState().updateObject(canvasObject.id, canvasObject);
+                await this.store.getState().updateObject(id, canvasObject);
               }).catch((error) => {
                 console.error('[CanvasSyncManager] Update failed:', error);
               });
             }
-          }
+          });
 
           // Clear active editing state after drag ends
           this.activelyEditingIds.clear();
@@ -382,6 +432,9 @@ export class CanvasSyncManager {
             state.releaseLock(id);
           }
         }
+
+        // Clear any captured transform states
+        this.transformStartState.clear();
 
         // Update selection state and broadcast
         state.deselectAll();

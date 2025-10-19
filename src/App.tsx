@@ -3,10 +3,13 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from '@/components/ui/sonner';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 
 // W2.D10: Code splitting - lazy load route components
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const Signup = lazy(() => import('./pages/Signup').then(m => ({ default: m.Signup })));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ResetPassword })));
 const CanvasPage = lazy(() => import('./pages/CanvasPage').then(m => ({ default: m.CanvasPage })));
 const CanvasRedirect = lazy(() => import('./pages/CanvasRedirect').then(m => ({ default: m.CanvasRedirect })));
 const CanvasSelectorPage = lazy(() => import('./pages/CanvasSelectorPage').then(m => ({ default: m.CanvasSelectorPage })));
@@ -16,14 +19,7 @@ const CanvasSelectorPage = lazy(() => import('./pages/CanvasSelectorPage').then(
  * Shows while lazy-loaded components are being fetched
  */
 function RouteLoadingFallback() {
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    </div>
-  );
+  return <LoadingScreen />;
 }
 
 /**
@@ -34,14 +30,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
@@ -59,14 +48,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (user) {
@@ -104,11 +86,27 @@ function App() {
               </PublicRoute>
             }
           />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <ForgotPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute>
+                <ResetPassword />
+              </PublicRoute>
+            }
+          />
 
           {/* Protected Routes - require authentication */}
-          {/* W5.D5.3: Canvas Selector Dashboard - Browse all canvases */}
+          {/* W5.D5.3: Workspace Dashboard - Browse all canvases in workspace */}
           <Route
-            path="/canvases"
+            path="/workspace"
             element={
               <ProtectedRoute>
                 <CanvasSelectorPage />

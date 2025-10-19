@@ -5,6 +5,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ResendVerificationButton } from './ResendVerificationButton';
+import { mapAuthError } from '@/utils/auth-errors';
 
 /**
  * Login form component
@@ -20,10 +22,12 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerificationRequired, setIsVerificationRequired] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsVerificationRequired(false);
 
     // Basic validation
     if (!email || !password) {
@@ -37,7 +41,9 @@ export function LoginForm() {
       await signIn(email, password);
       navigate('/canvas');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in');
+      const authError = mapAuthError(err instanceof Error ? err : new Error('Failed to sign in'));
+      setError(authError.message);
+      setIsVerificationRequired(authError.isVerificationRequired ?? false);
     } finally {
       setIsSubmitting(false);
     }
@@ -66,7 +72,15 @@ export function LoginForm() {
 
         {/* Password Input */}
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link
+              to="/forgot-password"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password"
             type="password"
@@ -80,8 +94,11 @@ export function LoginForm() {
 
         {/* Error Message */}
         {error && (
-          <div className="bg-destructive/10 text-destructive border border-destructive/20 px-4 py-3 rounded-md text-sm">
-            {error}
+          <div className="bg-destructive/10 text-destructive border border-destructive/20 px-4 py-3 rounded-md text-sm space-y-2">
+            <p>{error}</p>
+            {isVerificationRequired && email && (
+              <ResendVerificationButton email={email} />
+            )}
           </div>
         )}
 
@@ -100,7 +117,7 @@ export function LoginForm() {
         Don't have an account?{' '}
         <Link
           to="/signup"
-          className="text-primary hover:underline font-medium"
+          className="text-primary hover:underline font-medium cursor-pointer"
         >
           Sign up
         </Link>

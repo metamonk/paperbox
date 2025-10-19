@@ -3,6 +3,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/button';
 import type { PresenceUser } from '@/hooks/usePresence';
+import { ConnectionStatusDot } from './ConnectionStatusDot';
 
 interface HeaderProps {
   onlineUsers: PresenceUser[];
@@ -23,7 +24,7 @@ export function Header({ onlineUsers, currentUserId, onSignOut, userName }: Head
       {/* Left side: Logo + Title */}
       <div className="flex items-center gap-2">
         <Logo size={32} />
-        <h1 className="text-xl font-bold text-foreground hidden md:block">
+        <h1 className="text-xl font-bold text-foreground hidden md:block leading-none">
           Paperbox
         </h1>
       </div>
@@ -32,12 +33,14 @@ export function Header({ onlineUsers, currentUserId, onSignOut, userName }: Head
       <div className="flex items-center gap-3">
         {/* Presence Popover */}
         <PresencePopover users={onlineUsers} currentUserId={currentUserId} />
-        <div className="text-sm text-muted-foreground hidden sm:block">
+        <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{userName}</span>
+          {/* Connection Status Indicator */}
+          <ConnectionStatusDot />
         </div>
         <ThemeToggle />
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={onSignOut}
           className="cursor-pointer"

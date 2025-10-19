@@ -14,13 +14,14 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Loader2, FileText } from 'lucide-react';
+import { Plus, Settings, Loader2, Crown, Globe, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePaperboxStore } from '@/stores';
 import type { Canvas } from '@/types/canvas';
 import { Button } from '@/components/ui/button';
 import { CanvasManagementModal } from '@/components/canvas/CanvasManagementModal';
 import { Logo } from '@/components/ui/Logo';
+import { IsometricBox } from '@/components/ui/IsometricBox';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
 export function CanvasSelectorPage() {
@@ -76,6 +77,36 @@ export function CanvasSelectorPage() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  // Get canvas status badge
+  const getCanvasBadge = (canvas: Canvas) => {
+    const isOwner = user?.id === canvas.owner_id;
+    
+    if (isOwner) {
+      return (
+        <div className="absolute top-2 left-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/90 text-primary-foreground rounded-full text-xs font-medium shadow-sm">
+          <Crown className="h-3 w-3" />
+          <span>Owner</span>
+        </div>
+      );
+    }
+    
+    if (canvas.is_public) {
+      return (
+        <div className="absolute top-2 left-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/90 text-white rounded-full text-xs font-medium shadow-sm">
+          <Globe className="h-3 w-3" />
+          <span>Public</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="absolute top-2 left-2 inline-flex items-center gap-1.5 px-2.5 py-1 bg-muted/90 text-muted-foreground rounded-full text-xs font-medium shadow-sm">
+        <Users className="h-3 w-3" />
+        <span>Shared</span>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -84,14 +115,14 @@ export function CanvasSelectorPage() {
           <div className="flex items-center gap-4">
             <Logo size={40} />
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Your Canvases</h1>
+              <h1 className="text-2xl font-semibold text-foreground leading-none">Workspace</h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button onClick={handleCreateCanvas} disabled={isCreating} className="gap-2">
+            <Button size="sm" onClick={handleCreateCanvas} disabled={isCreating} className="gap-2">
               {isCreating ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -105,7 +136,7 @@ export function CanvasSelectorPage() {
               )}
             </Button>
             <ThemeToggle />
-            <Button variant="outline" onClick={() => signOut()}>
+            <Button variant="outline" size="sm" onClick={() => signOut()}>
               Sign Out
             </Button>
           </div>
@@ -120,7 +151,7 @@ export function CanvasSelectorPage() {
           </div>
         ) : canvases.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <FileText className="h-16 w-16 text-muted-foreground/40 mb-4" />
+            <IsometricBox size={64} className="mb-4 opacity-40" />
             <h2 className="text-xl font-medium text-foreground mb-2">No canvases yet</h2>
             <p className="text-muted-foreground mb-6">Create your first canvas to get started</p>
             <Button onClick={handleCreateCanvas} disabled={isCreating} className="gap-2">
@@ -147,12 +178,15 @@ export function CanvasSelectorPage() {
               >
                 {/* Canvas Thumbnail Placeholder */}
                 <div className="aspect-video bg-muted flex items-center justify-center relative">
-                  <FileText className="h-12 w-12 text-muted-foreground/40 group-hover:text-primary transition-colors" />
+                  <IsometricBox size={48} className="opacity-40 group-hover:opacity-100 transition-opacity" />
+
+                  {/* Canvas Status Badge */}
+                  {getCanvasBadge(canvas)}
 
                   {/* Settings Button */}
                   <button
                     onClick={(e) => handleSettingsClick(e, canvas)}
-                    className="absolute top-2 right-2 p-2 bg-card/80 hover:bg-card rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-border"
+                    className="absolute top-2 right-2 p-2 bg-card/80 hover:bg-card rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-border cursor-pointer"
                     title="Canvas settings"
                   >
                     <Settings className="h-4 w-4 text-muted-foreground" />

@@ -11,7 +11,7 @@
  */
 
 import * as React from 'react';
-import { Trash2, Loader2, Globe, Lock, Copy, Check, Users } from 'lucide-react';
+import { Trash2, Loader2, Globe, Lock, Copy, Check, Users, Crown } from 'lucide-react';
 import { usePaperboxStore } from '@/stores';
 import { supabase } from '@/lib/supabase';
 import type { Canvas } from '@/types/canvas';
@@ -165,6 +165,26 @@ export function CanvasManagementModal({
             </DialogDescription>
           </DialogHeader>
 
+          {/* Ownership Indicator Badge */}
+          <div className="flex items-center gap-2 mt-4 mb-2">
+            {isOwner ? (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                <Crown className="h-3 w-3" />
+                <span>Owner</span>
+              </div>
+            ) : canvas.is_public ? (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full text-xs font-medium">
+                <Globe className="h-3 w-3" />
+                <span>Public Canvas</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-muted text-muted-foreground rounded-full text-xs font-medium">
+                <Users className="h-3 w-3" />
+                <span>Shared with you</span>
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-4 py-4">
             {/* Canvas Name */}
             <div className="grid gap-2">
@@ -214,22 +234,60 @@ export function CanvasManagementModal({
               </p>
             </div>
 
+            {/* Canvas Sharing Info - Show for non-owners */}
+            {!isOwner && (
+              <div className="space-y-4 border rounded-lg p-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Sharing
+                </h3>
+
+                <div className="space-y-3">
+                  {canvas.is_public ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <span className="font-medium">Public Canvas</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Anyone with the link can view and edit this canvas.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Lock className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">Shared Canvas</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        This canvas has been shared with you by the owner.
+                      </p>
+                    </>
+                  )}
+                  
+                  <div className="pt-3 border-t text-xs text-muted-foreground">
+                    <p>Only the canvas owner can manage sharing settings.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Canvas Sharing (Phase 1 + Phase 2) - Only show for owners */}
             {isOwner && (
-              <div className="space-y-4 border-t pt-4">
+              <div className="space-y-4 border rounded-lg p-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Users className="h-5 w-5" />
                   Sharing
                 </h3>
 
                 {/* Phase 1: Public Toggle */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
                       {isPublic ? (
-                        <Globe className="h-4 w-4 text-green-600" />
+                        <Globe className="h-4 w-4 text-green-600 dark:text-green-500" />
                       ) : (
-                        <Lock className="h-4 w-4 text-gray-400" />
+                        <Lock className="h-4 w-4 text-muted-foreground" />
                       )}
                       <span className="font-medium">
                         {isPublic ? 'Public Canvas' : 'Private Canvas'}
@@ -254,7 +312,7 @@ export function CanvasManagementModal({
 
                 {/* Copy Link (only if public) */}
                 {isPublic && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 pt-3">
                     <Input
                       readOnly
                       value={`${window.location.origin}/canvas/${canvas.id}`}

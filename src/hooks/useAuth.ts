@@ -8,6 +8,9 @@ interface AuthState {
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  resendVerificationEmail: (email: string) => Promise<void>;
 }
 
 /**
@@ -62,15 +65,23 @@ export function useAuth(): AuthState {
 
   /**
    * Sign in an existing user
+   * Enforces email verification before allowing login
    */
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
       throw error;
+    }
+
+    // Check if email is verified
+    if (data.user && !data.user.email_confirmed_at) {
+      // Sign out the user immediately
+      await supabase.auth.signOut();
+      throw new Error('Email not confirmed. Please verify your email before signing in.');
     }
   };
 
@@ -85,12 +96,55 @@ export function useAuth(): AuthState {
     }
   };
 
+  /**
+   * Request a password reset email
+   */
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      throw error;
+    }
+  };
+
+  /**
+   * Update the user's password (used after clicking reset link)
+   */
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      throw error;
+    }
+  };
+
+  /**
+   * Resend verification email for unverified users
+   */
+  const resendVerificationEmail = async (email: string) => {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+
+    if (error) {
+      throw error;
+    }
+  };
+
   return {
     user,
     loading,
     signUp,
     signIn,
     signOut,
+    resetPassword,
+    updatePassword,
+    resendVerificationEmail,
   };
 }
 
