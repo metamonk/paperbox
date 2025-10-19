@@ -101,13 +101,35 @@ export interface FabricCanvasEventHandlers {
 }
 
 /**
+ * Helper function to get theme-aware background color from CSS variables
+ * Converts oklch() format to rgb() that Fabric.js understands
+ */
+function getThemeBackgroundColor(): string {
+  const computedStyle = getComputedStyle(document.documentElement);
+  const bgValue = computedStyle.getPropertyValue('--muted').trim();
+  
+  // If it's oklch() or other CSS color format, convert using a temp element
+  if (bgValue && (bgValue.startsWith('oklch(') || bgValue.startsWith('hsl(') || bgValue.startsWith('var('))) {
+    const temp = document.createElement('div');
+    temp.style.color = bgValue;
+    document.body.appendChild(temp);
+    const computed = getComputedStyle(temp).color;
+    document.body.removeChild(temp);
+    return computed; // returns rgb() format that Fabric.js understands
+  }
+  
+  // Return the value as-is if it's already in a compatible format (hex, rgb, etc.)
+  return bgValue || '#f5f5f5'; // fallback to light gray
+}
+
+/**
  * Default canvas configuration
- * STATIC CANVAS MIGRATION: Fixed 5000x5000 canvas for simple coordinate system
+ * STATIC CANVAS MIGRATION: Fixed 8000x8000 canvas for simple coordinate system
  */
 const DEFAULT_CONFIG: Required<FabricCanvasConfig> = {
-  backgroundColor: '#f5f5f5', // Light gray background (Figma-style) for white object contrast
-  width: 5000,  // Static canvas width
-  height: 5000, // Static canvas height
+  backgroundColor: '#f5f5f5', // Fallback - will be overridden with theme-aware color at runtime
+  width: 8000,  // Static canvas width
+  height: 8000, // Static canvas height
   selection: true,
   renderOnAddRemove: true,
 };
@@ -131,7 +153,7 @@ export class FabricCanvasManager {
   // W2.D8.4-5: Pixel grid visualization
   private pixelGridInitialized: boolean = false;
   private pixelGridPattern: FabricObject[] = []; // Grid lines
-  private readonly PIXEL_GRID_THRESHOLD = 8; // Show grid when zoom > 8x
+  private readonly PIXEL_GRID_THRESHOLD = 2; // Show grid when zoom > 2x (half the previous threshold)
 
   // W2.D8.7: Canvas boundary limits (Figma-style)
   private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
@@ -188,19 +210,22 @@ export class FabricCanvasManager {
     }
 
     // W2.D12 DEBUG: Check canvas element state before Fabric.js initialization
-    console.log('[FabricCanvasManager] Canvas element BEFORE Fabric init:', {
-      id: element.id,
-      widthAttr: element.width,
-      heightAttr: element.height,
-      clientWidth: element.clientWidth,
-      clientHeight: element.clientHeight,
-      hasGetContext: typeof element.getContext !== 'undefined'
-    });
+    // console.log('[FabricCanvasManager] Canvas element BEFORE Fabric init:', {
+    //   id: element.id,
+    //   widthAttr: element.width,
+    //   heightAttr: element.height,
+    //   clientWidth: element.clientWidth,
+    //   clientHeight: element.clientHeight,
+    //   hasGetContext: typeof element.getContext !== 'undefined'
+    // });
 
-    // STATIC CANVAS MIGRATION: Always use fixed 5000x5000 size
-    // No dynamic sizing based on viewport - canvas is always 5000x5000
+    // STATIC CANVAS MIGRATION: Always use fixed 8000x8000 size
+    // No dynamic sizing based on viewport - canvas is always 8000x8000
     const width = this.config.width;
     const height = this.config.height;
+
+    // Get theme-aware background color from CSS variables
+    const backgroundColor = getThemeBackgroundColor();
 
     // W2.D12 FIX: Fabric.js v6 Canvas constructor expects ID string, not HTMLCanvasElement
     // From official docs: new fabric.Canvas('canvasId', options)
@@ -213,7 +238,7 @@ export class FabricCanvasManager {
       parentClientHeight: element.parentElement?.clientHeight,
     });
     console.log(`[FabricCanvasManager] Config:`, {
-      backgroundColor: this.config.backgroundColor,
+      backgroundColor,
       width,
       height,
       selection: this.config.selection,
@@ -221,7 +246,7 @@ export class FabricCanvasManager {
     });
 
     this.canvas = new Canvas(canvasId, {
-      backgroundColor: this.config.backgroundColor,
+      backgroundColor,
       width,
       height,
       selection: this.config.selection,
@@ -229,20 +254,20 @@ export class FabricCanvasManager {
       preserveObjectStacking: true, // CRITICAL FIX: Prevent selection from bringing objects to front
     });
 
-    console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
-    console.log(`[FabricCanvasManager] Canvas type:`, this.canvas.constructor.name);
-    console.log(`[FabricCanvasManager] Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
+    // console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
+    // console.log(`[FabricCanvasManager] Canvas type:`, this.canvas.constructor.name);
+    // console.log(`[FabricCanvasManager] Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
 
     // W2.D12 DEBUG: Expose canvas instance globally for debugging
     (window as any).__fabricCanvas = this.canvas;
-    console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
+    // console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
     // STATIC CANVAS MIGRATION: No window resize handler needed (fixed size canvas)
     // Window resizing only affects the scrollable viewport, not the canvas itself
 
     // W5.D5++++: Initialize collaborative overlay manager
     this.overlayManager = new CollaborativeOverlayManager(this.canvas);
-    console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
+    // console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
 
     // PERFORMANCE: Start object culling for large canvases
     this.startObjectCulling();
@@ -251,7 +276,7 @@ export class FabricCanvasManager {
   }
 
   // STATIC CANVAS MIGRATION: Window resize handler removed
-  // Canvas is fixed at 5000x5000, viewport resizing handled by browser scroll container
+  // Canvas is fixed at 8000x8000, viewport resizing handled by browser scroll container
 
   /**
    * SNAP-TO-GRID: Snap a coordinate value to the nearest grid point
@@ -269,6 +294,10 @@ export class FabricCanvasManager {
   /**
    * PERFORMANCE: Update object visibility based on viewport
    * 
+   * STATIC CANVAS MIGRATION FIX: Calculate viewport using scroll position
+   * instead of viewport transform. The 8000x8000 canvas is in a scrollable
+   * container, so we need to check scroll offsets, not transform matrix.
+   * 
    * Hides objects outside the visible viewport for better rendering performance
    * with large numbers of objects. Objects near viewport edges (within CULL_MARGIN)
    * remain visible for smooth scrolling experience.
@@ -277,13 +306,25 @@ export class FabricCanvasManager {
     if (!this.canvas) return;
 
     const canvasElement = this.canvas.getElement();
-    const rect = canvasElement.getBoundingClientRect();
+    const scrollContainer = canvasElement.parentElement;
     
-    // Get viewport bounds (visible area of the 5000x5000 canvas)
-    const viewportLeft = -rect.left;
-    const viewportTop = -rect.top;
-    const viewportRight = viewportLeft + window.innerWidth;
-    const viewportBottom = viewportTop + window.innerHeight;
+    // STATIC CANVAS: Can't rely on parent element existing in all contexts
+    if (!scrollContainer) {
+      console.warn('[FabricCanvasManager] No scroll container found for culling');
+      return;
+    }
+    
+    // STATIC CANVAS FIX: Get viewport bounds using scroll position
+    // The canvas is 8000x8000 inside a scrollable container
+    const scrollLeft = scrollContainer.scrollLeft;
+    const scrollTop = scrollContainer.scrollTop;
+    const viewportWidth = scrollContainer.clientWidth;
+    const viewportHeight = scrollContainer.clientHeight;
+    
+    const viewportLeft = scrollLeft;
+    const viewportTop = scrollTop;
+    const viewportRight = scrollLeft + viewportWidth;
+    const viewportBottom = scrollTop + viewportHeight;
 
     // Add margin for smoother transitions
     const cullLeft = viewportLeft - this.CULL_MARGIN;
@@ -321,7 +362,10 @@ export class FabricCanvasManager {
 
     if (culledCount > 0) {
       this.canvas.requestRenderAll();
-      console.log(`[FabricCanvasManager] Culled ${culledCount} objects outside viewport`);
+      // Note: Object culling is expected with static canvas - only log if excessive
+      if (culledCount > 10) {
+        console.log(`[FabricCanvasManager] Culled ${culledCount} objects outside viewport`);
+      }
     }
   }
 
@@ -1271,7 +1315,7 @@ export class FabricCanvasManager {
         const canvasElement = this.canvas!.getElement();
         const rect = canvasElement.getBoundingClientRect();
         
-        // Direct pixel coordinates on the 5000x5000 canvas
+        // Direct pixel coordinates on the 8000x8000 canvas
         const canvasX = opt.e.clientX - rect.left;
         const canvasY = opt.e.clientY - rect.top;
 
@@ -1580,7 +1624,7 @@ export class FabricCanvasManager {
    * W2.D8.4: Setup pixel grid visualization system
    *
    * Initializes the pixel grid system that shows/hides grid lines based on zoom level.
-   * Grid appears when zoom > 8x for precision design work (like Figma).
+   * Grid appears when zoom > 4x for precision design work (like Figma).
    *
    * Pattern:
    * - Grid lines are rendered as Fabric.js Line objects
@@ -1612,7 +1656,7 @@ export class FabricCanvasManager {
   /**
    * W2.D8.4: Check if pixel grid is currently visible
    *
-   * Grid is visible when zoom > 8x threshold.
+   * Grid is visible when zoom > 4x threshold.
    *
    * @returns true if grid should be visible, false otherwise
    */
@@ -1672,7 +1716,7 @@ export class FabricCanvasManager {
    * W2.D8.4: Update pixel grid visibility based on current zoom
    *
    * Called automatically on zoom events.
-   * Shows grid when zoom > 8x, hides when zoom <= 8x.
+   * Shows grid when zoom > 4x, hides when zoom <= 4x.
    *
    * Pattern:
    * - Removes old grid lines

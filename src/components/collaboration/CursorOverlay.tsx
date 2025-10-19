@@ -8,33 +8,55 @@ interface CursorOverlayProps {
 }
 
 /**
- * STATIC CANVAS MIGRATION: Renders remote user cursors on top of the canvas
+ * Renders remote user cursors on top of the canvas
  * 
- * Simplified positioning - cursor coordinates are direct canvas pixels
- * No viewport transforms needed since all users share the same 5000x5000 coordinate space
+ * CRITICAL: Uses Fabric's viewport transform to position cursors
+ * - Receives cursor positions in canvas-absolute coordinates (x, y)
+ * - Transforms to viewport coordinates using viewer's zoom/pan
+ * - This allows each user to see cursors at correct position regardless of their own viewport
  *
- * - Receives cursor positions in direct canvas coordinates (from broadcast)
- * - Displays at exact canvas positions (simple!)
- * - Colored cursor with user's name
- * - Smooth CSS transitions for cursor movement
+ * Formula: viewportX = (canvasX * zoom) + panX
  *
  * Performance: Memoized to avoid re-renders when parent updates
  * but cursor positions haven't changed
  */
 function CursorOverlayComponent({ cursors, fabricManager }: CursorOverlayProps) {
+  const canvas = fabricManager?.getCanvas();
+  
+  if (!canvas) {
+    return null;
+  }
+
+  // Get viewer's viewport transform
+  const vpt = canvas.viewportTransform;
+  const zoom = canvas.getZoom();
+
   return (
-    <div className="absolute inset-0 pointer-events-none z-50">
+    <div 
+      className="absolute inset-0 pointer-events-none z-50"
+    >
       {Array.from(cursors.values()).map((cursor) => {
-        // STATIC CANVAS MIGRATION: Direct canvas coordinates - no transformation!
-        const canvasX = cursor.x;
-        const canvasY = cursor.y;
+        // Transform canvas coordinates to viewport coordinates using viewer's transform
+        // Formula: viewportX = (canvasX * zoom) + panX
+        const viewportX = (cursor.x * zoom) + vpt[4];
+        const viewportY = (cursor.y * zoom) + vpt[5];
+
+        console.log('[CursorOverlay] Rendering cursor:', {
+          userId: cursor.userId.slice(0, 8),
+          displayName: cursor.displayName,
+          canvas: { x: Math.round(cursor.x), y: Math.round(cursor.y) },
+          viewport: { x: Math.round(viewportX), y: Math.round(viewportY) },
+          transform: { zoom: zoom.toFixed(2), panX: Math.round(vpt[4]), panY: Math.round(vpt[5]) },
+        });
 
         return (
           <div
             key={cursor.userId}
-            className="absolute transition-transform duration-100 ease-out"
+            className="absolute"
             style={{
-              transform: `translate(${canvasX}px, ${canvasY}px)`,
+              left: `${viewportX}px`,
+              top: `${viewportY}px`,
+              transition: 'left 100ms ease-out, top 100ms ease-out',
             }}
           >
             {/* SVG Cursor - Classic Pointer */}

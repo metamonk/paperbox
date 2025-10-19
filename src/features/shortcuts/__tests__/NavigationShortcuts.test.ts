@@ -522,13 +522,13 @@ describe('NavigationShortcuts', () => {
         type: 'rect',
         left: 0,
         top: 0,
-        width: 5000,
-        height: 5000,
+        width: 8000,
+        height: 8000,
         getBoundingRect: () => ({
           left: 0,
           top: 0,
-          width: 5000,
-          height: 5000,
+          width: 8000,
+          height: 8000,
         }),
       };
 

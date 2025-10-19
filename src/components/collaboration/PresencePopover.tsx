@@ -21,10 +21,11 @@ interface PresencePopoverProps {
 
 export function PresencePopover({ users, currentUserId }: PresencePopoverProps) {
   const [showAllModal, setShowAllModal] = useState(false);
+  
   const otherUsers = users.filter(u => u.id !== currentUserId);
-  const totalCount = otherUsers.length;
+  const totalCount = otherUsers.length; // Exclude current user from count
   const displayUsers = otherUsers.slice(0, 5);
-  const hasMore = totalCount > 5;
+  const hasMore = otherUsers.length > 5;
 
   return (
     <>

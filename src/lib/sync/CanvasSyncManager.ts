@@ -267,7 +267,7 @@ export class CanvasSyncManager {
     // W2.D12+: Removed setupSpacebarPan() call
     // Now called in useCanvasSync along with setupScrollPanAndZoom()
 
-    // W2.D8.4-5: Setup pixel grid visualization (shows when zoom > 8x)
+    // W2.D8.4-5: Setup pixel grid visualization (shows when zoom > 4x)
     this.fabricManager.setupPixelGrid();
 
     // Setup viewport→Zustand sync callback
@@ -288,7 +288,9 @@ export class CanvasSyncManager {
    * - selection:cleared → clearSelection()
    */
   private setupCanvasToStateSync(): void {
-    this.fabricManager.setupEventListeners({
+    console.log('[CanvasSyncManager] 🔧 Setting up Fabric→State event listeners...');
+    
+    const handlers = {
       // W5.D5+++++: Track active editing during drag (for future locking)
       onObjectMoving: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
@@ -393,23 +395,81 @@ export class CanvasSyncManager {
         this.fabricManager.updateOverlayPositions();
       },
 
-      onSelectionCreated: (targets: FabricObject[]) => {
+      onSelectionCreated: async (targets: FabricObject[]) => {
+        console.log('[🎨 Fabric Event] onSelectionCreated fired!', {
+          targetCount: targets.length,
+          isSyncingFromStore: this._isSyncingFromStore,
+        });
+
         // CRITICAL FIX: Prevent selection events during programmatic updates
-        if (this._isSyncingFromStore) return;
+        if (this._isSyncingFromStore) {
+          console.log('[🎨 Fabric Event] Skipping - syncing from store');
+          return;
+        }
 
         console.log('[CanvasSyncManager] ✅ Selection created:', { count: targets.length });
         
         const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
+        console.log('[CanvasSyncManager] Extracted IDs:', ids);
 
-        // Simple immediate selection (no locks, no visual customization)
-        // Focus on correctness first, visual polish later
-        this.store.getState().selectObjects(ids);
-        this.store.getState().broadcastSelection(ids);
+        // COLLABORATIVE EDITING: Try to acquire locks for all selected objects
+        const state = this.store.getState();
+        const userId = state.currentUserId;
+        const userName = state.presence[userId ?? '']?.userName || 'Unknown';
+        
+        // Check if any objects are locked by others
+        const lockedByOthers: string[] = [];
+        for (const id of ids) {
+          const existingLock = state.locks[id];
+          if (existingLock && existingLock.userId !== userId) {
+            lockedByOthers.push(existingLock.userName);
+          }
+        }
 
-        console.log('[CanvasSyncManager] ✅ Selection set immediately:', { ids });
+        // If any objects are locked by others, prevent selection
+        if (lockedByOthers.length > 0) {
+          console.warn('[CanvasSyncManager] ❌ Cannot select - objects locked by:', lockedByOthers);
+          
+          // Clear the selection in Fabric.js
+          this.fabricManager.getCanvas()?.discardActiveObject();
+          this.fabricManager.getCanvas()?.requestRenderAll();
+          
+          // Show error message to user
+          const lockerName = lockedByOthers[0];
+          const message = lockedByOthers.length === 1
+            ? `This object is being edited by ${lockerName}`
+            : `These objects are being edited by ${lockedByOthers.join(', ')}`;
+          
+          // Show toast notification
+          toast.error('Cannot Select Object', {
+            description: message,
+            duration: 3000,
+          });
+          return;
+        }
+
+        // Acquire locks for all selected objects
+        for (const id of ids) {
+          const success = state.acquireLock(id, userId!, userName);
+          if (!success) {
+            console.error('[CanvasSyncManager] ❌ Failed to acquire lock for:', id);
+            // If we fail to acquire any lock, clear selection
+            this.fabricManager.getCanvas()?.discardActiveObject();
+            this.fabricManager.getCanvas()?.requestRenderAll();
+            return;
+          }
+        }
+
+        console.log('[CanvasSyncManager] 🔒 Locks acquired for:', ids);
+
+        // Update selection state and broadcast
+        state.selectObjects(ids);
+        state.broadcastSelection(ids);
+
+        console.log('[CanvasSyncManager] ✅ Selection set with locks:', { ids });
       },
 
-      onSelectionUpdated: (targets: FabricObject[]) => {
+      onSelectionUpdated: async (targets: FabricObject[]) => {
         // CRITICAL FIX: Prevent selection events during programmatic updates
         if (this._isSyncingFromStore) return;
 
@@ -417,11 +477,76 @@ export class CanvasSyncManager {
         
         const ids = targets.map(t => (t as FabricObjectWithData).data?.id).filter(Boolean) as string[];
 
-        // EMERGENCY FIX: Simple immediate selection (no locks)
-        this.store.getState().selectObjects(ids);
-        this.store.getState().broadcastSelection(ids);
+        // COLLABORATIVE EDITING: Release old locks, acquire new locks
+        const state = this.store.getState();
+        const userId = state.currentUserId;
+        const userName = state.presence[userId ?? '']?.userName || 'Unknown';
+        const previouslySelectedIds = state.selectedIds;
+
+        // Release locks for objects no longer selected
+        for (const oldId of previouslySelectedIds) {
+          if (!ids.includes(oldId)) {
+            const lock = state.locks[oldId];
+            if (lock && lock.userId === userId) {
+              state.releaseLock(oldId);
+              console.log('[CanvasSyncManager] 🔓 Released lock for:', oldId);
+            }
+          }
+        }
+
+        // Check if any NEW objects are locked by others
+        const lockedByOthers: string[] = [];
+        for (const id of ids) {
+          if (!previouslySelectedIds.includes(id)) {
+            // This is a newly selected object
+            const existingLock = state.locks[id];
+            if (existingLock && existingLock.userId !== userId) {
+              lockedByOthers.push(existingLock.userName);
+            }
+          }
+        }
+
+        // If any new objects are locked, prevent selection
+        if (lockedByOthers.length > 0) {
+          console.warn('[CanvasSyncManager] ❌ Cannot select - objects locked by:', lockedByOthers);
+          
+          // Clear the selection in Fabric.js
+          this.fabricManager.getCanvas()?.discardActiveObject();
+          this.fabricManager.getCanvas()?.requestRenderAll();
+          
+          // Show error message
+          const lockerName = lockedByOthers[0];
+          const message = `This object is being edited by ${lockerName}`;
+          
+          // Show toast notification
+          toast.error('Cannot Select Object', {
+            description: message,
+            duration: 3000,
+          });
+          return;
+        }
+
+        // Acquire locks for newly selected objects
+        for (const id of ids) {
+          if (!previouslySelectedIds.includes(id)) {
+            const success = state.acquireLock(id, userId!, userName);
+            if (!success) {
+              console.error('[CanvasSyncManager] ❌ Failed to acquire lock for:', id);
+              // If we fail to acquire any lock, revert to previous selection
+              this.fabricManager.getCanvas()?.discardActiveObject();
+              this.fabricManager.getCanvas()?.requestRenderAll();
+              return;
+            }
+          }
+        }
+
+        console.log('[CanvasSyncManager] 🔒 Locks updated for:', ids);
+
+        // Update selection state and broadcast
+        state.selectObjects(ids);
+        state.broadcastSelection(ids);
         
-        console.log('[CanvasSyncManager] ✅ Selection updated immediately:', { ids });
+        console.log('[CanvasSyncManager] ✅ Selection updated with locks:', { ids });
       },
 
       onSelectionCleared: () => {
@@ -430,13 +555,34 @@ export class CanvasSyncManager {
 
         console.log('[CanvasSyncManager] ✅ Selection cleared');
 
-        // EMERGENCY FIX: Simple immediate deselection
-        this.store.getState().deselectAll();
-        this.store.getState().broadcastSelection([]);
+        // COLLABORATIVE EDITING: Release locks for previously selected objects
+        const state = this.store.getState();
+        const userId = state.currentUserId;
+        const previouslySelectedIds = state.selectedIds;
+
+        // Release all locks held by this user for previously selected objects
+        for (const id of previouslySelectedIds) {
+          const lock = state.locks[id];
+          if (lock && lock.userId === userId) {
+            state.releaseLock(id);
+            console.log('[CanvasSyncManager] 🔓 Released lock for:', id);
+          }
+        }
+
+        // Update selection state and broadcast
+        state.deselectAll();
+        state.broadcastSelection([]);
         
-        console.log('[CanvasSyncManager] ✅ Selection cleared immediately');
+        console.log('[CanvasSyncManager] ✅ Selection cleared with locks released');
       },
-    });
+    };
+    
+    console.log('[CanvasSyncManager] 🔧 Registering event handlers with FabricCanvasManager...');
+    console.log('[CanvasSyncManager] Handlers:', Object.keys(handlers));
+    
+    this.fabricManager.setupEventListeners(handlers);
+    
+    console.log('[CanvasSyncManager] ✅ Event handlers registered successfully!');
   }
 
   /**

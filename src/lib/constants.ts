@@ -5,16 +5,16 @@
 import type { ShapeDefaults } from '../types/canvas';
 
 // Canvas dimensions and boundaries
-// STATIC CANVAS MIGRATION: Fixed 5000x5000 canvas for simple coordinate system
-export const CANVAS_WIDTH = 5000;
-export const CANVAS_HEIGHT = 5000;
+// STATIC CANVAS MIGRATION: Fixed 8000x8000 canvas for simple coordinate system
+export const CANVAS_WIDTH = 8000;
+export const CANVAS_HEIGHT = 8000;
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 5;
 export const DEFAULT_ZOOM = 1;
 export const ZOOM_SPEED = 0.1;
 
 // Snap-to-grid settings
-export const GRID_SIZE = 10; // pixels - objects snap to 10px grid
+export const GRID_SIZE = 1; // pixels - objects snap to 1px grid (pixel-perfect)
 export const GRID_ENABLED = true; // enable/disable snap-to-grid
 export const SHOW_GRID = false; // show visual grid overlay (future feature)
 

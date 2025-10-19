@@ -381,27 +381,49 @@ export const createCollaborationSlice: StateCreator<
    * @param objectIds - Array of selected object IDs (empty array = deselect all)
    */
   broadcastSelection: (objectIds: string[]) => {
+    console.log('[🚀 broadcastSelection] CALLED with:', {
+      objectIds,
+      count: objectIds.length,
+    });
+
     const state = get();
     const channel = state.presenceChannel;
     const currentUser = state.presence[state.currentUserId ?? ''];
 
+    console.log('[🚀 broadcastSelection] State check:', {
+      hasChannel: !!channel,
+      channelState: channel?.state,
+      hasCurrentUser: !!currentUser,
+      currentUserId: state.currentUserId?.slice(0, 8),
+      presenceKeys: Object.keys(state.presence).length,
+    });
+
     if (!channel || !currentUser) {
-      console.warn('[Collaboration] Cannot broadcast selection - no channel or current user');
+      console.warn('[Collaboration] Cannot broadcast selection - no channel or current user', {
+        hasChannel: !!channel,
+        channelState: channel?.state,
+        hasCurrentUser: !!currentUser,
+        currentUserId: state.currentUserId,
+      });
+      return;
+    }
+
+    // Check if channel is actually subscribed and ready
+    if (channel.state !== 'joined') {
+      console.warn('[Collaboration] Cannot broadcast - channel not ready yet. State:', channel.state);
       return;
     }
 
     const now = Date.now();
 
-    console.log('[🎯 DEBUG] broadcastSelection called:', {
-      objectIds,
-      count: objectIds.length,
-      isMultiSelect: objectIds.length > 1,
-      userName: currentUser.userName,
-      channel: !!channel
-    });
+    const selectionData = objectIds.length > 0
+      ? {
+          objectIds,
+          updatedAt: now,
+        }
+      : undefined;
 
-    // Broadcast selection state with full presence data
-    channel.track({
+    const trackData = {
       userId: currentUser.userId,
       userName: currentUser.userName,
       userColor: currentUser.userColor,
@@ -409,13 +431,24 @@ export const createCollaborationSlice: StateCreator<
       lastSeen: now,
       currentTool: currentUser.currentTool,
       cursor: state.cursors[currentUser.userId], // Include cursor if available
-      selection: objectIds.length > 0
-        ? {
-            objectIds,
-            updatedAt: now,
-          }
-        : undefined, // undefined = no selection
+      selection: selectionData, // undefined = no selection
+    };
+
+    console.log('[🎯 DEBUG] broadcastSelection called:', {
+      objectIds,
+      count: objectIds.length,
+      isMultiSelect: objectIds.length > 1,
+      userName: currentUser.userName,
+      channel: !!channel,
+      channelState: channel.state,
+      trackData: trackData,
+      hasSelection: !!selectionData,
     });
+
+    // Broadcast selection state with full presence data
+    const trackResult = channel.track(trackData);
+    console.log('[🎯 DEBUG] channel.track() result:', trackResult);
+    console.log('[🎯 DEBUG] After track, channel state:', channel.state);
 
     // Update local presence state
     set(
@@ -427,6 +460,17 @@ export const createCollaborationSlice: StateCreator<
                 updatedAt: now,
               }
             : undefined;
+          
+          console.log('[🎯 DEBUG] Local presence updated:', {
+            userId: state.currentUserId?.slice(0, 8),
+            hasSelection: !!state.presence[state.currentUserId ?? '']?.selection,
+            selection: state.presence[state.currentUserId ?? '']?.selection,
+          });
+        } else {
+          console.error('[🎯 DEBUG] ❌ Current user not in presence map!', {
+            currentUserId: state.currentUserId,
+            presenceKeys: Object.keys(state.presence),
+          });
         }
       },
       undefined,
@@ -804,11 +848,61 @@ export const createCollaborationSlice: StateCreator<
    * Creates a presence channel, tracks current user, and subscribes to presence events
    */
   setupPresenceChannel: (userId: string, userName: string, userColor: string, roomId: string) => {
+    console.log('[🔧 setupPresenceChannel] Starting setup:', {
+      userId: userId.slice(0, 8),
+      userName,
+      userColor,
+      roomId: roomId.slice(0, 8),
+    });
+
     // Cleanup existing channel first
+    console.log('[🔧 setupPresenceChannel] Cleaning up existing channel...');
     get().cleanupPresenceChannel();
+    console.log('[🔧 setupPresenceChannel] Cleanup complete');
+
+    // CRITICAL FIX: Add current user to presence map immediately
+    // Don't wait for Supabase sync - this prevents "Cannot broadcast" errors
+    const now = Date.now();
+    
+    console.log('[🔧 setupPresenceChannel] Adding current user to presence map...', {
+      userId: userId.slice(0, 8),
+      userName,
+      userColor,
+    });
+    
+    set(
+      (state) => {
+        state.presence[userId] = {
+          userId,
+          userName,
+          userColor,
+          isActive: true,
+          lastSeen: now,
+        };
+        console.log('[🔧 setupPresenceChannel] Presence map after adding user:', {
+          keys: Object.keys(state.presence),
+          count: Object.keys(state.presence).length,
+        });
+      },
+      undefined,
+      'collaboration/addCurrentUserToPresence'
+    );
+    
+    console.log('[🔧 setupPresenceChannel] ✅ Current user added to local presence map');
+    
+    // Verify it's actually there
+    const presenceCheck = get().presence[userId];
+    console.log('[🔧 setupPresenceChannel] Verification - user in presence:', {
+      exists: !!presenceCheck,
+      userId: userId.slice(0, 8),
+      totalPresenceKeys: Object.keys(get().presence).length,
+    });
 
     // Create presence channel for the room
-    const channel = supabase.channel(`presence-${roomId}`, {
+    const channelName = `presence-${roomId}`;
+    console.log('[🔧 setupPresenceChannel] Creating channel:', channelName);
+    
+    const channel = supabase.channel(channelName, {
       config: {
         presence: {
           key: userId,
@@ -816,27 +910,37 @@ export const createCollaborationSlice: StateCreator<
       },
     });
 
+    console.log('[🔧 setupPresenceChannel] Channel created, tracking presence...');
+
     // Track current user's presence
     channel.track({
       userId,
       userName,
       userColor,
       isActive: true,
-      lastSeen: Date.now(),
+      lastSeen: now,
     });
 
     // Subscribe to presence events
+    console.log('[🔧 setupPresenceChannel] Setting up presence event handlers...');
+    
     channel
       .on('presence', { event: 'sync' }, () => {
+        console.log('[🔧 Presence Sync Event] Received sync event');
         // Sync event - update entire presence map
         const presenceState = channel.presenceState();
         const presenceMap: Record<string, UserPresence> = {};
         const cursorsMap: Record<string, CursorPosition> = {};
 
+        console.log('[🔍 Presence Sync] Raw presence state:', presenceState);
+
         // Convert Supabase presence format to our format
         Object.entries(presenceState).forEach(([key, presences]) => {
           // Supabase stores array of presences per key, take first one
           const presence = (presences as any[])[0];
+          
+          console.log('[🔍 Presence Sync] Processing key:', key, 'presence:', presence);
+          
           if (presence) {
             presenceMap[key] = {
               userId: presence.userId,
@@ -849,6 +953,8 @@ export const createCollaborationSlice: StateCreator<
               selection: presence.selection,
               activelyEditing: presence.activelyEditing,
             };
+            
+            console.log('[🔍 Presence Sync] Mapped presence for', key, '- has selection:', !!presence.selection, 'selection:', presence.selection);
 
             // W1.D6: Extract cursor data if present
             if (presence.cursor) {
@@ -893,9 +999,27 @@ export const createCollaborationSlice: StateCreator<
         // User left - remove from presence
         get().removePresence(key);
       })
-      .subscribe();
+      .subscribe(async (status) => {
+        console.log('[🔧 setupPresenceChannel] Subscription status:', status);
+        
+        if (status === 'SUBSCRIBED') {
+          console.log('[🔧 setupPresenceChannel] ✅ Successfully subscribed! Setting channel in store...');
+          
+          // CRITICAL: Only set channel in store AFTER successful subscription
+          // This prevents race conditions where broadcastSelection tries to use unready channel
+          set({ presenceChannel: channel }, undefined, 'collaboration/setupPresence');
+          
+          console.log('[🔧 setupPresenceChannel] ✅ Channel stored and ready for broadcasts!');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[🔧 setupPresenceChannel] ❌ Channel error - failed to subscribe');
+          set({ presenceChannel: null }, undefined, 'collaboration/setupPresenceError');
+        } else if (status === 'TIMED_OUT') {
+          console.error('[🔧 setupPresenceChannel] ❌ Subscription timed out');
+          set({ presenceChannel: null }, undefined, 'collaboration/setupPresenceTimeout');
+        }
+      });
 
-    set({ presenceChannel: channel }, undefined, 'collaboration/setupPresence');
+    console.log('[🔧 setupPresenceChannel] ✅ Setup initiated, waiting for subscription...');
   },
 
   /**

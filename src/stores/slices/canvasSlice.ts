@@ -425,8 +425,10 @@ export const createCanvasSlice: StateCreator<
         objectCount: Object.keys(objectsMap).length,
       });
 
-      // Add layer metadata for all loaded objects
-      Object.values(objectsMap).forEach((obj) => {
+      // LAYER ORDERING FIX: Add layer metadata for all loaded objects in z_index order
+      // Sort objects by z_index before adding layers to ensure consistent ordering
+      const sortedObjects = Object.values(objectsMap).sort((a, b) => a.z_index - b.z_index);
+      sortedObjects.forEach((obj) => {
         get().addLayer(obj.id, {
           name: `${obj.type} ${obj.id.slice(0, 6)}`,
           visible: true,
@@ -822,15 +824,26 @@ export const createCanvasSlice: StateCreator<
 
   /**
    * Internal: Add object (called by SyncManager on realtime INSERT)
+   * 
+   * REALTIME LAYERS FIX: Also add layer so other users see it in layers panel
    */
-  _addObject: (object: CanvasObject) =>
+  _addObject: (object: CanvasObject) => {
     set(
       (state) => {
         state.objects[object.id] = object;
       },
       undefined,
       'canvas/_addObject',
-    ),
+    );
+    
+    // REALTIME LAYERS FIX: Sync layer to other users
+    // Add layer metadata for layers panel (checks for duplicates internally)
+    get().addLayer(object.id, {
+      name: `${object.type} ${object.id.slice(0, 6)}`,
+      visible: true,
+      locked: false,
+    });
+  },
 
   /**
    * Internal: Update object (called by SyncManager on realtime UPDATE)

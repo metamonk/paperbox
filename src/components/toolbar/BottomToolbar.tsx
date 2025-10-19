@@ -11,15 +11,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { MousePointer2, Square, Circle as CircleIcon, Type } from 'lucide-react';
+import { MousePointer2, Square, Circle as CircleIcon, Type, Sparkles } from 'lucide-react';
 import { usePaperboxStore } from '@/stores';
 
 interface BottomToolbarProps {
   onAddShape: (type: ShapeType) => void;
   activeTool?: 'select' | ShapeType;
+  onAIToggle?: () => void;
+  isAIOpen?: boolean;
 }
 
-export function BottomToolbar({ onAddShape, activeTool = 'select' }: BottomToolbarProps) {
+export function BottomToolbar({ 
+  onAddShape, 
+  activeTool = 'select',
+  onAIToggle,
+  isAIOpen = false 
+}: BottomToolbarProps) {
   const isPlacementMode = usePaperboxStore((state) => state.isPlacementMode);
 
   // Tool button config
@@ -57,15 +64,25 @@ export function BottomToolbar({ onAddShape, activeTool = 'select' }: BottomToolb
       shortcut: 'T',
       onClick: () => onAddShape('text'),
     },
+    {
+      id: 'ai',
+      label: 'AI Assistant',
+      icon: Sparkles,
+      shortcut: '/',
+      onClick: () => onAIToggle?.(),
+    },
   ] as const;
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
         <div className="flex items-center gap-1 bg-card border border-border rounded-xl px-2 py-2 shadow-xl backdrop-blur-sm">
           {tools.map((tool) => {
             const Icon = tool.icon;
-            const isActive = activeTool === tool.id || (isPlacementMode && activeTool === tool.id);
+            // Handle AI tool active state differently
+            const isActive = tool.id === 'ai'
+              ? isAIOpen
+              : activeTool === tool.id || (isPlacementMode && activeTool === tool.id);
 
             return (
               <Tooltip key={tool.id}>
@@ -82,7 +99,7 @@ export function BottomToolbar({ onAddShape, activeTool = 'select' }: BottomToolb
                 </TooltipTrigger>
                 <TooltipContent side="top" className="flex items-center gap-2">
                   <span>{tool.label}</span>
-                  <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded">{tool.shortcut}</kbd>
+                  <kbd className="px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded">{tool.shortcut}</kbd>
                 </TooltipContent>
               </Tooltip>
             );

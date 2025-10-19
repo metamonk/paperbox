@@ -192,7 +192,7 @@ export function useCanvas() {
       // If no stage (during tests), use canvas center
       const center = stage
         ? getViewportCenter(stage)
-        : { x: 2500, y: 2500 }; // Center of 5000x5000 canvas
+        : { x: 4000, y: 4000 }; // Center of 8000x8000 canvas
 
       // Create shape object based on type
       let newShape: Partial<CanvasObject>;

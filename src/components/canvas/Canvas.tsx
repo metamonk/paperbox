@@ -18,28 +18,34 @@ import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
 import { useKeyboard } from '../../hooks/useKeyboard';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
-// TEMP DISABLED: import { RemoteSelectionOverlay } from '../collaboration/RemoteSelectionOverlay';
+import { RemoteSelectionOverlay } from '../collaboration/RemoteSelectionOverlay';
 import { Header } from '../layout/Header';
 import { CanvasLayout } from '../layout/CanvasLayout';
 import { LeftSidebar } from '../sidebar/LeftSidebar';
 import { BottomToolbar } from '../toolbar/BottomToolbar';
+import { AITextBox } from '../ai/AITextBox';
 import { PropertyPanel } from '../properties/PropertyPanel';
 import { CanvasLoadingOverlay } from './CanvasLoadingOverlay';
 import { CanvasNavigationIndicator } from './CanvasNavigationIndicator';
+import { Minimap } from './Minimap';
 import { usePaperboxStore } from '../../stores';
+import { generateColorFromId } from '../../lib/constants';
 
 export function Canvas() {
   // Canvas element ref for Fabric.js - use state to trigger hook when element mounts
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  
+  // AI interface state
+  const [isAIOpen, setIsAIOpen] = useState(false);
 
   // Callback ref to capture canvas element immediately
   const canvasCallbackRef = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       console.log('[Canvas] Canvas element mounted, setting state');
 
-      // STATIC CANVAS MIGRATION: Set fixed 5000x5000 canvas dimensions
-      // Canvas is always 5000x5000, viewport scrolls to show different portions
-      const CANVAS_SIZE = 5000;
+      // STATIC CANVAS MIGRATION: Set fixed 8000x8000 canvas dimensions
+      // Canvas is always 8000x8000, viewport scrolls to show different portions
+      const CANVAS_SIZE = 8000;
       node.width = CANVAS_SIZE;
       node.height = CANVAS_SIZE;
       console.log('[Canvas] Set static canvas dimensions:', { width: CANVAS_SIZE, height: CANVAS_SIZE });
@@ -66,8 +72,52 @@ export function Canvas() {
   // Auth for logout
   const { signOut, user } = useAuth();
 
+  // COLLABORATIVE EDITING: Setup presence channel for selection broadcasting
+  // This enables real-time selection sync between users
+  const setupPresenceChannel = usePaperboxStore((state) => state.setupPresenceChannel);
+  const cleanupPresenceChannel = usePaperboxStore((state) => state.cleanupPresenceChannel);
+  const setCurrentUser = usePaperboxStore((state) => state.setCurrentUser);
+
+  useEffect(() => {
+    if (!user?.id || !activeCanvasId) {
+      console.log('[Canvas] Skipping presence setup - missing requirements:', {
+        hasUser: !!user?.id,
+        hasActiveCanvas: !!activeCanvasId,
+        activeCanvasId: activeCanvasId,
+      });
+      return;
+    }
+
+    const userName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Anonymous';
+    const userColor = generateColorFromId(user.id); // Consistent color based on user ID
+
+    console.log('[Canvas] Setting up collaboration presence channel:', {
+      userId: user.id.slice(0, 8),
+      userName,
+      userColor,
+      activeCanvasId: activeCanvasId,
+      activeCanvasIdShort: activeCanvasId.slice(0, 8),
+    });
+
+    // Set current user in collaboration slice
+    setCurrentUser(user.id, userName, userColor);
+
+    // Setup presence channel for selection broadcasting
+    setupPresenceChannel(user.id, userName, userColor, activeCanvasId);
+
+    return () => {
+      console.log('[Canvas] Cleaning up collaboration presence channel');
+      cleanupPresenceChannel();
+    };
+  }, [user?.id, activeCanvasId, setupPresenceChannel, cleanupPresenceChannel, setCurrentUser, user?.email, user?.user_metadata?.display_name]);
+
   // Shape creation logic
   const { handleAddShape, createObjectAtPosition } = useShapeCreation({ fabricManager, user });
+  
+  // AI toggle handler
+  const handleAIToggle = () => {
+    setIsAIOpen((prev) => !prev);
+  };
 
   // Zustand store for accessing canvas state
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
@@ -130,24 +180,53 @@ export function Canvas() {
   /**
    * STATIC CANVAS MIGRATION: Handle mouse movement to broadcast cursor position
    * 
-   * Simplified coordinate system - direct pixel coordinates on 5000x5000 canvas
+   * Simplified coordinate system - direct pixel coordinates on 8000x8000 canvas
    * All users share the same coordinate space, no viewport transforms needed
    */
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Get canvas element position
-    const canvasElement = document.getElementById('fabric-canvas');
-    if (!canvasElement) {
+    if (!fabricManager) {
       updateActivity();
       return;
     }
 
+    const canvas = fabricManager.getCanvas();
+    if (!canvas) {
+      updateActivity();
+      return;
+    }
+
+    // CRITICAL FIX: Use Fabric's viewport transform, not DOM scroll!
+    // The system uses Fabric's pan/zoom (viewportTransform), not DOM scrolling
+    const canvasElement = canvas.getElement();
     const rect = canvasElement.getBoundingClientRect();
     
-    // Direct pixel coordinates on the 5000x5000 canvas
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    // Get mouse position relative to canvas element (viewport coordinates)
+    const viewportX = e.clientX - rect.left;
+    const viewportY = e.clientY - rect.top;
+    
+    // Get Fabric's viewport transform
+    const vpt = canvas.viewportTransform;
+    const zoom = canvas.getZoom();
+    
+    // Transform viewport coordinates to canvas coordinates
+    // Formula: canvasX = (viewportX - panX) / zoom
+    const canvasX = (viewportX - vpt[4]) / zoom;
+    const canvasY = (viewportY - vpt[5]) / zoom;
 
-    // Broadcast direct canvas coordinates (simple!)
+    // Debug logging
+    if (Math.random() < 0.15) {
+      console.log('[✅ FIXED] Cursor with Fabric Viewport:', {
+        viewport: { x: Math.round(viewportX), y: Math.round(viewportY) },
+        transform: { 
+          zoom: zoom.toFixed(2), 
+          panX: Math.round(vpt[4]), 
+          panY: Math.round(vpt[5]) 
+        },
+        canvas: { x: Math.round(canvasX), y: Math.round(canvasY) },
+      });
+    }
+
+    // Broadcast canvas-absolute coordinates
     sendCursorUpdate(canvasX, canvasY);
 
     updateActivity();
@@ -163,6 +242,7 @@ export function Canvas() {
    * - Ctrl/Cmd + [: Send to back
    * - Ctrl/Cmd + Shift + ]: Bring forward (move up)
    * - Ctrl/Cmd + Shift + [: Send backward (move down)
+   * - Ctrl/Cmd + /: Toggle AI interface
    */
   useKeyboard({
     'delete': () => {
@@ -203,6 +283,13 @@ export function Canvas() {
         }
       }
     },
+    '/': (e) => {
+      if (e && (e.ctrlKey || e.metaKey)) {
+        // Ctrl/Cmd + /: Toggle AI interface
+        e.preventDefault();
+        setIsAIOpen((prev) => !prev);
+      }
+    },
   });
 
 
@@ -219,12 +306,12 @@ export function Canvas() {
         leftSidebar={<LeftSidebar />}
         rightSidebar={<PropertyPanel />}
       >
-        <div className="flex flex-1 overflow-hidden">
-        {/* STATIC CANVAS MIGRATION: Scrollable canvas container for 5000x5000 viewport */}
-        <div
-          className="relative flex-1 overflow-auto bg-muted"
-          onMouseMove={handleMouseMove}
-        >
+        <div className="flex flex-1 overflow-hidden relative">
+          {/* STATIC CANVAS MIGRATION: Scrollable canvas container for 8000x8000 viewport */}
+          <div
+            className="relative flex-1 overflow-auto bg-muted"
+            onMouseMove={handleMouseMove}
+          >
           {/* Error banner */}
           {syncError && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-destructive text-destructive-foreground px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
@@ -235,14 +322,14 @@ export function Canvas() {
             </div>
           )}
 
-          {/* STATIC CANVAS MIGRATION: 5000x5000 canvas within scrollable viewport */}
+          {/* STATIC CANVAS MIGRATION: 8000x8000 canvas within scrollable viewport */}
           <canvas
             id="fabric-canvas"
             ref={canvasCallbackRef}
             className="absolute top-0 left-0"
             onClick={(e) => {
               // STATIC CANVAS MIGRATION: React onClick fallback for placement mode
-              // Simplified coordinate system - direct pixel coordinates on 5000x5000 canvas
+              // Simplified coordinate system - direct pixel coordinates on 8000x8000 canvas
               if (isPlacementMode && fabricManager) {
                 // Direct pixel coordinates - no transforms needed
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -271,8 +358,8 @@ export function Canvas() {
               }
             }}
             style={{
-              width: '5000px',
-              height: '5000px',
+              width: '8000px',
+              height: '8000px',
               cursor: isPlacementMode ? 'crosshair' : 'default',
             }}
           />
@@ -283,9 +370,8 @@ export function Canvas() {
             fabricManager={fabricManager}
           />
 
-          {/* TEMP DISABLED: Remote Selection Overlay - coordinate system issues
+          {/* COLLABORATIVE EDITING: Remote Selection Overlay - shows other users' selections */}
           <RemoteSelectionOverlay />
-          */}
 
           {/* W2.D12+: Navigation indicator (zoom, pan position) */}
           <CanvasNavigationIndicator />
@@ -293,15 +379,23 @@ export function Canvas() {
           {/* Loading overlay - shown until canvas initializes */}
           {!canvasInitialized && <CanvasLoadingOverlay />}
 
-          {/* Bottom Toolbar - Figma-style centered tool palette */}
+          {/* Minimap - fixed to viewport, positioned within scrollable area */}
+          {canvasInitialized && <Minimap fabricManager={fabricManager} />}
+          </div>
+
+          {/* AI Text Box Overlay - fixed to viewport, appears above toolbar */}
+          <AITextBox isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
+
+          {/* Bottom Toolbar - Figma-style centered tool palette, fixed to viewport */}
           {canvasInitialized && (
             <BottomToolbar
               onAddShape={handleAddShape}
               activeTool={isPlacementMode ? 'rectangle' : 'select'}
+              onAIToggle={handleAIToggle}
+              isAIOpen={isAIOpen}
             />
           )}
         </div>
-      </div>
       </CanvasLayout>
     </div>
   );

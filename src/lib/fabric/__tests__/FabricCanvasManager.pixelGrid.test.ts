@@ -4,8 +4,8 @@
  * W2.D8.4: RED phase - Tests for pixel grid visualization feature
  *
  * Tests:
- * - Pixel grid hidden at zoom levels <= 8x
- * - Pixel grid visible at zoom levels > 8x
+ * - Pixel grid hidden at zoom levels <= 4x
+ * - Pixel grid visible at zoom levels > 4x
  * - Grid scale adjusts with zoom level
  * - Grid styling (color, opacity) is correct
  * - Performance: grid updates don't block rendering
@@ -49,31 +49,31 @@ describe('FabricCanvasManager - Pixel Grid', () => {
       expect(canvasManager.isPixelGridVisible()).toBe(false);
     });
 
-    it('should NOT show pixel grid at 4x zoom', () => {
+    it('should NOT show pixel grid at 2x zoom', () => {
       const canvas = canvasManager.getCanvas();
 
       canvasManager.setupPixelGrid();
-      canvas.setZoom(4);
+      canvas.setZoom(2);
 
       // Below threshold - grid should still be hidden
       expect(canvasManager.isPixelGridVisible()).toBe(false);
     });
 
-    it('should NOT show pixel grid at exactly 8x zoom (threshold)', () => {
+    it('should NOT show pixel grid at exactly 4x zoom (threshold)', () => {
       const canvas = canvasManager.getCanvas();
 
       canvasManager.setupPixelGrid();
-      canvas.setZoom(8);
+      canvas.setZoom(4);
 
       // At threshold - grid should still be hidden
       expect(canvasManager.isPixelGridVisible()).toBe(false);
     });
 
-    it('should show pixel grid at 8.1x zoom (just above threshold)', () => {
+    it('should show pixel grid at 4.1x zoom (just above threshold)', () => {
       const canvas = canvasManager.getCanvas();
 
       canvasManager.setupPixelGrid();
-      canvas.setZoom(8.1);
+      canvas.setZoom(4.1);
 
       // Above threshold - grid should be visible
       expect(canvasManager.isPixelGridVisible()).toBe(true);
@@ -99,7 +99,7 @@ describe('FabricCanvasManager - Pixel Grid', () => {
   });
 
   describe('Grid Toggle on Zoom Changes', () => {
-    it('should hide grid when zooming from 10x to 5x', () => {
+    it('should hide grid when zooming from 10x to 3x', () => {
       const canvas = canvasManager.getCanvas();
 
       canvasManager.setupPixelGrid();
@@ -109,17 +109,17 @@ describe('FabricCanvasManager - Pixel Grid', () => {
       expect(canvasManager.isPixelGridVisible()).toBe(true);
 
       // Zoom out below threshold
-      canvas.setZoom(5);
+      canvas.setZoom(3);
       expect(canvasManager.isPixelGridVisible()).toBe(false);
     });
 
-    it('should show grid when zooming from 5x to 10x', () => {
+    it('should show grid when zooming from 3x to 10x', () => {
       const canvas = canvasManager.getCanvas();
 
       canvasManager.setupPixelGrid();
 
       // Start below threshold
-      canvas.setZoom(5);
+      canvas.setZoom(3);
       expect(canvasManager.isPixelGridVisible()).toBe(false);
 
       // Zoom in above threshold
@@ -187,13 +187,13 @@ describe('FabricCanvasManager - Pixel Grid', () => {
       expect(spacing20x).toBe(spacing10x * 2);
     });
 
-    it('should maintain 1:1 pixel grid ratio at all zoom levels > 8x', () => {
+    it('should maintain 1:1 pixel grid ratio at all zoom levels > 4x', () => {
       const canvas = canvasManager.getCanvas();
 
       canvasManager.setupPixelGrid();
 
       // Test multiple zoom levels
-      const zoomLevels = [9, 10, 12, 15, 20];
+      const zoomLevels = [5, 8, 10, 12, 15, 20];
 
       zoomLevels.forEach(zoom => {
         canvas.setZoom(zoom);
@@ -255,7 +255,7 @@ describe('FabricCanvasManager - Pixel Grid', () => {
 
       // Simulate 10 zoom operations
       for (let i = 0; i < 10; i++) {
-        canvas.setZoom(8 + i * 0.5);
+        canvas.setZoom(4 + i * 0.5);
         canvas.requestRenderAll();
       }
 
@@ -304,13 +304,13 @@ describe('FabricCanvasManager - Pixel Grid', () => {
       canvasManager.setupPixelGrid();
 
       // Test boundary conditions
-      canvas.setZoom(7.9999);
+      canvas.setZoom(3.9999);
       expect(canvasManager.isPixelGridVisible()).toBe(false);
 
-      canvas.setZoom(8.0000);
+      canvas.setZoom(4.0000);
       expect(canvasManager.isPixelGridVisible()).toBe(false);
 
-      canvas.setZoom(8.0001);
+      canvas.setZoom(4.0001);
       expect(canvasManager.isPixelGridVisible()).toBe(true);
     });
 

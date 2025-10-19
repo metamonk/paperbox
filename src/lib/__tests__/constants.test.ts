@@ -9,8 +9,8 @@ import {
 
 describe('Canvas Constants', () => {
   it('should have correct canvas dimensions', () => {
-    expect(CANVAS_WIDTH).toBe(5000);
-    expect(CANVAS_HEIGHT).toBe(5000);
+    expect(CANVAS_WIDTH).toBe(8000);
+    expect(CANVAS_HEIGHT).toBe(8000);
   });
 
   it('should have valid zoom limits', () => {

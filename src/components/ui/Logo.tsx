@@ -58,15 +58,15 @@ export function Logo({ size = 40, className, useAccent = false }: LogoProps) {
             fill: var(--logo-right, oklch(0.3 0 0));
           }
 
-          /* Accent variant for branding */
+          /* Accent variant for branding - monotone with better contrast */
           .logo-accent .logo-cube-top { 
-            fill: var(--logo-top, oklch(0.95 0 0));
+            fill: var(--logo-top, oklch(0.85 0 0));
           }
           .logo-accent .logo-cube-left { 
-            fill: var(--logo-left, oklch(0.4 0.15 240));
+            fill: var(--logo-left, oklch(0.6 0 0));
           }
           .logo-accent .logo-cube-right { 
-            fill: var(--logo-right, oklch(0.3 0.12 260));
+            fill: var(--logo-right, oklch(0.45 0 0));
           }
         `}</style>
       </defs>
