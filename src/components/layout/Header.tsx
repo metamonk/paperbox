@@ -8,10 +8,10 @@ import { Settings, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePaperboxStore } from '@/stores';
 import type { Canvas } from '@/types/canvas';
-import type { OnlineUser } from '@/types/canvas';
+import type { PresenceUser } from '@/hooks/usePresence';
 
 interface HeaderProps {
-  onlineUsers: OnlineUser[];
+  onlineUsers: PresenceUser[];
   currentUserId: string;
   onSignOut: () => void;
   userName: string;

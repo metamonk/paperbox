@@ -12,16 +12,16 @@ import {
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import type { OnlineUser } from '@/types/canvas';
+import type { PresenceUser } from '@/hooks/usePresence';
 
 interface PresencePopoverProps {
-  users: OnlineUser[];
+  users: PresenceUser[];
   currentUserId: string;
 }
 
 export function PresencePopover({ users, currentUserId }: PresencePopoverProps) {
   const [showAllModal, setShowAllModal] = useState(false);
-  const otherUsers = users.filter(u => u.userId !== currentUserId);
+  const otherUsers = users.filter(u => u.id !== currentUserId);
   const totalCount = otherUsers.length;
   const displayUsers = otherUsers.slice(0, 5);
   const hasMore = totalCount > 5;
@@ -49,17 +49,17 @@ export function PresencePopover({ users, currentUserId }: PresencePopoverProps) 
                 <div className="space-y-2">
                   {displayUsers.map((user) => (
                     <div
-                      key={user.userId}
+                      key={user.id}
                       className="flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors"
                     >
                       <div
                         className="w-8 h-8 rounded-full flex items-center justify-center text-white font-medium text-sm"
-                        style={{ backgroundColor: user.cursorColor }}
+                        style={{ backgroundColor: user.color }}
                       >
-                        {user.userName.charAt(0).toUpperCase()}
+                        {user.displayName?.charAt(0).toUpperCase() || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{user.userName}</p>
+                        <p className="text-sm font-medium truncate">{user.displayName || 'Unknown'}</p>
                         <p className="text-xs text-muted-foreground">Active now</p>
                       </div>
                     </div>
@@ -92,17 +92,17 @@ export function PresencePopover({ users, currentUserId }: PresencePopoverProps) 
             <div className="space-y-2">
               {otherUsers.map((user) => (
                 <div
-                  key={user.userId}
+                  key={user.id}
                   className="flex items-center gap-3 p-3 rounded-md hover:bg-accent transition-colors"
                 >
                   <div
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white font-medium"
-                    style={{ backgroundColor: user.cursorColor }}
+                    style={{ backgroundColor: user.color }}
                   >
-                    {user.userName.charAt(0).toUpperCase()}
+                    {user.displayName?.charAt(0).toUpperCase() || '?'}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{user.userName}</p>
+                    <p className="font-medium truncate">{user.displayName || 'Unknown'}</p>
                     <p className="text-sm text-muted-foreground">Active now</p>
                   </div>
                 </div>
