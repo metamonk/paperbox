@@ -19,55 +19,13 @@ import { supabase } from '../../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type {
   CanvasObject,
-  RectangleObject,
-  CircleObject,
-  TextObject,
   Canvas,
 } from '../../types/canvas';
 import type { PaperboxStore } from '../index';
 import type { Database } from '../../types/database';
+import { dbToCanvasObject } from '../../lib/sync/coordinateConversion';
 
 type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
-
-/**
- * Convert database row to CanvasObject discriminated union
- */
-function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
-  const base = {
-    id: row.id,
-    canvas_id: row.canvas_id!,  // Multi-canvas: canvas_id is required (NOT NULL after migration 012)
-    x: row.x,
-    y: row.y,
-    width: row.width,
-    height: row.height,
-    rotation: row.rotation || 0,
-    group_id: row.group_id,
-    z_index: row.z_index,
-    fill: row.fill,
-    stroke: row.stroke,
-    stroke_width: row.stroke_width,
-    opacity: row.opacity,
-    type_properties: row.type_properties || {},
-    style_properties: row.style_properties || {},
-    metadata: row.metadata || {},
-    created_by: row.created_by,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    locked_by: row.locked_by,
-    lock_acquired_at: row.lock_acquired_at,
-  };
-
-  switch (row.type) {
-    case 'rectangle':
-      return { ...base, type: 'rectangle' } as unknown as RectangleObject;
-    case 'circle':
-      return { ...base, type: 'circle' } as unknown as CircleObject;
-    case 'text':
-      return { ...base, type: 'text' } as unknown as TextObject;
-    default:
-      throw new Error(`Unknown shape type: ${row.type}`);
-  }
-}
 
 /**
  * Viewport state for infinite canvas

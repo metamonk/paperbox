@@ -116,11 +116,13 @@ export const TreeProvider = ({
       let newSelection: string[];
 
       if (multiSelect && ctrlKey) {
+        // Multi-select: toggle on Ctrl/Cmd click
         newSelection = currentSelectedIds.includes(nodeId)
           ? currentSelectedIds.filter((id) => id !== nodeId)
           : [...currentSelectedIds, nodeId];
       } else {
-        newSelection = currentSelectedIds.includes(nodeId) ? [] : [nodeId];
+        // Single-select: always select (no toggle)
+        newSelection = [nodeId];
       }
 
       if (isControlled) {

@@ -16,8 +16,16 @@
  */
 
 import { usePaperboxStore } from '@/stores';
-import { TreeProvider, TreeNode } from '@/components/kibo-ui/tree';
-import { Eye, EyeOff, Lock, Unlock, Copy, Trash2, MoveUp, MoveDown, ArrowUpToLine, ArrowDownToLine } from 'lucide-react';
+import { 
+  TreeProvider, 
+  TreeView,
+  TreeNode, 
+  TreeNodeTrigger,
+  TreeExpander,
+  TreeIcon,
+  TreeLabel
+} from '@/components/kibo-ui/tree';
+import { Eye, EyeOff, Lock, Unlock, Copy, Trash2, MoveUp, MoveDown, ArrowUpToLine, ArrowDownToLine, Circle, Square, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -36,7 +44,7 @@ export function LayersPanel() {
   const layers = usePaperboxStore((state) => state.layers);
   const layerOrder = usePaperboxStore((state) => state.layerOrder);
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
-  const selectObject = usePaperboxStore((state) => state.selectObject);
+  const selectObjects = usePaperboxStore((state) => state.selectObjects);
   const toggleLayerVisibility = usePaperboxStore((state) => state.toggleLayerVisibility);
   const toggleLayerLock = usePaperboxStore((state) => state.toggleLayerLock);
   const setZIndex = usePaperboxStore((state) => state.setZIndex);
@@ -165,6 +173,20 @@ export function LayersPanel() {
     deleteObjects([objectId]);
   };
 
+  // Get icon for object type
+  const getObjectIcon = (type: string) => {
+    switch (type) {
+      case 'circle':
+        return <Circle className="h-4 w-4" />;
+      case 'rectangle':
+        return <Square className="h-4 w-4" />;
+      case 'text':
+        return <Type className="h-4 w-4" />;
+      default:
+        return null;
+    }
+  };
+
   // Create layer nodes from objects (reversed for top-to-bottom display)
   const layerNodes = [...layerOrder].reverse().map((objectId) => {
     const object = objects[objectId];
@@ -208,22 +230,22 @@ export function LayersPanel() {
           </p>
         </div>
 
-        {/* Layer List */}
+        {/* Layer List - Proper Kibo UI Structure */}
         <TreeProvider
           selectedIds={selectedIds}
           onSelectionChange={(ids) => {
             if (ids.length > 0) {
-              selectObject(ids[0]); // Single selection for now
+              selectObjects(ids); // Actually call the store!
             }
           }}
           selectable={true}
           multiSelect={false}
           showLines={false}
-          showIcons={false}
+          showIcons={true}
           indent={12}
         >
-          <div className="space-y-1">
-            {layerNodes.map((node) => (
+          <TreeView>
+            {layerNodes.map((node, index) => (
               <div
                 key={node!.id}
                 draggable={!node!.locked}
@@ -237,134 +259,139 @@ export function LayersPanel() {
                   <ContextMenuTrigger asChild>
                     <TreeNode
                       nodeId={node!.id}
-                      className={cn(
-                        'group flex items-center gap-2 px-2 py-1.5 rounded text-sm',
-                        'hover:bg-accent transition-colors',
-                        !node!.locked && 'cursor-move',
-                        node!.locked && 'cursor-not-allowed opacity-60',
-                        node!.isSelected && 'bg-accent ring-1 ring-ring',
-                        draggedId === node!.id && 'opacity-40',
-                        dropTargetId === node!.id && 'ring-2 ring-primary'
-                      )}
+                      isLast={index === layerNodes.length - 1}
                     >
-                {/* Layer Type Icon */}
-                <span className="text-xs opacity-70 flex-shrink-0 w-12">
-                  {node!.type === 'rectangle' && '▭'}
-                  {node!.type === 'circle' && '●'}
-                  {node!.type === 'text' && 'T'}
-                </span>
+                      <TreeNodeTrigger
+                        className={cn(
+                          'group relative',
+                          !node!.locked && 'cursor-move',
+                          node!.locked && 'cursor-not-allowed opacity-60',
+                          draggedId === node!.id && 'opacity-40',
+                          dropTargetId === node!.id && 'ring-2 ring-primary'
+                        )}
+                      >
+                        {/* No expander for flat list (no children) */}
+                        <TreeExpander />
+                        
+                        {/* Object Type Icon */}
+                        <TreeIcon icon={getObjectIcon(node!.type)} />
+                        
+                        {/* Layer Name - Editable on double-click */}
+                        {editingId === node!.id ? (
+                          <Input
+                            ref={inputRef}
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onBlur={() => handleRenameSubmit(node!.id)}
+                            onKeyDown={(e) => handleRenameKeyDown(e, node!.id)}
+                            className="h-6 px-1 py-0 text-sm flex-1"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <TreeLabel
+                            className="flex-1"
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              handleDoubleClick(node!.id, node!.name);
+                            }}
+                          >
+                            {node!.name}
+                          </TreeLabel>
+                        )}
 
-                {/* Layer Name - Editable on double-click */}
-                {editingId === node!.id ? (
-                  <Input
-                    ref={inputRef}
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onBlur={() => handleRenameSubmit(node!.id)}
-                    onKeyDown={(e) => handleRenameKeyDown(e, node!.id)}
-                    className="h-6 px-1 py-0 text-sm flex-1"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span
-                    className="flex-1 truncate"
-                    onDoubleClick={() => handleDoubleClick(node!.id, node!.name)}
-                  >
-                    {node!.name}
-                  </span>
-                )}
+                        {/* Visibility Toggle */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleLayerVisibility(node!.id);
+                          }}
+                          aria-label={node!.visible ? 'Hide layer' : 'Show layer'}
+                        >
+                          {node!.visible ? (
+                            <Eye className="h-3 w-3" />
+                          ) : (
+                            <EyeOff className="h-3 w-3 opacity-50" />
+                          )}
+                        </Button>
 
-                {/* Visibility Toggle */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleLayerVisibility(node!.id);
-                  }}
-                  aria-label={node!.visible ? 'Hide layer' : 'Show layer'}
-                >
-                  {node!.visible ? (
-                    <Eye className="h-3 w-3" />
-                  ) : (
-                    <EyeOff className="h-3 w-3 opacity-50" />
-                  )}
-                </Button>
+                        {/* Lock Toggle */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleLayerLock(node!.id);
+                          }}
+                          aria-label={node!.locked ? 'Unlock layer' : 'Lock layer'}
+                        >
+                          {node!.locked ? (
+                            <Lock className="h-3 w-3" />
+                          ) : (
+                            <Unlock className="h-3 w-3 opacity-50" />
+                          )}
+                        </Button>
+                      </TreeNodeTrigger>
+                    </TreeNode>
+                  </ContextMenuTrigger>
 
-                {/* Lock Toggle */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleLayerLock(node!.id);
-                  }}
-                  aria-label={node!.locked ? 'Unlock layer' : 'Lock layer'}
-                >
-                  {node!.locked ? (
-                    <Lock className="h-3 w-3" />
-                  ) : (
-                    <Unlock className="h-3 w-3 opacity-50" />
-                  )}
-                </Button>
-                  </TreeNode>
-                </ContextMenuTrigger>
+                  {/* Context Menu */}
+                  <ContextMenuContent className="w-48">
+                    {/* Z-index operations */}
+                    <ContextMenuItem
+                      onClick={() => moveToFront(node!.id)}
+                      disabled={node!.locked}
+                    >
+                      <ArrowUpToLine className="mr-2 h-4 w-4" />
+                      Bring to Front
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onClick={() => moveToBack(node!.id)}
+                      disabled={node!.locked}
+                    >
+                      <ArrowDownToLine className="mr-2 h-4 w-4" />
+                      Send to Back
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onClick={() => moveUp(node!.id)}
+                      disabled={node!.locked}
+                    >
+                      <MoveUp className="mr-2 h-4 w-4" />
+                      Move Forward
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onClick={() => moveDown(node!.id)}
+                      disabled={node!.locked}
+                    >
+                      <MoveDown className="mr-2 h-4 w-4" />
+                      Move Backward
+                    </ContextMenuItem>
 
-                <ContextMenuContent className="w-48">
-                  {/* Z-index operations */}
-                  <ContextMenuItem
-                    onClick={() => moveToFront(node!.id)}
-                    disabled={node!.locked}
-                  >
-                    <ArrowUpToLine className="mr-2 h-4 w-4" />
-                    Bring to Front
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    onClick={() => moveToBack(node!.id)}
-                    disabled={node!.locked}
-                  >
-                    <ArrowDownToLine className="mr-2 h-4 w-4" />
-                    Send to Back
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    onClick={() => moveUp(node!.id)}
-                    disabled={node!.locked}
-                  >
-                    <MoveUp className="mr-2 h-4 w-4" />
-                    Move Forward
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    onClick={() => moveDown(node!.id)}
-                    disabled={node!.locked}
-                  >
-                    <MoveDown className="mr-2 h-4 w-4" />
-                    Move Backward
-                  </ContextMenuItem>
+                    <ContextMenuSeparator />
 
-                  <ContextMenuSeparator />
-
-                  {/* Object operations */}
-                  <ContextMenuItem
-                    onClick={() => handleDuplicate(node!.id)}
-                    disabled={node!.locked}
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Duplicate
-                  </ContextMenuItem>
-                  <ContextMenuItem
-                    onClick={() => handleDelete(node!.id)}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </ContextMenuItem>
-                </ContextMenuContent>
+                    {/* Object operations */}
+                    <ContextMenuItem
+                      onClick={() => handleDuplicate(node!.id)}
+                      disabled={node!.locked}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Duplicate
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onClick={() => handleDelete(node!.id)}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </ContextMenuItem>
+                  </ContextMenuContent>
                 </ContextMenu>
               </div>
             ))}
-          </div>
+          </TreeView>
         </TreeProvider>
       </div>
     </div>

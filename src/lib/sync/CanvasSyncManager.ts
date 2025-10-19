@@ -211,24 +211,17 @@ export class CanvasSyncManager {
           const isGroupSelection = objects.length > 0;
 
           if (isGroupSelection) {
-            // Use Fabric's getBoundingRect for accurate absolute coordinates
+            // Process group selection (multiple objects)
             const batchUpdates: Array<{ id: string; updates: Partial<CanvasObject> }> = [];
 
             objects.forEach((obj: FabricObject) => {
-              const rect = obj.getBoundingRect();
+              // toCanvasObject() handles Fabric→center-origin translation
               const canvasObject = this.fabricManager.toCanvasObject(obj);
               
               if (canvasObject) {
                 batchUpdates.push({
                   id: canvasObject.id,
-                  updates: {
-                    ...canvasObject,
-                    // Convert bounding rect (top-left) to center position
-                    x: rect.left + (rect.width / 2),
-                    y: rect.top + (rect.height / 2),
-                    width: rect.width,
-                    height: rect.height,
-                  },
+                  updates: canvasObject, // Already in center-origin coordinates
                 });
               }
             });

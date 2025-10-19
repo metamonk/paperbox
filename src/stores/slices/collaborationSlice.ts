@@ -563,14 +563,14 @@ export const createCollaborationSlice: StateCreator<
       },
     });
 
-    // Track current user's presence
-    channel.track({
+    // Store presence data to track after subscription
+    const presenceData = {
       userId,
       userName,
       userColor,
       isActive: true,
       lastSeen: now,
-    });
+    };
 
     // Subscribe to presence events
     channel
@@ -615,6 +615,9 @@ export const createCollaborationSlice: StateCreator<
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+          // Track current user's presence AFTER successful subscription
+          await channel.track(presenceData);
+          
           // Set channel in store only after successful subscription
           set({ presenceChannel: channel }, undefined, 'collaboration/setupPresence');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
