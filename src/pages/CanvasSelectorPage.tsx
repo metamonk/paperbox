@@ -115,7 +115,7 @@ export function CanvasSelectorPage() {
           <div className="flex items-center gap-4">
             <Logo size={40} />
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">Workspace</h1>
+              <h1 className="text-2xl font-semibold text-foreground leading-none">Workspace</h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
               </p>

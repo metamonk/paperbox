@@ -24,7 +24,7 @@ export function Header({ onlineUsers, currentUserId, onSignOut, userName }: Head
       {/* Left side: Logo + Title */}
       <div className="flex items-center gap-2">
         <Logo size={32} />
-        <h1 className="text-xl font-bold text-foreground hidden md:block">
+        <h1 className="text-xl font-bold text-foreground hidden md:block leading-none">
           Paperbox
         </h1>
       </div>
