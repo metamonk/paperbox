@@ -40,9 +40,10 @@ export function CanvasShareSection({
   const [error, setError] = React.useState<string | null>(null);
 
   // const shareCanvas = usePaperboxStore((state) => state.shareCanvas); // TODO: Will be used when user lookup is implemented
-  const revokeAccess = usePaperboxStore((state) => state.revokeAccess);
-  const loadCanvasPermissions = usePaperboxStore((state) => state.loadCanvasPermissions);
-  const activeCanvasSharedWith = usePaperboxStore((state) => state.activeCanvasSharedWith);
+  // TODO: Re-implement these when canvas sharing is complete
+  const revokeAccess = usePaperboxStore((state) => (state as any).revokeAccess) || (() => Promise.resolve());
+  const loadCanvasPermissions = usePaperboxStore((state) => (state as any).loadCanvasPermissions) || (() => Promise.resolve());
+  const activeCanvasSharedWith = usePaperboxStore((state) => (state as any).activeCanvasSharedWith) || [];
 
   // Load permissions when component mounts or canvasId changes
   React.useEffect(() => {

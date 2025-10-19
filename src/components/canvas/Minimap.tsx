@@ -97,7 +97,7 @@ export function Minimap({ fabricManager }: MinimapProps) {
         ctx.lineWidth = 0.5;
         ctx.strokeRect(x, y, width, height);
       } else if (obj.type === 'circle') {
-        const radius = (obj.radius || 50) * SCALE;
+        const radius = (obj.type_properties.radius || 50) * SCALE;
         ctx.fillStyle = obj.fill || '#EF4444';
         ctx.globalAlpha = 0.6;
         ctx.beginPath();

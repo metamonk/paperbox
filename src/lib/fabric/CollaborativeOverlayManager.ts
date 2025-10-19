@@ -79,7 +79,7 @@ export class CollaborativeOverlayManager {
     });
 
     // Remove overlays that are no longer needed
-    this.overlays.forEach((overlay, key) => {
+    this.overlays.forEach((_overlay, key) => {
       if (!activeOverlays.has(key)) {
         this.removeOverlay(key);
       }
@@ -289,7 +289,7 @@ export class CollaborativeOverlayManager {
     width: number;
     height: number;
   } {
-    const boundingRect = obj.getBoundingRect(true, true); // absolute, with controls
+    const boundingRect = obj.getBoundingRect(); // Get bounding rect
 
     return {
       left: boundingRect.left,

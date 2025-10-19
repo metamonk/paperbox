@@ -288,7 +288,7 @@ export const createCollaborationSlice: StateCreator<
    * 
    * @returns Array of object IDs to deselect (conflicts where they win)
    */
-  handleSelectionConflict: (remoteUserId: string, remoteSelection: SelectionState) => {
+  handleSelectionConflict: (_remoteUserId: string, remoteSelection: SelectionState) => {
     const state = get();
     const currentUserId = state.currentUserId;
 
