@@ -24,6 +24,7 @@ import { UsersPanel } from '../collaboration/UsersPanel';
 import { Header } from '../layout/Header';
 import { Sidebar } from '../layout/Sidebar';
 import { ToolsSidebar } from './ToolsSidebar';
+import { BottomToolbar } from '../toolbar/BottomToolbar';
 import { PropertyPanel } from '../properties/PropertyPanel';
 import { LayersPanel } from '../layers/LayersPanel';
 import { CanvasLoadingOverlay } from './CanvasLoadingOverlay';
@@ -336,6 +337,14 @@ export function Canvas() {
 
           {/* Loading overlay - shown until canvas initializes */}
           {!canvasInitialized && <CanvasLoadingOverlay />}
+
+          {/* Bottom Toolbar - Figma-style centered tool palette */}
+          {canvasInitialized && (
+            <BottomToolbar
+              onAddShape={handleAddShape}
+              activeTool={isPlacementMode ? 'rectangle' : 'select'}
+            />
+          )}
         </div>
 
         {/* Backdrop for mobile sidebar overlay */}
