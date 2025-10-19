@@ -104,9 +104,9 @@ function App() {
           />
 
           {/* Protected Routes - require authentication */}
-          {/* W5.D5.3: Canvas Selector Dashboard - Browse all canvases */}
+          {/* W5.D5.3: Workspace Dashboard - Browse all canvases in workspace */}
           <Route
-            path="/canvases"
+            path="/workspace"
             element={
               <ProtectedRoute>
                 <CanvasSelectorPage />

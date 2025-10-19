@@ -136,7 +136,7 @@ export function CanvasSelectorPage() {
               )}
             </Button>
             <ThemeToggle />
-            <Button variant="outline" onClick={() => signOut()}>
+            <Button variant="ghost" size="sm" onClick={() => signOut()}>
               Sign Out
             </Button>
           </div>

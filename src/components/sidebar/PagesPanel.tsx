@@ -24,7 +24,7 @@ export function PagesPanel() {
   };
 
   const handleBrowseAll = () => {
-    navigate('/canvases');
+    navigate('/workspace');
   };
 
   const handleSettingsClick = (e: React.MouseEvent, canvas: Canvas) => {
