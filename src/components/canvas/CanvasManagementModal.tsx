@@ -11,10 +11,12 @@
  */
 
 import * as React from 'react';
-import { Trash2, Loader2 } from 'lucide-react';
+import { Trash2, Loader2, Globe, Lock, Copy, Check, Users } from 'lucide-react';
 import { usePaperboxStore } from '@/stores';
+import { supabase } from '@/lib/supabase';
 import type { Canvas } from '@/types/canvas';
 import { Button } from '@/components/ui/button';
+import { Toggle } from '@/components/ui/toggle';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+// import { CanvasShareSection } from './CanvasShareSection'; // TODO: Re-enable when sharing is implemented
 
 interface CanvasManagementModalProps {
   canvas: Canvas | null;
@@ -42,12 +45,24 @@ export function CanvasManagementModal({
   const [isSaving, setIsSaving] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [copiedLink, setCopiedLink] = React.useState(false);
+  const [userId, setUserId] = React.useState<string | null>(null);
 
   const updateCanvas = usePaperboxStore((state) => state.updateCanvas);
   const deleteCanvas = usePaperboxStore((state) => state.deleteCanvas);
+  const toggleCanvasPublic = usePaperboxStore((state) => state.toggleCanvasPublic);
   const canvases = usePaperboxStore((state) => state.canvases);
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
+
+  // Fetch user ID on mount
+  React.useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id || null);
+    };
+    fetchUser();
+  }, []);
 
   // Initialize form when canvas changes
   React.useEffect(() => {
@@ -114,6 +129,29 @@ export function CanvasManagementModal({
     handleSave();
   };
 
+  // Handle toggle public
+  const handleTogglePublic = async (pressed: boolean) => {
+    if (!canvas) return;
+    try {
+      await toggleCanvasPublic(canvas.id, pressed);
+    } catch (error) {
+      console.error('[CanvasManagementModal] Failed to toggle public:', error);
+    }
+  };
+
+  // Handle copy link
+  const handleCopyLink = () => {
+    if (!canvas) return;
+    const url = `${window.location.origin}/canvas/${canvas.id}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  // Check if current user is owner
+  const isOwner = userId && canvas?.owner_id === userId;
+  const isPublic = canvas?.is_public || false;
+
   if (!canvas) return null;
 
   return (
@@ -175,6 +213,81 @@ export function CanvasManagementModal({
                 })}
               </p>
             </div>
+
+            {/* Canvas Sharing (Phase 1 + Phase 2) - Only show for owners */}
+            {isOwner && (
+              <div className="space-y-4 border-t pt-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Sharing
+                </h3>
+
+                {/* Phase 1: Public Toggle */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      {isPublic ? (
+                        <Globe className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Lock className="h-4 w-4 text-gray-400" />
+                      )}
+                      <span className="font-medium">
+                        {isPublic ? 'Public Canvas' : 'Private Canvas'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {isPublic
+                        ? 'Anyone with the link can view and edit this canvas'
+                        : 'Only you and invited collaborators can access this canvas'}
+                    </p>
+                  </div>
+
+                  <Toggle
+                    pressed={isPublic}
+                    onPressedChange={handleTogglePublic}
+                    aria-label="Toggle public access"
+                    disabled={isSaving || isDeleting}
+                  >
+                    {isPublic ? 'Public' : 'Private'}
+                  </Toggle>
+                </div>
+
+                {/* Copy Link (only if public) */}
+                {isPublic && (
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={`${window.location.origin}/canvas/${canvas.id}`}
+                      className="flex-1 font-mono text-sm"
+                    />
+                    <Button variant="outline" onClick={handleCopyLink}>
+                      {copiedLink ? (
+                        <>
+                          <Check className="h-4 w-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy Link
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Phase 2: Granular Permissions - TODO: Implement store functions */}
+                {/* {!isPublic && (
+                  <div className="border-t pt-4">
+                    <CanvasShareSection
+                      canvasId={canvas.id}
+                      isOwner={isOwner}
+                      disabled={isSaving || isDeleting}
+                    />
+                  </div>
+                )} */}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -187,7 +300,7 @@ export function CanvasManagementModal({
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowDeleteConfirm(true)}
-                    disabled={isSaving || isDeleting || canvases.length === 1}
+                    disabled={isSaving || isDeleting || (canvases?.length ?? 0) <= 1}
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -242,7 +355,7 @@ export function CanvasManagementModal({
         </form>
 
         {/* Helpful message for last canvas */}
-        {canvases.length === 1 && (
+        {(canvases?.length ?? 0) === 1 && (
           <div className="mt-2 text-xs text-muted-foreground">
             <p>You cannot delete your last canvas. Create another canvas first.</p>
           </div>

@@ -21,6 +21,8 @@ import { Canvas, Rect, Circle, Textbox, FabricObject, Path, Point, Text } from '
 
 import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
 import type { CursorPosition, UserPresence } from '@/stores/slices/collaborationSlice';
+import { CollaborativeOverlayManager } from './CollaborativeOverlayManager';
+import { GRID_SIZE, GRID_ENABLED } from '@/lib/constants';
 
 /**
  * Extended FabricObject type with custom data property
@@ -66,8 +68,15 @@ export interface FabricCanvasConfig {
 export interface FabricCanvasEventHandlers {
   /**
    * Called when an object is modified (moved, scaled, rotated)
+   * Fires AFTER mouse release - use for final position updates
    */
   onObjectModified?: (target: FabricObject) => void;
+
+  /**
+   * W5.D5+ Real-time collaboration: Called DURING object movement
+   * Fires continuously while dragging - use for real-time position broadcasts
+   */
+  onObjectMoving?: (target: FabricObject) => void;
 
   /**
    * Called when selection is created
@@ -92,12 +101,35 @@ export interface FabricCanvasEventHandlers {
 }
 
 /**
+ * Helper function to get theme-aware background color from CSS variables
+ * Converts oklch() format to rgb() that Fabric.js understands
+ */
+function getThemeBackgroundColor(): string {
+  const computedStyle = getComputedStyle(document.documentElement);
+  const bgValue = computedStyle.getPropertyValue('--muted').trim();
+  
+  // If it's oklch() or other CSS color format, convert using a temp element
+  if (bgValue && (bgValue.startsWith('oklch(') || bgValue.startsWith('hsl(') || bgValue.startsWith('var('))) {
+    const temp = document.createElement('div');
+    temp.style.color = bgValue;
+    document.body.appendChild(temp);
+    const computed = getComputedStyle(temp).color;
+    document.body.removeChild(temp);
+    return computed; // returns rgb() format that Fabric.js understands
+  }
+  
+  // Return the value as-is if it's already in a compatible format (hex, rgb, etc.)
+  return bgValue || '#f5f5f5'; // fallback to light gray
+}
+
+/**
  * Default canvas configuration
+ * STATIC CANVAS MIGRATION: Fixed 8000x8000 canvas for simple coordinate system
  */
 const DEFAULT_CONFIG: Required<FabricCanvasConfig> = {
-  backgroundColor: '#f5f5f5', // Light gray background (Figma-style) for white object contrast
-  width: 800,
-  height: 600,
+  backgroundColor: '#f5f5f5', // Fallback - will be overridden with theme-aware color at runtime
+  width: 8000,  // Static canvas width
+  height: 8000, // Static canvas height
   selection: true,
   renderOnAddRemove: true,
 };
@@ -121,14 +153,19 @@ export class FabricCanvasManager {
   // W2.D8.4-5: Pixel grid visualization
   private pixelGridInitialized: boolean = false;
   private pixelGridPattern: FabricObject[] = []; // Grid lines
-  private readonly PIXEL_GRID_THRESHOLD = 8; // Show grid when zoom > 8x
+  private readonly PIXEL_GRID_THRESHOLD = 2; // Show grid when zoom > 2x (half the previous threshold)
 
   // W2.D8.7: Canvas boundary limits (Figma-style)
   private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
 
-  // W4.D3: Window resize handler for responsive rendering
-  private resizeHandler: (() => void) | null = null;
-  private resizeDebounceTimeout: number | null = null;
+  // STATIC CANVAS MIGRATION: Resize handler properties removed (no longer needed)
+
+  // W5.D5++++: Collaborative overlays (lock/selection indicators)
+  private overlayManager: CollaborativeOverlayManager | null = null;
+
+  // PERFORMANCE: Object culling for large canvases
+  private cullInterval: number | null = null;
+  private readonly CULL_MARGIN = 500; // pixels - show objects 500px outside viewport
 
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -173,21 +210,22 @@ export class FabricCanvasManager {
     }
 
     // W2.D12 DEBUG: Check canvas element state before Fabric.js initialization
-    console.log('[FabricCanvasManager] Canvas element BEFORE Fabric init:', {
-      id: element.id,
-      widthAttr: element.width,
-      heightAttr: element.height,
-      clientWidth: element.clientWidth,
-      clientHeight: element.clientHeight,
-      hasGetContext: typeof element.getContext !== 'undefined'
-    });
+    // console.log('[FabricCanvasManager] Canvas element BEFORE Fabric init:', {
+    //   id: element.id,
+    //   widthAttr: element.width,
+    //   heightAttr: element.height,
+    //   clientWidth: element.clientWidth,
+    //   clientHeight: element.clientHeight,
+    //   hasGetContext: typeof element.getContext !== 'undefined'
+    // });
 
-    // W4.D3 ARCHITECTURAL FIX: Query canvas element's own dimensions, not parent's
-    // The canvas element is already sized by CSS (absolute inset-0, width: 100%, height: 100%)
-    // By querying the element itself, we get the actual rendered size after CSS layout
-    // This avoids timing issues where parent dimensions might not reflect canvas size
-    const width = element.clientWidth || this.config.width;
-    const height = element.clientHeight || this.config.height;
+    // STATIC CANVAS MIGRATION: Always use fixed 8000x8000 size
+    // No dynamic sizing based on viewport - canvas is always 8000x8000
+    const width = this.config.width;
+    const height = this.config.height;
+
+    // Get theme-aware background color from CSS variables
+    const backgroundColor = getThemeBackgroundColor();
 
     // W2.D12 FIX: Fabric.js v6 Canvas constructor expects ID string, not HTMLCanvasElement
     // From official docs: new fabric.Canvas('canvasId', options)
@@ -200,7 +238,7 @@ export class FabricCanvasManager {
       parentClientHeight: element.parentElement?.clientHeight,
     });
     console.log(`[FabricCanvasManager] Config:`, {
-      backgroundColor: this.config.backgroundColor,
+      backgroundColor,
       width,
       height,
       selection: this.config.selection,
@@ -208,7 +246,7 @@ export class FabricCanvasManager {
     });
 
     this.canvas = new Canvas(canvasId, {
-      backgroundColor: this.config.backgroundColor,
+      backgroundColor,
       width,
       height,
       selection: this.config.selection,
@@ -216,83 +254,161 @@ export class FabricCanvasManager {
       preserveObjectStacking: true, // CRITICAL FIX: Prevent selection from bringing objects to front
     });
 
-    console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
-    console.log(`[FabricCanvasManager] Canvas type:`, this.canvas.constructor.name);
-    console.log(`[FabricCanvasManager] Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
+    // console.log(`[FabricCanvasManager] Canvas created:`, this.canvas);
+    // console.log(`[FabricCanvasManager] Canvas type:`, this.canvas.constructor.name);
+    // console.log(`[FabricCanvasManager] Canvas dimensions: ${this.canvas.width}x${this.canvas.height}`);
 
     // W2.D12 DEBUG: Expose canvas instance globally for debugging
     (window as any).__fabricCanvas = this.canvas;
-    console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
+    // console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
-    // W4.D3: Setup window resize handler for responsive canvas rendering
-    this.setupWindowResizeHandler(element);
+    // STATIC CANVAS MIGRATION: No window resize handler needed (fixed size canvas)
+    // Window resizing only affects the scrollable viewport, not the canvas itself
+
+    // W5.D5++++: Initialize collaborative overlay manager
+    this.overlayManager = new CollaborativeOverlayManager(this.canvas);
+    // console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
+
+    // PERFORMANCE: Start object culling for large canvases
+    this.startObjectCulling();
 
     return this.canvas;
   }
 
+  // STATIC CANVAS MIGRATION: Window resize handler removed
+  // Canvas is fixed at 8000x8000, viewport resizing handled by browser scroll container
+
   /**
-   * W4.D3: Setup window resize handler for responsive canvas rendering
-   *
-   * Uses simple debounced window resize listener (like Figma, Miro) instead of ResizeObserver.
-   * This is a more foundational, battle-tested approach for canvas resize handling.
-   *
-   * On window resize:
-   * 1. Query container's clientWidth/clientHeight for new dimensions
-   * 2. Update Fabric.js canvas dimensions via setDimensions()
-   * 3. Re-render canvas with requestRenderAll()
-   *
-   * Debouncing (150ms) prevents excessive resize calculations during window drag.
-   *
-   * Fixes white space issue where canvas doesn't expand when DevTools closes.
+   * SNAP-TO-GRID: Snap a coordinate value to the nearest grid point
+   * 
+   * With static canvas, snap-to-grid is trivial: value % gridSize
+   * 
+   * @param value - Coordinate value (x or y)
+   * @param gridSize - Grid size in pixels
+   * @returns Snapped coordinate value
    */
-  private setupWindowResizeHandler(canvasElement: HTMLCanvasElement): void {
-    const container = canvasElement.parentElement;
-    if (!container) {
-      console.warn('[FabricCanvasManager] No parent container found for resize handler');
+  private snapToGrid(value: number, gridSize: number): number {
+    return Math.round(value / gridSize) * gridSize;
+  }
+
+  /**
+   * PERFORMANCE: Update object visibility based on viewport
+   * 
+   * STATIC CANVAS MIGRATION FIX: Calculate viewport using scroll position
+   * instead of viewport transform. The 8000x8000 canvas is in a scrollable
+   * container, so we need to check scroll offsets, not transform matrix.
+   * 
+   * Hides objects outside the visible viewport for better rendering performance
+   * with large numbers of objects. Objects near viewport edges (within CULL_MARGIN)
+   * remain visible for smooth scrolling experience.
+   */
+  private updateObjectCulling(): void {
+    if (!this.canvas) return;
+
+    const canvasElement = this.canvas.getElement();
+    const scrollContainer = canvasElement.parentElement;
+    
+    // STATIC CANVAS: Can't rely on parent element existing in all contexts
+    if (!scrollContainer) {
+      console.warn('[FabricCanvasManager] No scroll container found for culling');
       return;
     }
+    
+    // STATIC CANVAS FIX: Get viewport bounds using scroll position
+    // The canvas is 8000x8000 inside a scrollable container
+    const scrollLeft = scrollContainer.scrollLeft;
+    const scrollTop = scrollContainer.scrollTop;
+    const viewportWidth = scrollContainer.clientWidth;
+    const viewportHeight = scrollContainer.clientHeight;
+    
+    const viewportLeft = scrollLeft;
+    const viewportTop = scrollTop;
+    const viewportRight = scrollLeft + viewportWidth;
+    const viewportBottom = scrollTop + viewportHeight;
 
-    // Create debounced resize handler
-    this.resizeHandler = () => {
-      // Clear existing timeout
-      if (this.resizeDebounceTimeout !== null) {
-        window.clearTimeout(this.resizeDebounceTimeout);
+    // Add margin for smoother transitions
+    const cullLeft = viewportLeft - this.CULL_MARGIN;
+    const cullTop = viewportTop - this.CULL_MARGIN;
+    const cullRight = viewportRight + this.CULL_MARGIN;
+    const cullBottom = viewportBottom + this.CULL_MARGIN;
+
+    // Update visibility for each object
+    const objects = this.canvas.getObjects();
+    let culledCount = 0;
+
+    objects.forEach((obj) => {
+      // Skip overlay objects (cursors, etc.)
+      const objWithData = obj as FabricObjectWithData;
+      if (!objWithData.data || !objWithData.data.id) return;
+
+      // Get object bounds
+      const objLeft = (obj.left || 0) - (obj.width || 0) / 2;
+      const objTop = (obj.top || 0) - (obj.height || 0) / 2;
+      const objRight = objLeft + (obj.width || 0);
+      const objBottom = objTop + (obj.height || 0);
+
+      // Check if object intersects viewport (with margin)
+      const isVisible =
+        objRight >= cullLeft &&
+        objLeft <= cullRight &&
+        objBottom >= cullTop &&
+        objTop <= cullBottom;
+
+      if (obj.visible !== isVisible) {
+        obj.visible = isVisible;
+        if (!isVisible) culledCount++;
       }
+    });
 
-      // Schedule resize update
-      this.resizeDebounceTimeout = window.setTimeout(() => {
-        if (!this.canvas) return;
+    if (culledCount > 0) {
+      this.canvas.requestRenderAll();
+      // Note: Object culling is expected with static canvas - only log if excessive
+      if (culledCount > 10) {
+        console.log(`[FabricCanvasManager] Culled ${culledCount} objects outside viewport`);
+      }
+    }
+  }
 
-        // W4.D3 CRITICAL FIX: Fabric.js creates a wrapper div that needs explicit sizing
-        // The wrapper has class="canvas-container" and data-fabric="wrapper"
-        // It uses inline styles with hardcoded pixel dimensions that don't auto-update
-        // We must update the wrapper's dimensions, not just the canvas elements
-        const wrapper = (this.canvas as any).wrapperEl;
-        if (!wrapper) {
-          console.warn('[FabricCanvasManager] No Fabric.js wrapper element found');
-          return;
+  /**
+   * PERFORMANCE: Start periodic object culling
+   * 
+   * Runs culling check every 500ms to hide off-screen objects
+   */
+  private startObjectCulling(): void {
+    if (this.cullInterval !== null) return;
+
+    // Initial cull
+    this.updateObjectCulling();
+
+    // Periodic culling (500ms interval)
+    this.cullInterval = window.setInterval(() => {
+      this.updateObjectCulling();
+    }, 500);
+
+    console.log('[FabricCanvasManager] Object culling started (500ms interval)');
+  }
+
+  /**
+   * PERFORMANCE: Stop object culling and restore all objects
+   */
+  private stopObjectCulling(): void {
+    if (this.cullInterval !== null) {
+      window.clearInterval(this.cullInterval);
+      this.cullInterval = null;
+    }
+
+    // Restore all objects
+    if (this.canvas) {
+      this.canvas.getObjects().forEach((obj) => {
+        const objWithData = obj as FabricObjectWithData;
+        if (objWithData.data && objWithData.data.id) {
+          obj.visible = true;
         }
+      });
+      this.canvas.requestRenderAll();
+    }
 
-        // Query the parent container's current dimensions (after viewport change)
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-
-        // Update Fabric.js wrapper element dimensions via inline styles
-        wrapper.style.width = `${width}px`;
-        wrapper.style.height = `${height}px`;
-
-        // Update Fabric.js canvas dimensions (updates both lower and upper canvas)
-        this.canvas.setDimensions({ width, height });
-
-        // Re-render canvas
-        this.canvas.requestRenderAll();
-      }, 150); // 150ms debounce - balance between responsiveness and performance
-    };
-
-    // Attach window resize listener
-    window.addEventListener('resize', this.resizeHandler);
-
-    console.log('[FabricCanvasManager] Window resize handler initialized');
+    console.log('[FabricCanvasManager] Object culling stopped');
   }
 
   /**
@@ -336,12 +452,27 @@ export class FabricCanvasManager {
       }
     });
 
+    // W5.D5+ Real-time collaboration: Fire during movement for live updates
+    // SNAP-TO-GRID: Apply grid snapping during object movement
+    this.canvas.on('object:moving', (event) => {
+      const target = event.target;
+      if (target) {
+        // Apply snap-to-grid if enabled
+        if (GRID_ENABLED && target.left !== undefined && target.top !== undefined) {
+          target.left = this.snapToGrid(target.left, GRID_SIZE);
+          target.top = this.snapToGrid(target.top, GRID_SIZE);
+          target.setCoords(); // Update coordinates after snapping
+        }
+
+        // Broadcast movement for real-time collaboration
+        if (this.eventHandlers.onObjectMoving) {
+          this.eventHandlers.onObjectMoving(target);
+        }
+      }
+    });
+
     // Selection events
     this.canvas.on('selection:created', (event) => {
-      console.log('[FabricCanvasManager] 🎯 selection:created event fired', {
-        selectedCount: event.selected?.length || 0,
-        selected: event.selected
-      });
       const targets = event.selected || [];
       if (this.eventHandlers.onSelectionCreated) {
         console.log('[FabricCanvasManager] Calling onSelectionCreated handler');
@@ -399,6 +530,8 @@ export class FabricCanvasManager {
       stroke: canvasObject.stroke || undefined,
       strokeWidth: canvasObject.stroke_width || undefined,
       opacity: canvasObject.opacity,
+      scaleX: 1, // FIX #3: Reset scale to 1 (dimensions already baked into width/height/radius)
+      scaleY: 1, // FIX #3: Reset scale to 1 (prevents double-scaling on deserialization)
       visible: true, // W2.D12 FIX: Explicitly set visible to ensure objects render
       selectable: true, // W2.D12 FIX: Explicitly set selectable
       evented: true, // W2.D12 FIX: Explicitly set evented to ensure interaction
@@ -412,6 +545,13 @@ export class FabricCanvasManager {
     switch (canvasObject.type) {
       case 'rectangle': {
         const cornerRadius = canvasObject.type_properties.corner_radius || 0;
+        console.log('[FabricCanvasManager] Creating rectangle:', {
+          width: canvasObject.width,
+          height: canvasObject.height,
+          cornerRadius,
+          hasRectConstructor: typeof Rect === 'function'
+        });
+        
         fabricObject = new Rect({
           ...commonProps,
           width: canvasObject.width,
@@ -424,6 +564,11 @@ export class FabricCanvasManager {
 
       case 'circle': {
         const radius = canvasObject.type_properties.radius;
+        console.log('[FabricCanvasManager] Creating circle:', {
+          radius,
+          hasCircleConstructor: typeof Circle === 'function'
+        });
+        
         fabricObject = new Circle({
           ...commonProps,
           radius,
@@ -441,6 +586,12 @@ export class FabricCanvasManager {
           text_align,
         } = canvasObject.type_properties;
 
+        console.log('[FabricCanvasManager] Creating text:', {
+          text_content,
+          width: canvasObject.width,
+          hasTextboxConstructor: typeof Textbox === 'function'
+        });
+
         fabricObject = new Textbox(text_content, {
           ...commonProps,
           width: canvasObject.width,
@@ -455,9 +606,22 @@ export class FabricCanvasManager {
 
       default:
         // Unknown type, return null
+        console.error('[FabricCanvasManager] Unknown object type:', (canvasObject as any).type);
         return null;
     }
 
+    // Validate the created object
+    if (!fabricObject || typeof (fabricObject as any)._set !== 'function') {
+      console.error('[FabricCanvasManager] ❌ Object creation failed - invalid Fabric.js object!', {
+        type: canvasObject.type,
+        fabricObject,
+        hasSetMethod: fabricObject ? typeof (fabricObject as any)._set : 'object is null',
+        constructor: fabricObject?.constructor?.name,
+      });
+      return null;
+    }
+
+    console.log('[FabricCanvasManager] ✅ Successfully created', canvasObject.type, 'object');
     return fabricObject;
   }
 
@@ -475,7 +639,7 @@ export class FabricCanvasManager {
    */
   toCanvasObject(fabricObject: FabricObject | null): CanvasObject | null {
     const obj = fabricObject as FabricObjectWithData;
-    if (!obj || !obj.data) {
+    if (!obj || !obj.data || !this.canvas) {
       return null;
     }
 
@@ -484,17 +648,23 @@ export class FabricCanvasManager {
     const dbType = obj.data.type as ShapeType;
     const dbId = obj.data.id as string;
 
+    // W5.D5+++++ Calculate actual z-index from canvas stacking order
+    // Objects later in the array are rendered on top (higher z-index)
+    const canvasObjects = this.canvas.getObjects();
+    const zIndex = canvasObjects.indexOf(obj);
+
     // Extract common properties from Fabric.js object
     // Maps Fabric.js property names to our database schema
+    // CRITICAL: Apply scale transforms to geometric properties before serialization
     const baseProperties = {
       id: dbId,
       x: obj.left || 0,
       y: obj.top || 0,
-      width: obj.width || 0,
-      height: obj.height || 0,
+      width: (obj.width || 0) * (obj.scaleX || 1), // FIX #1: Bake scaleX into width
+      height: (obj.height || 0) * (obj.scaleY || 1), // FIX #1: Bake scaleY into height
       rotation: obj.angle || 0,
       group_id: null, // TODO: Implement group support in W1.D3
-      z_index: 1, // TODO: Calculate from canvas.getObjects() index in W1.D3
+      z_index: zIndex >= 0 ? zIndex : 0, // W5.D5+++++ Use actual canvas position
       fill: obj.fill as string,
       stroke: (obj.stroke as string) || null,
       stroke_width: obj.strokeWidth || null,
@@ -529,7 +699,7 @@ export class FabricCanvasManager {
           ...baseProperties,
           type: 'circle',
           type_properties: {
-            radius: circle.radius || 0,
+            radius: (circle.radius || 0) * (circle.scaleX || 1), // FIX #2: Bake scaleX into radius
           },
         } as CircleObject;
       }
@@ -578,11 +748,23 @@ export class FabricCanvasManager {
       return null;
     }
 
+    // Validate that fabricObject is actually a Fabric.js object
+    if (typeof fabricObject._set !== 'function') {
+      console.error('[FabricCanvasManager] ❌ Created object is not a valid Fabric.js object!', {
+        fabricObject,
+        hasSet: typeof fabricObject._set,
+        constructor: fabricObject.constructor?.name,
+        type: canvasObject.type
+      });
+      return null;
+    }
+
     console.log('[FabricCanvasManager] Adding object to canvas:', {
       id: canvasObject.id,
       type: canvasObject.type,
       x: canvasObject.x,
       y: canvasObject.y,
+      z_index: canvasObject.z_index,
       objectCount: this.canvas.getObjects().length
     });
 
@@ -596,10 +778,43 @@ export class FabricCanvasManager {
       fill: (fabricObject as any).fill,
       visible: (fabricObject as any).visible,
       opacity: (fabricObject as any).opacity,
+      hasSetMethod: typeof fabricObject._set === 'function',
+      constructor: fabricObject.constructor?.name,
     });
 
-    // Add to canvas and render
-    this.canvas.add(fabricObject);
+    // W5.D5+++++ Add to canvas at correct z-index position
+    // Insert at specific index to maintain stacking order from database
+    try {
+      const targetIndex = canvasObject.z_index ?? 0; // Default to 0 if undefined
+      const currentObjects = this.canvas.getObjects();
+
+      console.log('[FabricCanvasManager] 🎯 Attempting to add object:', {
+        targetIndex,
+        currentObjectCount: currentObjects.length,
+        willInsert: targetIndex >= 0 && targetIndex < currentObjects.length,
+        fabricObjectType: typeof fabricObject,
+        hasSetMethod: typeof (fabricObject as any)._set
+      });
+
+      // Always use simple add() to avoid insertAt() issues
+      // Z-index will be managed through bringToFront/sendToBack operations
+      this.canvas.add(fabricObject);
+      console.log(`[FabricCanvasManager] ✅ Added object to canvas (z-index: ${targetIndex})`);
+      
+    } catch (error) {
+      console.error('[FabricCanvasManager] ❌ Error adding object to canvas:', error);
+      console.error('[FabricCanvasManager] Error details:', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        canvasObject,
+        fabricObject: {
+          type: fabricObject.type,
+          constructor: fabricObject.constructor?.name,
+          hasSetMethod: typeof (fabricObject as any)._set
+        }
+      });
+      return null;
+    }
 
     // W2.D12 FIX: Use synchronous renderAll() instead of requestRenderAll()
     // requestRenderAll() schedules render on next animation frame (async)
@@ -1092,23 +1307,28 @@ export class FabricCanvasManager {
 
     // Mouse down - handle placement mode OR start panning if spacebar held
     this.canvas.on('mouse:down', (opt: any) => {
-      // W2.D12: Check for placement mode first (higher priority than panning)
+      // STATIC CANVAS MIGRATION: Check for placement mode first (higher priority than panning)
       // Only trigger placement if clicking empty canvas (no target object)
       if (!opt.target && this.eventHandlers.onPlacementClick) {
-        // Get fabric space coordinates (accounts for pan/zoom)
-        // ignoreZoom: false = fabric space coordinates (correct for object placement)
-        // This ensures objects are placed at the correct position regardless of zoom level
-        const pointer = this.canvas!.getPointer(opt.e, false);
+        // STATIC CANVAS MIGRATION: Simple direct coordinate calculation
+        // No viewport transforms needed - canvas coordinates = click coordinates
+        const canvasElement = this.canvas!.getElement();
+        const rect = canvasElement.getBoundingClientRect();
+        
+        // Direct pixel coordinates on the 8000x8000 canvas
+        const canvasX = opt.e.clientX - rect.left;
+        const canvasY = opt.e.clientY - rect.top;
 
-        console.log('[FabricCanvasManager] Placement click detected:', {
-          fabricX: pointer.x,
-          fabricY: pointer.y,
-          zoom: this.canvas!.getZoom(),
-          vpt: this.canvas!.viewportTransform,
+        console.log('[FabricCanvasManager] Placement click detected (static canvas):', {
+          canvasX,
+          canvasY,
+          clientX: opt.e.clientX,
+          clientY: opt.e.clientY,
+          rect,
         });
 
-        // Trigger placement handler with fabric space coordinates
-        this.eventHandlers.onPlacementClick(pointer.x, pointer.y);
+        // Trigger placement handler with direct canvas coordinates
+        this.eventHandlers.onPlacementClick(canvasX, canvasY);
         return; // Don't process as pan event
       }
 
@@ -1404,7 +1624,7 @@ export class FabricCanvasManager {
    * W2.D8.4: Setup pixel grid visualization system
    *
    * Initializes the pixel grid system that shows/hides grid lines based on zoom level.
-   * Grid appears when zoom > 8x for precision design work (like Figma).
+   * Grid appears when zoom > 4x for precision design work (like Figma).
    *
    * Pattern:
    * - Grid lines are rendered as Fabric.js Line objects
@@ -1436,7 +1656,7 @@ export class FabricCanvasManager {
   /**
    * W2.D8.4: Check if pixel grid is currently visible
    *
-   * Grid is visible when zoom > 8x threshold.
+   * Grid is visible when zoom > 4x threshold.
    *
    * @returns true if grid should be visible, false otherwise
    */
@@ -1496,7 +1716,7 @@ export class FabricCanvasManager {
    * W2.D8.4: Update pixel grid visibility based on current zoom
    *
    * Called automatically on zoom events.
-   * Shows grid when zoom > 8x, hides when zoom <= 8x.
+   * Shows grid when zoom > 4x, hides when zoom <= 4x.
    *
    * Pattern:
    * - Removes old grid lines
@@ -1752,6 +1972,41 @@ export class FabricCanvasManager {
   }
 
   /**
+   * W5.D5++++: Update collaborative overlays (lock/selection indicators)
+   *
+   * Call this whenever presence data changes to update visual indicators
+   * showing who's editing and who has what selected.
+   *
+   * @param presence - User presence data from collaboration store
+   * @param currentUserId - Current user's ID (to skip their own overlays)
+   */
+  updateCollaborativeOverlays(
+    presence: Record<string, UserPresence>,
+    currentUserId: string
+  ): void {
+    if (!this.overlayManager) {
+      console.warn('[FabricCanvasManager] Overlay manager not initialized');
+      return;
+    }
+
+    this.overlayManager.updateOverlays(presence, currentUserId);
+  }
+
+  /**
+   * W5.D5++++: Update overlay positions during object movement
+   *
+   * Call this during object:modified or object:moving events to keep
+   * overlays synchronized with their target objects.
+   */
+  updateOverlayPositions(): void {
+    if (!this.overlayManager) {
+      return;
+    }
+
+    this.overlayManager.updateOverlaysForMovement();
+  }
+
+  /**
    * Dispose of the canvas and clean up resources
    */
   dispose(): void {
@@ -1769,15 +2024,16 @@ export class FabricCanvasManager {
     this.pixelGridPattern = [];
     this.pixelGridInitialized = false;
 
-    // W4.D3: Clean up window resize handler
-    if (this.resizeHandler) {
-      window.removeEventListener('resize', this.resizeHandler);
-      this.resizeHandler = null;
-      console.log('[FabricCanvasManager] Window resize handler removed');
-    }
-    if (this.resizeDebounceTimeout !== null) {
-      window.clearTimeout(this.resizeDebounceTimeout);
-      this.resizeDebounceTimeout = null;
+    // STATIC CANVAS MIGRATION: No resize handler to clean up
+
+    // PERFORMANCE: Stop object culling
+    this.stopObjectCulling();
+
+    // W5.D5++++: Clean up collaborative overlays
+    if (this.overlayManager) {
+      this.overlayManager.destroy();
+      this.overlayManager = null;
+      console.log('[FabricCanvasManager] Collaborative overlay manager destroyed');
     }
 
     if (this.canvas) {

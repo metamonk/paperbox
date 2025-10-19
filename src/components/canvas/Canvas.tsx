@@ -1,6 +1,5 @@
 /**
- * Main canvas component
- * W1.D10: Fabric.js integration with complete sync pipeline
+ * Main canvas component with Fabric.js integration
  *
  * Architecture:
  * Supabase ←→ SyncManager ←→ Zustand Store ←→ CanvasSyncManager ←→ Fabric.js
@@ -13,84 +12,127 @@ import { useState, useCallback, useEffect } from 'react';
 import { useCanvasSync } from '../../hooks/useCanvasSync';
 import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
 import { usePresence } from '../../hooks/usePresence';
+import { useCollaborativeOverlays } from '../../hooks/useCollaborativeOverlays';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
-import { useSidebarState } from '../../hooks/useSidebarState';
 import { useKeyboard } from '../../hooks/useKeyboard';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
-import { UsersPanel } from '../collaboration/UsersPanel';
+import { RemoteSelectionOverlay } from '../collaboration/RemoteSelectionOverlay';
 import { Header } from '../layout/Header';
-import { Sidebar } from '../layout/Sidebar';
-import { ToolsSidebar } from './ToolsSidebar';
+import { CanvasLayout } from '../layout/CanvasLayout';
+import { LeftSidebar } from '../sidebar/LeftSidebar';
+import { BottomToolbar } from '../toolbar/BottomToolbar';
+import { AITextBox } from '../ai/AITextBox';
 import { PropertyPanel } from '../properties/PropertyPanel';
-import { LayersPanel } from '../layers/LayersPanel';
 import { CanvasLoadingOverlay } from './CanvasLoadingOverlay';
 import { CanvasNavigationIndicator } from './CanvasNavigationIndicator';
+import { Minimap } from './Minimap';
 import { usePaperboxStore } from '../../stores';
+import { generateColorFromId } from '../../lib/constants';
 
 export function Canvas() {
   // Canvas element ref for Fabric.js - use state to trigger hook when element mounts
   const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  
+  // AI interface state
+  const [isAIOpen, setIsAIOpen] = useState(false);
 
   // Callback ref to capture canvas element immediately
   const canvasCallbackRef = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
       console.log('[Canvas] Canvas element mounted, setting state');
 
-      // W2.D12 FIX: Set canvas dimensions BEFORE Fabric.js initialization
-      // Fabric.js needs the canvas element to already have correct dimensions
-      // when it looks it up by ID, otherwise rendering context may not initialize properly
-      const parent = node.parentElement;
-      if (parent) {
-        const width = parent.clientWidth;
-        const height = parent.clientHeight;
-        node.width = width;
-        node.height = height;
-        console.log('[Canvas] Set canvas dimensions before Fabric init:', { width, height });
-      }
+      // STATIC CANVAS MIGRATION: Set fixed 8000x8000 canvas dimensions
+      // Canvas is always 8000x8000, viewport scrolls to show different portions
+      const CANVAS_SIZE = 8000;
+      node.width = CANVAS_SIZE;
+      node.height = CANVAS_SIZE;
+      console.log('[Canvas] Set static canvas dimensions:', { width: CANVAS_SIZE, height: CANVAS_SIZE });
 
       setCanvasElement(node);
     }
   }, []);
 
-  // W1.D10: Initialize complete sync pipeline (Supabase ↔ Zustand ↔ Fabric.js)
+  // Initialize complete sync pipeline (Supabase ↔ Zustand ↔ Fabric.js)
   const { initialized: canvasInitialized, error: syncError, fabricManager } = useCanvasSync(canvasElement);
 
-  // Multiplayer cursors via Broadcast
-  const { cursors, sendCursorUpdate } = useBroadcastCursors();
+  // Get active canvas ID for scoped realtime channels
+  const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
 
-  // Presence tracking and online users
-  const { onlineUsers, updateActivity, currentUserId } = usePresence();
+  // Multiplayer cursors (canvas-scoped)
+  const { cursors, sendCursorUpdate } = useBroadcastCursors(activeCanvasId);
 
-  // Auth for logout
+  // Presence tracking (canvas-scoped)
+  const { onlineUsers, updateActivity, currentUserId } = usePresence(activeCanvasId);
+
+  // Collaborative overlays (lock/selection indicators)
+  useCollaborativeOverlays(fabricManager);
+
+  // Auth
   const { signOut, user } = useAuth();
+
+  // Setup presence channel for selection broadcasting
+  const setupPresenceChannel = usePaperboxStore((state) => state.setupPresenceChannel);
+  const cleanupPresenceChannel = usePaperboxStore((state) => state.cleanupPresenceChannel);
+  const setCurrentUser = usePaperboxStore((state) => state.setCurrentUser);
+
+  useEffect(() => {
+    if (!user?.id || !activeCanvasId) {
+      console.log('[Canvas] Skipping presence setup - missing requirements:', {
+        hasUser: !!user?.id,
+        hasActiveCanvas: !!activeCanvasId,
+        activeCanvasId: activeCanvasId,
+      });
+      return;
+    }
+
+    const userName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Anonymous';
+    const userColor = generateColorFromId(user.id); // Consistent color based on user ID
+
+    console.log('[Canvas] Setting up collaboration presence channel:', {
+      userId: user.id.slice(0, 8),
+      userName,
+      userColor,
+      activeCanvasId: activeCanvasId,
+      activeCanvasIdShort: activeCanvasId.slice(0, 8),
+    });
+
+    // Set current user in collaboration slice
+    setCurrentUser(user.id, userName, userColor);
+
+    // Setup presence channel for selection broadcasting
+    setupPresenceChannel(user.id, userName, userColor, activeCanvasId);
+
+    return () => {
+      console.log('[Canvas] Cleaning up collaboration presence channel');
+      cleanupPresenceChannel();
+    };
+  }, [user?.id, activeCanvasId, setupPresenceChannel, cleanupPresenceChannel, setCurrentUser, user?.email, user?.user_metadata?.display_name]);
 
   // Shape creation logic
   const { handleAddShape, createObjectAtPosition } = useShapeCreation({ fabricManager, user });
-
-  // Sidebar state management
-  const { sidebarOpen, sidebarContent, handleToggleTools, handleToggleUsers, handleToggleProperties, handleToggleLayers } = useSidebarState();
+  
+  // AI toggle handler
+  const handleAIToggle = () => {
+    setIsAIOpen((prev) => !prev);
+  };
 
   // Zustand store for accessing canvas state
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
   const deleteObjects = usePaperboxStore((state) => state.deleteObjects);
   const selectAll = usePaperboxStore((state) => state.selectAll);
 
-  // W4.D4: Z-index operations from layers slice
+  // Z-index operations
   const moveToFront = usePaperboxStore((state) => state.moveToFront);
   const moveToBack = usePaperboxStore((state) => state.moveToBack);
   const moveUp = usePaperboxStore((state) => state.moveUp);
   const moveDown = usePaperboxStore((state) => state.moveDown);
 
-  // W2.D12: Placement mode state for click-to-place pattern
+  // Placement mode state
   const isPlacementMode = usePaperboxStore((state) => state.isPlacementMode);
 
-  // Canvas transform state (for cursor overlay)
-  const [scale] = useState(1);
-  const [position] = useState({ x: 0, y: 0 });
-
   /**
-   * W2.D12: Wire up placement click handler to fabricManager
+   * Wire up placement click handler to fabricManager
    *
    * When fabricManager is ready and we're in placement mode,
    * the onPlacementClick handler will be called when user clicks canvas.
@@ -132,35 +174,71 @@ export function Canvas() {
   }, [fabricManager, isPlacementMode, createObjectAtPosition]);
 
   /**
-   * Handle mouse movement to broadcast cursor position
+   * STATIC CANVAS MIGRATION: Handle mouse movement to broadcast cursor position
+   * 
+   * Simplified coordinate system - direct pixel coordinates on 8000x8000 canvas
+   * All users share the same coordinate space, no viewport transforms needed
    */
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    if (!fabricManager) {
+      updateActivity();
+      return;
+    }
 
+    const canvas = fabricManager.getCanvas();
+    if (!canvas) {
+      updateActivity();
+      return;
+    }
+
+    // CRITICAL FIX: Use Fabric's viewport transform, not DOM scroll!
+    // The system uses Fabric's pan/zoom (viewportTransform), not DOM scrolling
+    const canvasElement = canvas.getElement();
+    const rect = canvasElement.getBoundingClientRect();
+    
+    // Get mouse position relative to canvas element (viewport coordinates)
+    const viewportX = e.clientX - rect.left;
+    const viewportY = e.clientY - rect.top;
+    
+    // Get Fabric's viewport transform
+    const vpt = canvas.viewportTransform;
+    const zoom = canvas.getZoom();
+    
+    // Transform viewport coordinates to canvas coordinates
+    // Formula: canvasX = (viewportX - panX) / zoom
+    const canvasX = (viewportX - vpt[4]) / zoom;
+    const canvasY = (viewportY - vpt[5]) / zoom;
+
+    // Debug logging
+    if (Math.random() < 0.15) {
+      console.log('[✅ FIXED] Cursor with Fabric Viewport:', {
+        viewport: { x: Math.round(viewportX), y: Math.round(viewportY) },
+        transform: { 
+          zoom: zoom.toFixed(2), 
+          panX: Math.round(vpt[4]), 
+          panY: Math.round(vpt[5]) 
+        },
+        canvas: { x: Math.round(canvasX), y: Math.round(canvasY) },
+      });
+    }
+
+    // Broadcast canvas-absolute coordinates
     sendCursorUpdate(canvasX, canvasY);
+
     updateActivity();
   };
 
 
-  /**
-   * Handle delete requests from toolbar
-   */
-  const handleDelete = () => {
-    if (selectedIds.length > 0) {
-      deleteObjects(selectedIds);
-    }
-  };
 
   /**
-   * W4.D4: Keyboard shortcuts for delete, selection, and z-index operations
+   * Keyboard shortcuts for delete, selection, and z-index operations
    * - Delete/Backspace: Delete selected objects
    * - Ctrl/Cmd + A: Select all objects
    * - Ctrl/Cmd + ]: Bring to front
    * - Ctrl/Cmd + [: Send to back
    * - Ctrl/Cmd + Shift + ]: Bring forward (move up)
    * - Ctrl/Cmd + Shift + [: Send backward (move down)
+   * - Ctrl/Cmd + /: Toggle AI interface
    */
   useKeyboard({
     'delete': () => {
@@ -201,32 +279,38 @@ export function Canvas() {
         }
       }
     },
+    '/': (e) => {
+      if (e && (e.ctrlKey || e.metaKey)) {
+        // Ctrl/Cmd + /: Toggle AI interface
+        e.preventDefault();
+        setIsAIOpen((prev) => !prev);
+      }
+    },
   });
 
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-background">
       <Header
-        userCount={onlineUsers.length}
+        onlineUsers={onlineUsers}
+        currentUserId={currentUserId}
         onSignOut={() => signOut()}
         userName={user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User'}
-        sidebarOpen={sidebarOpen}
-        sidebarContent={sidebarContent}
-        onToggleTools={handleToggleTools}
-        onToggleUsers={handleToggleUsers}
-        onToggleProperties={handleToggleProperties}
-        onToggleLayers={handleToggleLayers}
       />
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Canvas area */}
-        <div
-          className="relative flex-1 overflow-hidden bg-white"
-          onMouseMove={handleMouseMove}
-        >
+      <CanvasLayout
+        leftSidebar={<LeftSidebar />}
+        rightSidebar={<PropertyPanel />}
+      >
+        <div className="flex flex-1 overflow-hidden relative">
+          {/* STATIC CANVAS MIGRATION: Scrollable canvas container for 8000x8000 viewport */}
+          <div
+            className="relative flex-1 overflow-auto bg-muted"
+            onMouseMove={handleMouseMove}
+          >
           {/* Error banner */}
           {syncError && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-destructive text-destructive-foreground px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
@@ -234,31 +318,25 @@ export function Canvas() {
             </div>
           )}
 
-          {/* Fabric.js Canvas Element */}
+          {/* STATIC CANVAS MIGRATION: 8000x8000 canvas within scrollable viewport */}
           <canvas
             id="fabric-canvas"
             ref={canvasCallbackRef}
-            className="absolute inset-0"
+            className="absolute top-0 left-0"
             onClick={(e) => {
-              // W4.D1 FIX: React onClick fallback for placement mode
-              // This ensures clicks are captured even if Fabric.js event listener isn't working
+              // STATIC CANVAS MIGRATION: React onClick fallback for placement mode
+              // Simplified coordinate system - direct pixel coordinates on 8000x8000 canvas
               if (isPlacementMode && fabricManager) {
-                const canvas = fabricManager.getCanvas();
-                if (!canvas) return;
-
-                // Get click position relative to canvas element
+                // Direct pixel coordinates - no transforms needed
                 const rect = e.currentTarget.getBoundingClientRect();
-                const clientX = e.clientX - rect.left;
-                const clientY = e.clientY - rect.top;
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
 
-                // Convert to Fabric.js viewport coordinates (accounting for zoom/pan)
-                const pointer = canvas.getPointer(e.nativeEvent, true);
-
-                console.log('[Canvas] React onClick placement:', {
-                  clientX,
-                  clientY,
-                  canvasX: pointer.x,
-                  canvasY: pointer.y,
+                console.log('[Canvas] React onClick placement (static canvas):', {
+                  canvasX,
+                  canvasY,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
                   isPlacementMode
                 });
 
@@ -267,8 +345,8 @@ export function Canvas() {
                 if (config) {
                   createObjectAtPosition(
                     config.type,
-                    pointer.x,
-                    pointer.y,
+                    canvasX,
+                    canvasY,
                     config.defaultSize.width,
                     config.defaultSize.height
                   );
@@ -276,8 +354,8 @@ export function Canvas() {
               }
             }}
             style={{
-              width: '100%',
-              height: '100%',
+              width: '8000px',
+              height: '8000px',
               cursor: isPlacementMode ? 'crosshair' : 'default',
             }}
           />
@@ -285,64 +363,36 @@ export function Canvas() {
           {/* Multiplayer Cursors Overlay */}
           <CursorOverlay
             cursors={cursors}
-            scale={scale}
-            stagePosition={position}
+            fabricManager={fabricManager}
           />
 
-          {/* W2.D12+: Navigation indicator (zoom, pan position) */}
+          {/* Remote Selection Overlay - shows other users' selections */}
+          <RemoteSelectionOverlay fabricManager={fabricManager} />
+
+          {/* Navigation indicator (zoom, pan position) */}
           <CanvasNavigationIndicator />
 
           {/* Loading overlay - shown until canvas initializes */}
           {!canvasInitialized && <CanvasLoadingOverlay />}
-        </div>
 
-        {/* Backdrop for mobile sidebar overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={() => {
-              // Toggle based on current sidebar content to close
-              if (sidebarContent === 'tools') handleToggleTools();
-              else handleToggleUsers();
-            }}
-            aria-hidden="true"
-          />
-        )}
+          {/* Minimap - fixed to viewport, positioned within scrollable area */}
+          {canvasInitialized && <Minimap fabricManager={fabricManager} />}
+          </div>
 
-        {/* Sidebar with dynamic content */}
-        <Sidebar
-          isOpen={sidebarOpen}
-          onClose={() => {
-            // On mobile, close the sidebar when backdrop is clicked
-            // Desktop behavior handled by useSidebarState
-            if (window.innerWidth < 768) {
-              // Toggle based on current sidebar content to close
-              if (sidebarContent === 'tools') handleToggleTools();
-              else if (sidebarContent === 'users') handleToggleUsers();
-              else if (sidebarContent === 'properties') handleToggleProperties();
-              else handleToggleLayers();
-            }
-          }}
-        >
-          {sidebarContent === 'users' ? (
-            <UsersPanel users={onlineUsers} currentUserId={currentUserId} />
-          ) : sidebarContent === 'properties' ? (
-            <PropertyPanel />
-          ) : sidebarContent === 'layers' ? (
-            <LayersPanel />
-          ) : (
-            <ToolsSidebar
+          {/* AI Text Box Overlay - fixed to viewport, appears above toolbar */}
+          <AITextBox isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
+
+          {/* Bottom Toolbar - Figma-style centered tool palette, fixed to viewport */}
+          {canvasInitialized && (
+            <BottomToolbar
               onAddShape={handleAddShape}
-              onDelete={handleDelete}
-              hasSelection={selectedIds.length > 0}
-              onMoveToFront={selectedIds.length === 1 ? () => moveToFront(selectedIds[0]) : undefined}
-              onMoveToBack={selectedIds.length === 1 ? () => moveToBack(selectedIds[0]) : undefined}
-              onMoveUp={selectedIds.length === 1 ? () => moveUp(selectedIds[0]) : undefined}
-              onMoveDown={selectedIds.length === 1 ? () => moveDown(selectedIds[0]) : undefined}
+              activeTool={isPlacementMode ? 'rectangle' : 'select'}
+              onAIToggle={handleAIToggle}
+              isAIOpen={isAIOpen}
             />
           )}
-        </Sidebar>
-      </div>
+        </div>
+      </CanvasLayout>
     </div>
   );
 }

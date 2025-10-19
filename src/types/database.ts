@@ -166,11 +166,47 @@ export type Database = {
           },
         ]
       }
+      canvas_permissions: {
+        Row: {
+          canvas_id: string
+          granted_at: string | null
+          granted_by: string | null
+          id: string
+          permission: Database["public"]["Enums"]["canvas_permission"]
+          user_id: string
+        }
+        Insert: {
+          canvas_id: string
+          granted_at?: string | null
+          granted_by?: string | null
+          id?: string
+          permission?: Database["public"]["Enums"]["canvas_permission"]
+          user_id: string
+        }
+        Update: {
+          canvas_id?: string
+          granted_at?: string | null
+          granted_by?: string | null
+          id?: string
+          permission?: Database["public"]["Enums"]["canvas_permission"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canvas_permissions_canvas_id_fkey"
+            columns: ["canvas_id"]
+            isOneToOne: false
+            referencedRelation: "canvases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       canvases: {
         Row: {
           created_at: string
           description: string | null
           id: string
+          is_public: boolean
           name: string
           owner_id: string
           updated_at: string
@@ -179,6 +215,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_public?: boolean
           name: string
           owner_id: string
           updated_at?: string
@@ -187,6 +224,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          is_public?: boolean
           name?: string
           owner_id?: string
           updated_at?: string
@@ -219,7 +257,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      canvas_permission: "owner" | "editor" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -346,6 +384,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      canvas_permission: ["owner", "editor", "viewer"],
+    },
   },
 } as const

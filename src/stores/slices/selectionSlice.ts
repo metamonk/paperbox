@@ -22,6 +22,18 @@ export type SelectionMode = 'single' | 'multi' | 'lasso' | 'drag';
 /**
  * Selection slice state interface
  */
+/**
+ * Result of lock-coordinated selection operations
+ */
+export interface SelectionWithLocksResult {
+  success: string[]; // IDs successfully locked and selected
+  failed: Array<{
+    id: string;
+    reason: string;
+    lockedBy?: string;
+  }>;
+}
+
 export interface SelectionSlice {
   // State
   selectedIds: string[];
@@ -31,9 +43,10 @@ export interface SelectionSlice {
   // Actions
   selectObject: (id: string) => void;
   selectObjects: (ids: string[]) => void;
+  selectObjectsWithLocks: (ids: string[]) => Promise<SelectionWithLocksResult>; // W5.D5++ Enhanced Path B
   selectAll: () => void;
-  deselectObject: (id: string) => void;
   deselectAll: () => void;
+  deselectObject: (id: string) => void;
   toggleSelection: (id: string) => void;
   setActiveObject: (id: string | null) => void;
   setSelectionMode: (mode: SelectionMode) => void;
@@ -85,6 +98,75 @@ export const createSelectionSlice: StateCreator<
       undefined,
       'selection/selectObjects',
     ),
+
+  /**
+   * W5.D5++ Enhanced Path B: Select objects with lock coordination
+   * 
+   * Implements state-driven coordination where selection workflow:
+   * 1. Acquires database locks atomically
+   * 2. Updates selection state (only for successfully locked objects)
+   * 3. Broadcasts selection to other users via Presence
+   * 4. Returns result for UI feedback
+   * 
+   * This prevents conflicts by ensuring only one user can edit an object at a time.
+   * Fulfills FOUNDATION.md requirement: "Documented strategy (last-write-wins, CRDT, OT, etc.)"
+   * Our strategy: Optimistic Locking (database-level atomic constraints)
+   */
+  selectObjectsWithLocks: async (ids: string[]) => {
+    const store = get();
+
+    // 1. Acquire database locks for each object atomically
+    const lockResults = await Promise.all(
+      ids.map(async (id) => {
+        const locked = await store.requestLock(id);
+        return { id, locked };
+      })
+    );
+
+    // 2. Separate successful and failed locks
+    const successfulIds = lockResults.filter(r => r.locked).map(r => r.id);
+    const failedLocks = lockResults.filter(r => !r.locked);
+
+    // 3. Update selection state (only for successfully locked objects)
+    if (successfulIds.length > 0) {
+      set(
+        (state) => {
+          state.selectedIds = successfulIds;
+          state.activeObjectId = successfulIds[0] || null;
+        },
+        undefined,
+        'selection/selectObjectsWithLocks'
+      );
+
+      // 4. Broadcast selection to other users (Supabase Presence)
+      store.broadcastSelection(successfulIds);
+    } else {
+      // All locks failed - clear selection
+      set(
+        (state) => {
+          state.selectedIds = [];
+          state.activeObjectId = null;
+        },
+        undefined,
+        'selection/selectObjectsWithLocks/allFailed'
+      );
+
+      store.broadcastSelection([]);
+    }
+
+    // 5. Build result with failed lock details for UI feedback
+    const failed = failedLocks.map(({ id }) => {
+      const lock = store.locks[id];
+      return {
+        id,
+        reason: 'Object locked by another user',
+        lockedBy: lock?.userName,
+      };
+    });
+
+    // 6. Return result for caller (e.g., CanvasSyncManager can show toast)
+    return { success: successfulIds, failed };
+  },
 
   /**
    * W4.D4: Select all objects on canvas (Cmd/Ctrl+A)

@@ -24,7 +24,11 @@
   - ✅ W5.D3 Complete: UI Components (CanvasPicker with ⌘K shortcut, CanvasManagementModal)
   - ✅ W5.D4 Complete: Routing & Integration (/canvas/:canvasId with URL-state bidirectional sync)
   - ✅ W5.D5 Complete: Testing, Polish & Documentation (W5_MULTI_CANVAS_COMPLETE.md + AI Integration)
-- 🔜 **Week 6 Next**: Color & Text Styling
+  - ✅ **CRITICAL FIX**: Production infinite loop resolved (Commit 3497033)
+    - **Issue**: Circular useEffect dependency causing 80K-114K console logs in 5-10s
+    - **Solution**: Architectural separation - CanvasRedirect (routing) + CanvasPage (rendering)
+    - **Documentation**: [W5_ROUTING_FIX.md](../claudedocs/W5_ROUTING_FIX.md) (8 fix attempts documented)
+- 🔜 **Week 6 In Progress**: Color & Text Styling (Color picker ✅ complete, Text formatting next)
 - 📋 **TDD Approach Abandoned**: Direct implementation → Testing → Documentation (faster delivery)
 
 ---
@@ -222,6 +226,224 @@ Fabric.js Canvas Update
     ↓
 Visual Rendering
 ```
+
+### Architecture Improvements (W2.D12)
+
+**Critical Sync Architecture Fixes**: Two fundamental issues affecting property updates and multi-user transform synchronization were identified and resolved in W2.D12, strengthening the bidirectional data flow.
+
+#### Issue 1: Property Update Sync (✅ RESOLVED)
+**Problem**: Font size/fill color/stroke color changes caused objects to deselect, breaking UX flow.
+
+**Root Cause**: Asymmetric sync flag protection - selection event handlers lacked `_isSyncingFromStore` guards.
+
+**Fixes**:
+1. **Symmetric Sync Flag Protection**: Added guards to `onSelectionCreated`, `onSelectionUpdated`, `onSelectionCleared`
+2. **Complete Change Detection**: Added `stroke`, `stroke_width`, `style_properties` to `hasObjectChanged()`
+
+**Impact**: All property updates maintain selection state + immediate visual feedback.
+
+#### Issue 2: Multi-User Transform Sync (✅ RESOLVED)
+**Problem**:
+- Rectangle resize snap-back (dimensions not persisted)
+- Circle enlargement appears as movement to other users
+
+**Root Cause**: Fabric.js scale transforms (scaleX, scaleY) not applied to geometric properties before database serialization.
+
+**Data Flow (Before Fix)**:
+```
+User A resizes rectangle (100×100 → 200×150)
+  → Fabric.js: width=100, scaleX=2.0 ❌
+  → Database: width=100 ❌ (scale lost)
+  → User B: width=100 ❌ (snap-back)
+```
+
+**Data Flow (After Fix)**:
+```
+User A resizes rectangle (100×100 → 200×150)
+  → Fabric.js: width=100, scaleX=2.0
+  → toCanvasObject(): width=200 ✅ (scale baked)
+  → Database: width=200 ✅ (correct dimension)
+  → User B: width=200, scaleX=1 ✅ (no double-scale)
+```
+
+**Fixes**:
+1. **Bake Scales into Dimensions**: `width = obj.width * obj.scaleX`, `height = obj.height * obj.scaleY`
+2. **Bake Scale into Circle Radius**: `radius = circle.radius * circle.scaleX`
+3. **Reset Scales on Deserialization**: `scaleX = 1, scaleY = 1` in `createFabricObject()`
+
+**Impact**: All geometric transformations persist correctly across database round-trips and sync to all users.
+
+**Documentation**: 6 comprehensive analysis documents in `claudedocs/W2.D12_*` covering root cause analysis, architecture diagrams, sync gap matrix, and implementation plans.
+
+#### Issue 3: Sync Architecture Flaw - Self-Broadcasting Race Condition (✅ RESOLVED - W5.D5++++)
+
+**Status**: ✅ COMPLETELY RESOLVED with architectural timestamp comparison fix. Previous time-based filtering failed - old broadcasts can arrive AFTER the 2-second window expires.
+
+**Problem**: Dragging user experiences snap-back artifacts and choppy "frame-by-frame" animation when moving objects, even after previous fixes.
+
+**Evidence**:
+- User drags object → Object snaps back to original position → Animates choppily → Settles at final position
+- Remote users see smooth real-time updates (no artifacts)
+- Bug manifests for BOTH single objects and group objects
+
+**Root Cause Analysis** (Sequential Thinking - 46 total thoughts across 4 sessions):
+
+**FOUR ROOT CAUSES IDENTIFIED** (W5.D5++++):
+
+**Root Cause #1: Delayed Self-Broadcasts Arriving After Drag Ends**:
+   - User drags object for 1 second → 60 `updateObject()` calls (60fps throttled)
+   - Each database write has 50-200ms async latency
+   - User releases mouse → Drag state cleared IMMEDIATELY in `onObjectModified`
+   - BUT: Database broadcasts from DURING drag still in flight for 200-400ms
+   - These delayed broadcasts arrive AFTER drag state is cleared
+   - State→Canvas sync fires for each delayed broadcast → Remove+Add → Snap-back!
+
+**Root Cause #2: Floating-Point Precision Loss Causing False Change Detection**:
+   - `toCanvasObject()` preserves full JavaScript precision: `x = 100.123456789012345`
+   - PostgreSQL DOUBLE PRECISION stores 15 digits: `x = 100.123456789012`
+   - `hasObjectChanged()` uses strict equality: `100.123456789012345 !== 100.123456789012`
+   - ALWAYS returns TRUE for database roundtrips, even for self-broadcasts
+   - Triggers remove+add cycle even when positions are visually identical
+
+**Root Cause #3: Filter Required Selection State (Git Diff - W5.D5+++)** [FIXED, but incomplete]:
+   - Broadcast filter checked: `if (isRecentlyModified && isSelected)`
+   - Required BOTH timestamp AND selection state
+   - User drags → Releases → Deselects (clicks elsewhere)
+   - Delayed broadcasts arrive AFTER deselection
+   - `isRecentlyModified` = TRUE, but `isSelected` = FALSE
+   - Filter fails → Broadcasts applied → Snap-back and frame-by-frame glitching!
+   - **Fix Attempt**: Remove `&& isSelected` - timestamp alone identifies self-broadcasts
+   - **Still Failed**: Time-based window (< 2 seconds) allows old broadcasts through!
+
+**Root Cause #4: Time-Based Filtering Allows Stale Broadcasts (W5.D5++++ - THE REAL FLAW)**:
+   - **Previous Approach**: `if (Date.now() - lastModTime < 2000) return;`
+   - **The Problem**: Timestamp keeps getting OVERWRITTEN during drag!
+   - Timeline:
+     - T=1000ms: Start drag → `lastLocalModification[id] = 1000`
+     - T=1016ms: object:moving → `lastLocalModification[id] = 1016` (OVERWRITE!)
+     - T=1032ms: object:moving → `lastLocalModification[id] = 1032` (OVERWRITE!)
+     - T=2000ms: End drag → `lastLocalModification[id] = 2000` (final)
+     - T=4500ms: OLD broadcast from T=1000ms arrives!
+     - Check: `(4500 - 2000 < 2000)` = `(2500 < 2000)` = FALSE ✗
+     - Filter FAILS → Old position applied → SNAP BACK!
+   - **The Flaw**: Asking "Did I modify this recently?" instead of "Is this data stale?"
+   - **The Fix**: Compare broadcast's `updated_at` timestamp with current state's `updated_at`
+   - **Why It Works**: Database timestamps provide authoritative ordering - reject anything OLDER than current state
+
+**Data Flow (Broken)**:
+```
+User A drags object
+  ↓
+Fabric.js moves object visually (instant, local)
+  ↓
+object:moving event fires (60fps throttled)
+  ↓
+onObjectMoving handler → updateObject(newPosition)
+  ↓
+Zustand state updated (optimistic update)
+  ↓
+Database write to Supabase
+  ↓
+Supabase realtime broadcast to ALL users
+  ↓ [INCLUDING SENDER!]
+User A receives OWN broadcast ❌
+  ↓
+_updateObject called (internal state mutation)
+  ↓
+Zustand state change detected
+  ↓
+State→Canvas sync subscription fires
+  ↓
+CanvasSyncManager: removeObject(id) ← DESTROYS DRAGGING OBJECT!
+  ↓
+CanvasSyncManager: addObject(updatedObj) ← RECREATES OBJECT!
+  ↓
+Fabric.js drag state LOST
+  ↓
+Object appears at wrong position (snap back)
+```
+
+**Complete Four-Part Fix** (W5.D5++++):
+
+**Part 1: Drag State Protection** (✅ IMPLEMENTED - CanvasSyncManager.ts):
+- **Purpose**: Prevent State→Canvas sync from destroying objects DURING drag
+- **Implementation**: `activelyDraggingObjectIds` Set tracks objects being dragged
+- **Logic**:
+  - `onObjectMoving` adds ID to Set
+  - `setupStateToCanvasSync` checks Set before remove+add
+  - If ID in Set → Skip update (Fabric.js owns position during drag)
+  - `onObjectModified` clears ID from Set when drag ends
+- **Why Essential**: Protects from optimistic update triggering State→Canvas sync mid-drag
+- **Files**: `src/lib/sync/CanvasSyncManager.ts:60, 217, 221, 357-360`
+
+**Part 2: Precision-Aware Comparison** (✅ IMPLEMENTED - CanvasSyncManager.ts):
+- **Purpose**: Eliminate false change detection from floating-point precision loss
+- **Implementation**: Round geometric values to 2 decimals before comparison
+- **Logic**: `round(current.x) !== round(prev.x)` instead of `current.x !== prev.x`
+- **Why Essential**: PostgreSQL DOUBLE PRECISION != JavaScript number precision
+- **Files**: `src/lib/sync/CanvasSyncManager.ts:450-457`
+
+**Part 3: _isSyncingFromCanvas Flag** (✅ IMPLEMENTED - CanvasSyncManager.ts):
+- **Purpose**: Prevent circular updates when optimistic updates trigger State→Canvas sync
+- **Implementation**: Flag set during Canvas→Store operations (onObjectMoving, onObjectModified)
+- **Logic**: State→Canvas subscription checks flag and SKIPs if TRUE
+- **Why Essential**: Optimistic updates during drag would trigger State→Canvas sync without this
+- **Files**: `src/lib/sync/CanvasSyncManager.ts:318-320`
+
+**Part 4: Timestamp Comparison Stale Broadcast Filter** (✅ IMPLEMENTED - W5.D5++++ - canvasSlice.ts):
+- **Purpose**: Reject OLD broadcasts that arrive late (> 2 seconds after drag)
+- **Previous Broken Approach**: `if (Date.now() - lastModTime < 2000) return;` (time-based)
+- **Problem**: `lastModTime` gets overwritten during drag, old broadcasts slip through after window expires
+- **New Approach**: Compare broadcast's `updated_at` with current state's `updated_at`
+- **Logic**:
+  ```typescript
+  const broadcastTime = new Date(broadcast.updated_at).getTime();
+  const currentTime = new Date(currentObj.updated_at).getTime();
+  if (broadcastTime <= currentTime) return; // Reject stale data
+  ```
+- **Why It Works**:
+  - Database `updated_at` timestamps provide authoritative ordering
+  - Broadcast older than current state → stale → reject
+  - Broadcast newer than current state → valid update → apply
+  - Works regardless of when broadcast arrives (200ms or 5 seconds later!)
+  - No time windows, no client-side timestamp tracking needed
+- **Files**: `src/stores/slices/canvasSlice.ts:1176-1196`
+
+**Why All Four Are Required**:
+1. **Part 1** protects during drag (Set prevents State→Canvas sync for dragging objects)
+2. **Part 2** prevents false positives from precision loss (rounding eliminates phantom changes)
+3. **Part 3** prevents circular updates (flag prevents optimistic update loop)
+4. **Part 4** rejects stale broadcasts after drag (timestamp comparison filters old data)
+
+Remove any one → Snap-back can return. All four together → Complete, elegant fix.
+
+**Success Criteria**:
+- ✅ No snap-back during drag (Phase 1 prevents self-broadcasts)
+- ✅ No frame-by-frame animation after drag (Phase 1 filters delayed broadcasts)
+- ✅ No precision-triggered updates (Phase 2 eliminates false positives)
+- ✅ Smooth real-time collaboration for all users
+- ✅ Optimistic updates work correctly (no re-renders from self-broadcasts)
+
+**Testing Plan**:
+1. **Single Object Drag**: User A drags rectangle - verify no snap-back, no frame-by-frame animation
+2. **Rapid Repeated Drags**: User A drags quickly back/forth - verify no artifacts during or after
+3. **Group Object Drag**: User A selects 3 objects, drags as group - verify all move smoothly together
+4. **Concurrent Edits**: User A drags object X, User B drags object Y simultaneously - verify both smooth
+5. **Remote Updates During Selection**: User A selects object X, User B moves it - verify User A sees update after 2s cooldown
+6. **Precision Verification**: User A makes small 0.1px movements - verify no snap-back from precision differences
+
+**Lessons Learned**:
+1. **Fix at the Source**: Filter bad updates at source (realtime subscription), not destination (State→Canvas sync)
+2. **Consider Async Timing**: Account for async delays (broadcasts arrive 200-400ms after drag ends)
+3. **Precision Matters**: Round to reasonable precision before comparison/storage (strict equality on floats fails)
+4. **Test with Realistic Latency**: Test with simulated network latency (100-200ms), not just localhost
+5. **Optimistic Updates Must Match**: Optimistic update precision must match database value precision
+
+**Documentation**:
+- **Final Fix**: [W5.D5++++_TIMESTAMP_COMPARISON_FIX.md](../claudedocs/W5.D5++++_TIMESTAMP_COMPARISON_FIX.md) - Architectural timestamp comparison solution (THE FIX)
+- **Selection Bug**: [W5.D5++_FINAL_SNAP_BACK_FIX.md](../claudedocs/W5.D5++_FINAL_SNAP_BACK_FIX.md) - Selection state requirement bug (incomplete fix)
+- **Initial Analysis**: [W5.D5+_SNAP_BACK_ROOT_CAUSE_ANALYSIS.md](../claudedocs/W5.D5+_SNAP_BACK_ROOT_CAUSE_ANALYSIS.md) - TWO root causes, 4-phase solution
+- **Legacy Analysis**: [W5.D5+_SYNC_ARCHITECTURE_FLAW.md](../claudedocs/W5.D5+_SYNC_ARCHITECTURE_FLAW.md) - Original Phase 1 & 2 analysis
 
 ---
 

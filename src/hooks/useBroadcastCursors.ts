@@ -3,34 +3,8 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { throttle } from '../utils/throttle';
+import { generateColorFromId } from '../lib/constants';
 import type { CursorPosition } from '../types/user';
-
-// Vibrant color palette for cursor differentiation
-const CURSOR_COLORS = [
-  '#EF4444', // red
-  '#F59E0B', // amber
-  '#10B981', // green
-  '#3B82F6', // blue
-  '#8B5CF6', // violet
-  '#EC4899', // pink
-  '#06B6D4', // cyan
-  '#F97316', // orange
-  '#84CC16', // lime
-  '#F43F5E', // rose
-];
-
-/**
- * Generate a consistent color from userId using simple hash
- * Same userId will always get the same color
- */
-function generateColorFromId(userId: string): string {
-  let hash = 0;
-  for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % CURSOR_COLORS.length;
-  return CURSOR_COLORS[index];
-}
 
 interface UseBroadcastCursorsReturn {
   cursors: Map<string, CursorPosition>;
@@ -44,8 +18,11 @@ interface UseBroadcastCursorsReturn {
  * - Assigns random color per user (deterministic)
  * - Tracks all remote user cursors
  * - Cleans up on disconnect
+ *
+ * W5.D5.1: Canvas-scoped cursor broadcasts to prevent cross-canvas cursor visibility
+ * @param canvasId - Current canvas ID for channel scoping
  */
-export function useBroadcastCursors(): UseBroadcastCursorsReturn {
+export function useBroadcastCursors(canvasId: string | null): UseBroadcastCursorsReturn {
   const { user } = useAuth();
   const [cursors, setCursors] = useState<Map<string, CursorPosition>>(new Map());
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -83,11 +60,11 @@ export function useBroadcastCursors(): UseBroadcastCursorsReturn {
   );
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !canvasId) return;
 
-    // All users must subscribe to the SAME channel name to see each other's cursors
-    // Use a fixed channel name for the global canvas
-    const channelName = 'canvas-cursors';
+    // W5.D5.1: Canvas-scoped cursor channel to prevent cross-canvas cursor visibility
+    // Pattern matches canvas_objects channel scoping (canvasSlice.ts:802)
+    const channelName = `canvas-cursors-${canvasId}`;
     
     // Configure channel for broadcast
     const channel = supabase.channel(channelName, {
@@ -156,7 +133,7 @@ export function useBroadcastCursors(): UseBroadcastCursorsReturn {
         channelRef.current = null;
       }
     };
-  }, [userId, displayName, userColor]);
+  }, [userId, displayName, userColor, canvasId]);
 
   return {
     cursors,

@@ -11,6 +11,7 @@ import { useCallback } from 'react';
 import type { FabricCanvasManager } from '../lib/fabric/FabricCanvasManager';
 import type { User } from '@supabase/supabase-js';
 import { usePaperboxStore } from '../stores';
+import { GRID_SIZE, GRID_ENABLED } from '../lib/constants';
 
 export interface UseShapeCreationOptions {
   fabricManager: FabricCanvasManager | null;
@@ -71,10 +72,27 @@ export function useShapeCreation({ fabricManager, user }: UseShapeCreationOption
    */
   const createObjectAtPosition = useCallback(
     (type: 'rectangle' | 'circle' | 'text', x: number, y: number, width: number, height: number) => {
-      console.log('[useShapeCreation] createObjectAtPosition:', { type, x, y, width, height });
+      console.log('[useShapeCreation] createObjectAtPosition CALLED:', { 
+        type, 
+        x, 
+        y, 
+        width, 
+        height,
+        fabricManager: !!fabricManager,
+        user: !!user 
+      });
+
+      // SNAP-TO-GRID: Apply grid snapping to placement coordinates
+      if (GRID_ENABLED) {
+        const originalX = x;
+        const originalY = y;
+        x = Math.round(x / GRID_SIZE) * GRID_SIZE;
+        y = Math.round(y / GRID_SIZE) * GRID_SIZE;
+        console.log('[useShapeCreation] Grid snapping applied:', { originalX, originalY, snappedX: x, snappedY: y });
+      }
 
       if (!fabricManager || !user) {
-        console.log('[useShapeCreation] Cannot create object - fabricManager or user is null');
+        console.error('[useShapeCreation] Cannot create object - fabricManager or user is null', { fabricManager: !!fabricManager, user: !!user });
         return;
       }
 

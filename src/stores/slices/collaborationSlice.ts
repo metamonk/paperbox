@@ -1,25 +1,30 @@
 /**
  * Collaboration Slice - Zustand Store
  *
- * Manages real-time collaboration features
- * Part of 6-slice architecture for Phase II
- *
- * Responsibilities:
+ * Manages real-time collaboration features:
  * - User presence tracking (who's online)
- * - Live cursor positions (multiplayer cursors)
  * - Object locks (prevent concurrent edits)
+ * - Selection state broadcasting (show what others are editing)
  * - Awareness state (user names, colors, activities)
  *
- * Integration Points:
- * - Supabase Realtime (W1.D4) for presence broadcast
- * - Supabase Presence API for user tracking
- * - Canvas event sync for cursor positions
+ * Integration:
+ * - Supabase Realtime Presence API for user tracking
+ * - Canvas event sync via CanvasSyncManager
  */
 
 import type { StateCreator } from 'zustand';
 import { supabase } from '../../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { PaperboxStore } from '../index';
+import { perfMonitor } from '../../lib/monitoring/PerformanceMonitor';
+
+/**
+ * Selection state - tracks which objects a user has selected
+ */
+export interface SelectionState {
+  objectIds: string[];
+  updatedAt: number; // For conflict resolution (last-touch-wins)
+}
 
 /**
  * User presence information
@@ -29,12 +34,15 @@ export interface UserPresence {
   userName: string;
   userColor: string; // For cursor and selection highlighting
   isActive: boolean;
-  lastSeen: number; // Timestamp
+  lastSeen: number;
   currentTool?: string;
+  selection?: SelectionState; // Selected objects
+  activelyEditing?: string | null; // Object currently being modified
 }
 
 /**
  * Live cursor position
+ * Note: Cursors are managed by useBroadcastCursors hook, not this slice
  */
 export interface CursorPosition {
   userId: string;
@@ -60,13 +68,11 @@ export interface ObjectLock {
 export interface CollaborationSlice {
   // State
   currentUserId: string | null;
-  presence: Record<string, UserPresence>; // userId -> presence
-  cursors: Record<string, CursorPosition>; // userId -> cursor
-  locks: Record<string, ObjectLock>; // objectId -> lock
+  presence: Record<string, UserPresence>;
+  locks: Record<string, ObjectLock>;
   isOnline: boolean;
   roomId: string | null;
-  presenceChannel: RealtimeChannel | null; // W1.D5: Supabase Presence channel
-  lastCursorBroadcast: number | null; // W1.D6: Timestamp of last cursor broadcast for throttling
+  presenceChannel: RealtimeChannel | null;
 
   // Actions - User presence
   setCurrentUser: (userId: string, userName: string, userColor: string) => void;
@@ -75,11 +81,12 @@ export interface CollaborationSlice {
   setPresenceMap: (presenceMap: Record<string, UserPresence>) => void;
   clearAllPresence: () => void;
 
-  // Actions - Cursor positions
-  updateCursor: (userId: string, x: number, y: number) => void;
-  removeCursor: (userId: string) => void;
-  clearAllCursors: () => void;
-  broadcastCursor: (x: number, y: number) => void; // W1.D6: Broadcast cursor via Presence
+  // Actions - Selection state
+  updateRemoteSelection: (userId: string, selection: SelectionState) => void;
+  clearRemoteSelection: (userId: string) => void;
+  broadcastSelection: (objectIds: string[]) => void;
+  broadcastActivelyEditing: (objectIds: string[] | null) => void;
+  handleSelectionConflict: (remoteUserId: string, remoteSelection: SelectionState) => string[];
 
   // Actions - Object locks
   acquireLock: (objectId: string, userId: string, userName: string) => boolean;
@@ -88,7 +95,7 @@ export interface CollaborationSlice {
   releaseAllLocks: () => void;
   setLocks: (locks: Record<string, ObjectLock>) => void;
 
-  // W1.D7: Async database-level locking
+  // Actions - Database-level locking
   requestLock: (objectId: string) => Promise<boolean>;
   releaseDbLock: (objectId: string) => Promise<void>;
 
@@ -96,26 +103,21 @@ export interface CollaborationSlice {
   setOnline: (isOnline: boolean) => void;
   setRoomId: (roomId: string | null) => void;
 
-  // Supabase Presence (W1.D5)
+  // Supabase Presence
   setupPresenceChannel: (userId: string, userName: string, userColor: string, roomId: string) => void;
   cleanupPresenceChannel: () => void;
 
   // Utilities
   getPresence: (userId: string) => UserPresence | undefined;
-  getCursor: (userId: string) => CursorPosition | undefined;
   getLock: (objectId: string) => ObjectLock | undefined;
   isObjectLocked: (objectId: string) => boolean;
   isObjectLockedByCurrentUser: (objectId: string) => boolean;
   isObjectLockedByOther: (objectId: string) => boolean;
   getActiveUsers: () => UserPresence[];
-  getActiveCursors: () => CursorPosition[];
 }
 
 /**
  * Create collaboration slice
- *
- * NOTE: Full real-time sync will be implemented in W1.D4 (Supabase integration)
- * This provides the state structure and local management
  */
 export const createCollaborationSlice: StateCreator<
   PaperboxStore,
@@ -126,23 +128,17 @@ export const createCollaborationSlice: StateCreator<
   // Initial state
   currentUserId: null,
   presence: {},
-  cursors: {},
   locks: {},
   isOnline: false,
   roomId: null,
   presenceChannel: null,
-  lastCursorBroadcast: null,
 
-  // User presence actions
+  // ─── User Presence Actions ───
 
-  /**
-   * Set current user information
-   */
   setCurrentUser: (userId: string, userName: string, userColor: string) =>
     set(
       (state) => {
         state.currentUserId = userId;
-
         state.presence[userId] = {
           userId,
           userName,
@@ -155,14 +151,10 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/setCurrentUser',
     ),
 
-  /**
-   * Update user presence
-   */
   updatePresence: (userId: string, updates: Partial<UserPresence>) =>
     set(
       (state) => {
         const existing = state.presence[userId];
-
         if (existing) {
           state.presence[userId] = {
             ...existing,
@@ -170,7 +162,6 @@ export const createCollaborationSlice: StateCreator<
             lastSeen: Date.now(),
           };
         } else {
-          // Create new presence if doesn't exist
           state.presence[userId] = {
             userId,
             userName: updates.userName || 'Unknown',
@@ -178,6 +169,8 @@ export const createCollaborationSlice: StateCreator<
             isActive: updates.isActive ?? true,
             lastSeen: Date.now(),
             currentTool: updates.currentTool,
+            selection: updates.selection,
+            activelyEditing: updates.activelyEditing,
           };
         }
       },
@@ -185,9 +178,6 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/updatePresence',
     ),
 
-  /**
-   * Remove user presence
-   */
   removePresence: (userId: string) =>
     set(
       (state) => {
@@ -197,9 +187,6 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/removePresence',
     ),
 
-  /**
-   * Set entire presence map (for initial sync)
-   */
   setPresenceMap: (presenceMap: Record<string, UserPresence>) =>
     set(
       (state) => {
@@ -209,13 +196,9 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/setPresenceMap',
     ),
 
-  /**
-   * Clear all presence (disconnect)
-   */
   clearAllPresence: () =>
     set(
       (state) => {
-        // Keep only current user
         const currentUserId = state.currentUserId;
         if (currentUserId && state.presence[currentUserId]) {
           const currentUser = state.presence[currentUserId];
@@ -228,74 +211,55 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/clearAllPresence',
     ),
 
-  // Cursor position actions
+  // ─── Selection State Actions ───
 
-  /**
-   * Update cursor position for user
-   */
-  updateCursor: (userId: string, x: number, y: number) =>
+  updateRemoteSelection: (userId: string, selection: SelectionState) =>
     set(
       (state) => {
-        state.cursors[userId] = {
-          userId,
-          x,
-          y,
-          timestamp: Date.now(),
-        };
+        if (state.presence[userId]) {
+          state.presence[userId].selection = selection;
+        }
       },
       undefined,
-      'collaboration/updateCursor',
+      'collaboration/updateRemoteSelection',
+    ),
+
+  clearRemoteSelection: (userId: string) =>
+    set(
+      (state) => {
+        if (state.presence[userId]) {
+          state.presence[userId].selection = undefined;
+        }
+      },
+      undefined,
+      'collaboration/clearRemoteSelection',
     ),
 
   /**
-   * Remove cursor
+   * Broadcast local selection to other users via Supabase Presence
+   * Called from CanvasSyncManager when Fabric selection events fire
    */
-  removeCursor: (userId: string) =>
-    set(
-      (state) => {
-        delete state.cursors[userId];
-      },
-      undefined,
-      'collaboration/removeCursor',
-    ),
-
-  /**
-   * Clear all cursors
-   */
-  clearAllCursors: () =>
-    set(
-      (state) => {
-        state.cursors = {};
-      },
-      undefined,
-      'collaboration/clearAllCursors',
-    ),
-
-  /**
-   * Broadcast cursor position via Supabase Presence
-   * W1.D6: Live Cursor Tracking
-   *
-   * Throttled to 60fps (16.67ms) for performance
-   */
-  broadcastCursor: (x: number, y: number) => {
+  broadcastSelection: (objectIds: string[]) => {
     const state = get();
     const channel = state.presenceChannel;
-
-    // Early return if no presence channel
-    if (!channel) return;
-
-    // Throttle to max 60fps (16.67ms)
-    const now = Date.now();
-    const lastBroadcast = state.lastCursorBroadcast;
-
-    // Only throttle if we have a previous broadcast timestamp
-    if (lastBroadcast !== null && now - lastBroadcast < 16.67) return;
-
-    // Get current presence data
     const currentUser = state.presence[state.currentUserId ?? ''];
-    if (!currentUser) return;
 
-    // Broadcast cursor position with full presence data
+    if (!channel || !currentUser) {
+      console.warn('[Collaboration] Cannot broadcast selection - no channel or current user');
+      return;
+    }
+
+    if (channel.state !== 'joined') {
+      console.warn('[Collaboration] Cannot broadcast - channel not ready:', channel.state);
+      return;
+    }
+
+    const now = Date.now();
+    const selectionData = objectIds.length > 0
+      ? { objectIds, updatedAt: now }
+      : undefined;
+
+    // Broadcast selection via Supabase Presence
     channel.track({
       userId: currentUser.userId,
       userName: currentUser.userName,
@@ -303,39 +267,105 @@ export const createCollaborationSlice: StateCreator<
       isActive: true,
       lastSeen: now,
       currentTool: currentUser.currentTool,
-      cursor: {
-        x,
-        y,
-        timestamp: now,
-      },
+      selection: selectionData,
     });
 
-    // Update lastCursorBroadcast timestamp
+    // Update local presence state
     set(
       (state) => {
-        state.lastCursorBroadcast = now;
+        if (state.presence[state.currentUserId ?? '']) {
+          state.presence[state.currentUserId ?? ''].selection = selectionData;
+        }
       },
       undefined,
-      'collaboration/broadcastCursor',
+      'collaboration/broadcastSelection',
     );
   },
 
-  // Object lock actions
+  /**
+   * Handle selection conflict when another user selects objects we have selected
+   * Uses last-touch-wins strategy based on timestamps
+   * 
+   * @returns Array of object IDs to deselect (conflicts where they win)
+   */
+  handleSelectionConflict: (_remoteUserId: string, remoteSelection: SelectionState) => {
+    const state = get();
+    const currentUserId = state.currentUserId;
+
+    if (!currentUserId) return [];
+
+    const myPresence = state.presence[currentUserId];
+    if (!myPresence?.selection) return [];
+
+    const mySelection = myPresence.selection;
+    const conflicts = mySelection.objectIds.filter((id) => 
+      remoteSelection.objectIds.includes(id)
+    );
+
+    if (conflicts.length === 0) return [];
+
+    // Last-touch-wins: If their selection is newer, we lose those objects
+    if (remoteSelection.updatedAt > mySelection.updatedAt) {
+      console.log('[Collaboration] Selection conflict - they win:', {
+        conflicts,
+        myTime: new Date(mySelection.updatedAt).toISOString(),
+        theirTime: new Date(remoteSelection.updatedAt).toISOString(),
+      });
+      return conflicts;
+    }
+
+    return []; // We win
+  },
+
+  /**
+   * Broadcast "actively editing" state during object manipulation
+   * Shows other users which objects are currently being moved/modified
+   */
+  broadcastActivelyEditing: (objectIds: string[] | null) => {
+    const state = get();
+    const channel = state.presenceChannel;
+    const currentUser = state.presence[state.currentUserId ?? ''];
+
+    if (!channel || !currentUser) return;
+
+    const activelyEditing = objectIds && objectIds.length > 0 ? objectIds[0] : null;
+
+    channel.track({
+      userId: currentUser.userId,
+      userName: currentUser.userName,
+      userColor: currentUser.userColor,
+      isActive: true,
+      lastSeen: Date.now(),
+      currentTool: currentUser.currentTool,
+      selection: currentUser.selection,
+      activelyEditing,
+    });
+
+    set(
+      (state) => {
+        if (state.presence[state.currentUserId ?? '']) {
+          state.presence[state.currentUserId ?? ''].activelyEditing = activelyEditing;
+        }
+      },
+      undefined,
+      'collaboration/broadcastActivelyEditing',
+    );
+  },
+
+  // ─── Object Lock Actions ───
 
   /**
    * Acquire lock on object
-   * Returns true if lock acquired, false if already locked by another user
+   * @returns true if lock acquired, false if already locked by another user
    */
   acquireLock: (objectId: string, userId: string, userName: string) => {
     const state = get();
-
-    // Check if already locked by another user
     const existingLock = state.locks[objectId];
+    
     if (existingLock && existingLock.userId !== userId) {
       return false;
     }
 
-    // Acquire or refresh lock
     set(
       (draft) => {
         draft.locks[objectId] = {
@@ -343,7 +373,7 @@ export const createCollaborationSlice: StateCreator<
           userId,
           userName,
           acquiredAt: Date.now(),
-          expiresAt: Date.now() + 30000, // 30 second expiry (will be refreshed)
+          expiresAt: Date.now() + 30000, // 30 second expiry
         };
       },
       undefined,
@@ -353,9 +383,6 @@ export const createCollaborationSlice: StateCreator<
     return true;
   },
 
-  /**
-   * Release lock on object
-   */
   releaseLock: (objectId: string) =>
     set(
       (state) => {
@@ -365,9 +392,6 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/releaseLock',
     ),
 
-  /**
-   * Release all locks held by user (on disconnect)
-   */
   releaseLockByUser: (userId: string) =>
     set(
       (state) => {
@@ -381,9 +405,6 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/releaseLockByUser',
     ),
 
-  /**
-   * Release all locks (emergency cleanup)
-   */
   releaseAllLocks: () =>
     set(
       (state) => {
@@ -393,9 +414,6 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/releaseAllLocks',
     ),
 
-  /**
-   * Set locks map (for sync)
-   */
   setLocks: (locks: Record<string, ObjectLock>) =>
     set(
       (state) => {
@@ -405,22 +423,23 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/setLocks',
     ),
 
-  // W1.D7: Async database-level locking
+  // ─── Database-Level Locking ───
 
   /**
-   * Request lock on object (database-level optimistic locking)
-   * Returns true if lock acquired, false if already locked by another user
+   * Request database-level lock on object (optimistic locking)
+   * @returns true if lock acquired, false if already locked
    */
   requestLock: async (objectId: string) => {
+    const stopTimer = perfMonitor.startTimer('lock_acquisition');
     const userId = get().currentUserId;
     const userName = get().presence[userId ?? '']?.userName ?? 'Unknown';
 
     if (!userId) {
-      return false; // No current user
+      stopTimer();
+      return false;
     }
 
     try {
-      // Optimistic lock: Only update if not currently locked
       const { data, error } = await supabase
         .from('canvas_objects')
         .update({
@@ -428,44 +447,45 @@ export const createCollaborationSlice: StateCreator<
           lock_acquired_at: new Date().toISOString(),
         })
         .eq('id', objectId)
-        .is('locked_by', null) // Critical: Only lock if unlocked
+        .is('locked_by', null) // Only lock if unlocked
         .select()
         .single();
 
       if (error || !data) {
-        // Lock failed - object already locked by someone else
+        stopTimer();
         return false;
       }
 
-      // Update local state
       get().acquireLock(objectId, userId, userName);
-
+      stopTimer();
       return true;
     } catch (error) {
-      console.error('Failed to acquire database lock:', error);
+      console.error('[Collaboration] Failed to acquire database lock:', error);
+      stopTimer();
       return false;
     }
   },
 
   /**
-   * Release lock on object (database-level)
+   * Release database-level lock on object
    * Only releases if current user owns the lock
    */
   releaseDbLock: async (objectId: string) => {
+    const stopTimer = perfMonitor.startTimer('lock_release');
     const userId = get().currentUserId;
 
     if (!userId) {
-      return; // No current user
+      stopTimer();
+      return;
     }
 
-    // Check if we own the lock locally before attempting database release
     const existingLock = get().locks[objectId];
     if (!existingLock || existingLock.userId !== userId) {
-      return; // Don't own the lock, nothing to release
+      stopTimer();
+      return;
     }
 
     try {
-      // Release lock in database (only succeeds if we own it)
       const { error } = await supabase
         .from('canvas_objects')
         .update({
@@ -476,19 +496,18 @@ export const createCollaborationSlice: StateCreator<
         .eq('locked_by', userId);
 
       if (!error) {
-        // Update local state
         get().releaseLock(objectId);
       }
+
+      stopTimer();
     } catch (error) {
-      console.error('Failed to release database lock:', error);
+      console.error('[Collaboration] Failed to release database lock:', error);
+      stopTimer();
     }
   },
 
-  // Connection state actions
+  // ─── Connection State Actions ───
 
-  /**
-   * Set online status
-   */
   setOnline: (isOnline: boolean) =>
     set(
       (state) => {
@@ -498,9 +517,6 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/setOnline',
     ),
 
-  /**
-   * Set room ID (canvas session)
-   */
   setRoomId: (roomId: string | null) =>
     set(
       (state) => {
@@ -510,81 +526,36 @@ export const createCollaborationSlice: StateCreator<
       'collaboration/setRoomId',
     ),
 
-  // Utility functions
+  // ─── Supabase Presence Channel ───
 
   /**
-   * Get presence for user
-   */
-  getPresence: (userId: string) => {
-    return get().presence[userId];
-  },
-
-  /**
-   * Get cursor for user
-   */
-  getCursor: (userId: string) => {
-    return get().cursors[userId];
-  },
-
-  /**
-   * Get lock for object
-   */
-  getLock: (objectId: string) => {
-    return get().locks[objectId];
-  },
-
-  /**
-   * Check if object is locked
-   */
-  isObjectLocked: (objectId: string) => {
-    return !!get().locks[objectId];
-  },
-
-  /**
-   * Check if object is locked by current user
-   */
-  isObjectLockedByCurrentUser: (objectId: string) => {
-    const state = get();
-    const lock = state.locks[objectId];
-    return lock?.userId === state.currentUserId;
-  },
-
-  /**
-   * Check if object is locked by another user
-   */
-  isObjectLockedByOther: (objectId: string) => {
-    const state = get();
-    const lock = state.locks[objectId];
-    return !!lock && lock.userId !== state.currentUserId;
-  },
-
-  /**
-   * Get all active users
-   */
-  getActiveUsers: () => {
-    return Object.values(get().presence).filter((p) => p.isActive);
-  },
-
-  /**
-   * Get all active cursors
-   */
-  getActiveCursors: () => {
-    return Object.values(get().cursors);
-  },
-
-  // ─── Supabase Presence (W1.D5) ───
-
-  /**
-   * W1.D5: Setup Supabase Presence channel for real-time user tracking
-   *
-   * Creates a presence channel, tracks current user, and subscribes to presence events
+   * Setup Supabase Presence channel for real-time collaboration
+   * Creates channel, tracks current user, and subscribes to presence events
    */
   setupPresenceChannel: (userId: string, userName: string, userColor: string, roomId: string) => {
-    // Cleanup existing channel first
+    // Cleanup existing channel
     get().cleanupPresenceChannel();
 
+    // Add current user to presence map immediately
+    // This ensures broadcast functions work before Supabase sync completes
+    const now = Date.now();
+    set(
+      (state) => {
+        state.presence[userId] = {
+          userId,
+          userName,
+          userColor,
+          isActive: true,
+          lastSeen: now,
+        };
+      },
+      undefined,
+      'collaboration/addCurrentUserToPresence'
+    );
+
     // Create presence channel for the room
-    const channel = supabase.channel(`presence-${roomId}`, {
+    const channelName = `presence-${roomId}`;
+    const channel = supabase.channel(channelName, {
       config: {
         presence: {
           key: userId,
@@ -598,20 +569,16 @@ export const createCollaborationSlice: StateCreator<
       userName,
       userColor,
       isActive: true,
-      lastSeen: Date.now(),
+      lastSeen: now,
     });
 
     // Subscribe to presence events
     channel
       .on('presence', { event: 'sync' }, () => {
-        // Sync event - update entire presence map
         const presenceState = channel.presenceState();
         const presenceMap: Record<string, UserPresence> = {};
-        const cursorsMap: Record<string, CursorPosition> = {};
 
-        // Convert Supabase presence format to our format
         Object.entries(presenceState).forEach(([key, presences]) => {
-          // Supabase stores array of presences per key, take first one
           const presence = (presences as any[])[0];
           if (presence) {
             presenceMap[key] = {
@@ -621,33 +588,15 @@ export const createCollaborationSlice: StateCreator<
               isActive: presence.isActive ?? true,
               lastSeen: presence.lastSeen ?? Date.now(),
               currentTool: presence.currentTool,
+              selection: presence.selection,
+              activelyEditing: presence.activelyEditing,
             };
-
-            // W1.D6: Extract cursor data if present
-            if (presence.cursor) {
-              cursorsMap[key] = {
-                userId: presence.userId,
-                x: presence.cursor.x,
-                y: presence.cursor.y,
-                timestamp: presence.cursor.timestamp,
-              };
-            }
           }
         });
 
         get().setPresenceMap(presenceMap);
-
-        // W1.D6: Update cursors map
-        set(
-          (state) => {
-            state.cursors = cursorsMap;
-          },
-          undefined,
-          'collaboration/syncCursors',
-        );
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        // User joined - add to presence
         const presence = (newPresences as any[])[0];
         if (presence) {
           get().updatePresence(key, {
@@ -656,22 +605,27 @@ export const createCollaborationSlice: StateCreator<
             userColor: presence.userColor,
             isActive: presence.isActive ?? true,
             currentTool: presence.currentTool,
+            selection: presence.selection,
+            activelyEditing: presence.activelyEditing,
           });
         }
       })
       .on('presence', { event: 'leave' }, ({ key }) => {
-        // User left - remove from presence
         get().removePresence(key);
       })
-      .subscribe();
-
-    set({ presenceChannel: channel }, undefined, 'collaboration/setupPresence');
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // Set channel in store only after successful subscription
+          set({ presenceChannel: channel }, undefined, 'collaboration/setupPresence');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('[Collaboration] Channel subscription failed:', status);
+          set({ presenceChannel: null }, undefined, 'collaboration/setupPresenceError');
+        }
+      });
   },
 
   /**
-   * W1.D5: Cleanup Supabase Presence channel
-   *
-   * Untracks current user and unsubscribes from channel
+   * Cleanup Supabase Presence channel
    */
   cleanupPresenceChannel: () => {
     const channel = get().presenceChannel;
@@ -680,5 +634,35 @@ export const createCollaborationSlice: StateCreator<
       channel.unsubscribe();
       set({ presenceChannel: null }, undefined, 'collaboration/cleanupPresence');
     }
+  },
+
+  // ─── Utility Functions ───
+
+  getPresence: (userId: string) => {
+    return get().presence[userId];
+  },
+
+  getLock: (objectId: string) => {
+    return get().locks[objectId];
+  },
+
+  isObjectLocked: (objectId: string) => {
+    return !!get().locks[objectId];
+  },
+
+  isObjectLockedByCurrentUser: (objectId: string) => {
+    const state = get();
+    const lock = state.locks[objectId];
+    return lock?.userId === state.currentUserId;
+  },
+
+  isObjectLockedByOther: (objectId: string) => {
+    const state = get();
+    const lock = state.locks[objectId];
+    return !!lock && lock.userId !== state.currentUserId;
+  },
+
+  getActiveUsers: () => {
+    return Object.values(get().presence).filter((p) => p.isActive);
   },
 });

@@ -23,6 +23,7 @@ import { useState } from 'react';
 import { ColorProperty } from './ColorProperty';
 import { PositionProperty } from './PositionProperty';
 import { SizeProperty } from './SizeProperty';
+import { TextProperty } from './TextProperty';
 
 export function PropertyPanel() {
   // Split selectors to avoid creating new objects on every render
@@ -38,6 +39,7 @@ export function PropertyPanel() {
   // Collapsible section states
   const [positionOpen, setPositionOpen] = useState(true);
   const [sizeOpen, setSizeOpen] = useState(true);
+  const [textOpen, setTextOpen] = useState(true);
   const [styleOpen, setStyleOpen] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -114,6 +116,33 @@ export function PropertyPanel() {
             <SizeProperty object={activeObject} />
           </CollapsibleContent>
         </Collapsible>
+
+        {/* Text Formatting (W6.D2: Only for text objects) */}
+        {activeObject.type === 'text' && (
+          <Collapsible open={textOpen} onOpenChange={setTextOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                className="w-full justify-between p-2 h-auto font-medium text-sm"
+              >
+                Text Formatting
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${
+                    textOpen ? 'transform rotate-180' : ''
+                  }`}
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <TextProperty
+                object={activeObject}
+                onChange={(updates) => {
+                  updateObject(activeObject.id, updates);
+                }}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
 
         {/* Style */}
         <Collapsible open={styleOpen} onOpenChange={setStyleOpen}>

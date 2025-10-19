@@ -10,6 +10,7 @@
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -37,9 +38,7 @@ export function Sidebar({ isOpen, onClose, children }: SidebarProps) {
         className="md:hidden absolute top-3 right-3 z-10"
         aria-label="Close sidebar"
       >
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
+        <X className="h-5 w-5" />
       </Button>
 
       {/* Dynamic content (UserList or ToolsSidebar) */}

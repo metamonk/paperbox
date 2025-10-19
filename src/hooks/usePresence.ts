@@ -10,32 +10,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { throttle } from '../utils/throttle';
-
-// Reuse same color palette as cursors for consistency
-const USER_COLORS = [
-  '#EF4444', // red
-  '#F59E0B', // amber
-  '#10B981', // green
-  '#3B82F6', // blue
-  '#8B5CF6', // violet
-  '#EC4899', // pink
-  '#06B6D4', // cyan
-  '#F97316', // orange
-  '#84CC16', // lime
-  '#F43F5E', // rose
-];
-
-/**
- * Generate a consistent color from userId (same logic as cursors)
- */
-function generateColorFromId(userId: string): string {
-  let hash = 0;
-  for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % USER_COLORS.length;
-  return USER_COLORS[index];
-}
+import { generateColorFromId } from '../lib/constants';
 
 export interface PresenceUser {
   id: string;
@@ -57,12 +32,15 @@ const IDLE_CHECK_INTERVAL = 30 * 1000; // Check every 30 seconds
 
 /**
  * Custom hook for presence tracking and idle detection
- * - Uses Supabase Broadcast presence feature on dedicated channel
+ * - Uses Supabase Broadcast presence feature on canvas-scoped channel
  * - Tracks online users with activity status
  * - Detects idle users (2 minutes of inactivity)
  * - Throttles activity updates to once per 5 seconds
+ *
+ * W5.D5.1: Canvas-scoped presence to prevent cross-canvas cursor visibility
+ * @param canvasId - Current canvas ID for channel scoping
  */
-export function usePresence(): UsePresenceReturn {
+export function usePresence(canvasId: string | null): UsePresenceReturn {
   const { user } = useAuth();
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -116,10 +94,11 @@ export function usePresence(): UsePresenceReturn {
   }, []);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !canvasId) return;
 
-    // Use a dedicated channel for presence (separate from cursors)
-    const channelName = 'canvas-presence';
+    // W5.D5.1: Canvas-scoped presence channel to prevent cross-canvas cursor visibility
+    // Pattern matches canvas_objects channel scoping (canvasSlice.ts:802)
+    const channelName = `canvas-presence-${canvasId}`;
 
     // Create channel with presence configuration
     const channel = supabase.channel(channelName, {
@@ -227,7 +206,7 @@ export function usePresence(): UsePresenceReturn {
         channelRef.current = null;
       }
     };
-  }, [userId, displayName, userColor, checkIdleStatus]);
+  }, [userId, displayName, userColor, checkIdleStatus, canvasId]);
 
   return {
     onlineUsers,

@@ -1,135 +1,70 @@
-import { PresenceBadge } from '../collaboration/PresenceBadge';
-import { CanvasPicker } from '../canvas/CanvasPicker';
-import { CanvasManagementModal } from '../canvas/CanvasManagementModal';
-import { useState } from 'react';
-import { Settings } from 'lucide-react';
+import { PresencePopover } from '../collaboration/PresencePopover';
+import { ThemeToggle } from './ThemeToggle';
+import { Logo } from '@/components/ui/Logo';
+import { useNavigate } from 'react-router-dom';
+import { LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { usePaperboxStore } from '@/stores';
-import type { Canvas } from '@/types/canvas';
+import type { PresenceUser } from '@/hooks/usePresence';
 
 interface HeaderProps {
-  userCount: number;
+  onlineUsers: PresenceUser[];
+  currentUserId: string;
   onSignOut: () => void;
   userName: string;
-  sidebarOpen: boolean;
-  sidebarContent: 'users' | 'tools' | 'properties' | 'layers';
-  onToggleTools: () => void;
-  onToggleUsers: () => void;
-  onToggleProperties: () => void;
-  onToggleLayers: () => void;
 }
 
 /**
  * Header component displays the top navigation bar
- * - W5.D3: Canvas picker prominently placed like Figma (top-left)
- * - App title, tools button, and presence badge
+ * - Logo and app title
+ * - Browse all canvases button
+ * - Presence popover
  * - User info and sign out button on the right
  */
-export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarContent, onToggleTools, onToggleUsers, onToggleProperties, onToggleLayers }: HeaderProps) {
-  // W5.D3: Canvas management modal state
-  const [managementModalOpen, setManagementModalOpen] = useState(false);
-  const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
-  const canvases = usePaperboxStore((state) => state.canvases);
-  const activeCanvas = canvases.find((c: Canvas) => c.id === activeCanvasId);
+export function Header({ onlineUsers, currentUserId, onSignOut, userName }: HeaderProps) {
+  const navigate = useNavigate();
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 px-4 md:px-6 flex items-center justify-between gap-4">
-      {/* Left side: Canvas Picker (Figma-style) + Tools + Presence */}
+    <header className="h-14 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between gap-4">
+      {/* Left side: Logo + Browse Canvases */}
       <div className="flex items-center gap-3">
-        {/* W5.D3: Canvas Picker - prominently placed like Figma */}
         <div className="flex items-center gap-2">
-          <CanvasPicker />
-          {/* Settings icon to open canvas management modal */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setManagementModalOpen(true)}
-            disabled={!activeCanvas}
-            title="Canvas settings"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          <Logo size={32} />
+          <h1 className="text-xl font-bold text-foreground hidden md:block">
+            Paperbox
+          </h1>
         </div>
 
-        <div className="h-6 w-px bg-gray-300" /> {/* Separator */}
+        <div className="h-6 w-px bg-border" /> {/* Separator */}
 
-        <h1 className="text-xl font-bold text-gray-900 hidden md:block">
-          CollabCanvas
-        </h1>
-
-        {/* Tools button */}
-        <button
-          onClick={onToggleTools}
-          className={`
-            px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-            ${sidebarOpen && sidebarContent === 'tools'
-              ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300 ring-offset-1'
-              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-            }
-          `}
-          aria-label="Toggle tools sidebar"
+        {/* Browse all canvases button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 cursor-pointer"
+          onClick={() => navigate('/canvases')}
+          title="Browse all canvases"
         >
-          🎨 <span className="hidden sm:inline">Tools</span>
-        </button>
-
-        {/* Properties button */}
-        <button
-          onClick={onToggleProperties}
-          className={`
-            px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-            ${sidebarOpen && sidebarContent === 'properties'
-              ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300 ring-offset-1'
-              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-            }
-          `}
-          aria-label="Toggle properties sidebar"
-        >
-          ⚙️ <span className="hidden sm:inline">Properties</span>
-        </button>
-
-        {/* Layers button */}
-        <button
-          onClick={onToggleLayers}
-          className={`
-            px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-            ${sidebarOpen && sidebarContent === 'layers'
-              ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300 ring-offset-1'
-              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-            }
-          `}
-          aria-label="Toggle layers sidebar"
-        >
-          📊 <span className="hidden sm:inline">Layers</span>
-        </button>
-
-        {/* Clickable presence badge for users sidebar */}
-        <PresenceBadge
-          count={userCount}
-          onClick={onToggleUsers}
-          isActive={sidebarOpen && sidebarContent === 'users'}
-        />
+          <LayoutGrid className="h-4 w-4" />
+        </Button>
       </div>
 
       {/* Right side: User actions */}
       <div className="flex items-center gap-3">
-        <div className="text-sm text-gray-700 hidden sm:block">
-          <span className="font-medium">{userName}</span>
+        {/* Presence Popover */}
+        <PresencePopover users={onlineUsers} currentUserId={currentUserId} />
+        <div className="text-sm text-muted-foreground hidden sm:block">
+          <span className="font-medium text-foreground">{userName}</span>
         </div>
-        <button
+        <ThemeToggle />
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onSignOut}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+          className="cursor-pointer"
         >
           Sign Out
-        </button>
+        </Button>
       </div>
-
-      {/* W5.D3: Canvas Management Modal */}
-      <CanvasManagementModal
-        canvas={activeCanvas || null}
-        open={managementModalOpen}
-        onOpenChange={setManagementModalOpen}
-      />
     </header>
   );
 }

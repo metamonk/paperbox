@@ -16,6 +16,10 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
+import { enableMapSet } from 'immer';
+
+// W5.D5+ Canvas Sharing: Enable Immer MapSet plugin for Map<string, CanvasPermission>
+enableMapSet();
 
 import { createCanvasSlice, type CanvasSlice } from './slices/canvasSlice';
 import { createSelectionSlice, type SelectionSlice } from './slices/selectionSlice';

@@ -1,37 +1,54 @@
 import { memo } from 'react';
 import type { CursorPosition } from '../../types/user';
-import { canvasToScreen } from '../../utils/canvas-helpers';
+import type { FabricCanvasManager } from '../../lib/fabric/FabricCanvasManager';
 
 interface CursorOverlayProps {
   cursors: Map<string, CursorPosition>;
-  scale: number;
-  stagePosition: { x: number; y: number };
+  fabricManager: FabricCanvasManager | null;
 }
 
 /**
  * Renders remote user cursors on top of the canvas
- * W2.D9: Optimized with React.memo to prevent unnecessary re-renders
+ * 
+ * CRITICAL: Uses Fabric's viewport transform to position cursors
+ * - Receives cursor positions in canvas-absolute coordinates (x, y)
+ * - Transforms to viewport coordinates using viewer's zoom/pan
+ * - This allows each user to see cursors at correct position regardless of their own viewport
  *
- * - Transforms canvas coordinates to screen coordinates
- * - Displays colored cursor with user's name
- * - Smooth CSS transitions for cursor movement
+ * Formula: viewportX = (canvasX * zoom) + panX
  *
  * Performance: Memoized to avoid re-renders when parent updates
  * but cursor positions haven't changed
  */
-function CursorOverlayComponent({ cursors, scale, stagePosition }: CursorOverlayProps) {
+function CursorOverlayComponent({ cursors, fabricManager }: CursorOverlayProps) {
+  const canvas = fabricManager?.getCanvas();
+  
+  if (!canvas) {
+    return null;
+  }
+
+  // Get viewer's viewport transform
+  const vpt = canvas.viewportTransform;
+  const zoom = canvas.getZoom();
+
   return (
-    <div className="absolute inset-0 pointer-events-none z-50">
+    <div 
+      className="absolute inset-0 pointer-events-none z-50"
+    >
       {Array.from(cursors.values()).map((cursor) => {
-        // Transform canvas coordinates to screen coordinates
-        const screenPos = canvasToScreen(cursor.x, cursor.y, scale, stagePosition);
+        // Transform canvas coordinates to viewport coordinates using viewer's transform
+        // Formula: viewportX = (canvasX * zoom) + panX
+        const viewportX = (cursor.x * zoom) + vpt[4];
+        const viewportY = (cursor.y * zoom) + vpt[5];
 
         return (
           <div
             key={cursor.userId}
-            className="absolute transition-transform duration-100 ease-out"
+            className="absolute"
             style={{
-              transform: `translate(${screenPos.x}px, ${screenPos.y}px)`,
+              left: `${viewportX}px`,
+              top: `${viewportY}px`,
+              transition: 'left 100ms ease-out, top 100ms ease-out',
             }}
           >
             {/* SVG Cursor - Classic Pointer */}
@@ -73,16 +90,11 @@ function CursorOverlayComponent({ cursors, scale, stagePosition }: CursorOverlay
 
 /**
  * Memoized CursorOverlay with custom comparison
- * Prevents re-renders when cursor Map reference changes but content is the same
+ * Only re-render when cursor positions actually change
  */
 export const CursorOverlay = memo(CursorOverlayComponent, (prevProps, nextProps) => {
   // Check if cursors Map has same entries
   if (prevProps.cursors.size !== nextProps.cursors.size) return false;
-
-  // Check if scale and position unchanged
-  if (prevProps.scale !== nextProps.scale) return false;
-  if (prevProps.stagePosition.x !== nextProps.stagePosition.x) return false;
-  if (prevProps.stagePosition.y !== nextProps.stagePosition.y) return false;
 
   // Check if cursor positions changed (shallow comparison)
   for (const [userId, cursor] of prevProps.cursors.entries()) {
