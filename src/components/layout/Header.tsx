@@ -1,7 +1,6 @@
 import { PresencePopover } from '../collaboration/PresencePopover';
 import { ThemeToggle } from './ThemeToggle';
-import { useNavigate } from 'react-router-dom';
-import { LayoutGrid } from 'lucide-react';
+import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/button';
 import type { PresenceUser } from '@/hooks/usePresence';
 
@@ -14,28 +13,17 @@ interface HeaderProps {
 
 /**
  * Header component displays the top navigation bar
- * - Clickable grid icon to browse canvases
- * - App title
+ * - Logo and app title
  * - Presence popover
  * - User info and sign out button on the right
  */
 export function Header({ onlineUsers, currentUserId, onSignOut, userName }: HeaderProps) {
-  const navigate = useNavigate();
-
   return (
     <header className="h-14 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between gap-4">
-      {/* Left side: Grid icon + Title */}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 cursor-pointer"
-          onClick={() => navigate('/canvases')}
-          title="Browse all canvases"
-        >
-          <LayoutGrid className="h-5 w-5" />
-        </Button>
-        <h1 className="text-xl font-bold text-foreground">
+      {/* Left side: Logo + Title */}
+      <div className="flex items-center gap-2">
+        <Logo size={32} />
+        <h1 className="text-xl font-bold text-foreground hidden md:block">
           Paperbox
         </h1>
       </div>

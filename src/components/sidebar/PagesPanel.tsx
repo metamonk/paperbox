@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePaperboxStore } from '@/stores';
 import { Button } from '@/components/ui/button';
-import { Plus, FileText, Settings, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, FileText, LayoutGrid, Settings, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CanvasManagementModal } from '../canvas/CanvasManagementModal';
 import type { Canvas } from '@/types/canvas';
@@ -56,7 +56,7 @@ export function PagesPanel() {
               onClick={handleBrowseAll}
               title="Browse all canvases"
             >
-              <FileText className="h-3.5 w-3.5" />
+              <LayoutGrid className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
