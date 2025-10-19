@@ -5,6 +5,7 @@
 
 import { usePaperboxStore } from '../../stores';
 import type { CanvasContext } from '../../types/ai';
+import { fabricToCenter } from '../fabric/coordinateTranslation';
 
 /**
  * Get current canvas context for AI
@@ -41,14 +42,18 @@ export function getCanvasContext(): CanvasContext | null {
   const canvasWidth = 8000;
   const canvasHeight = 8000;
 
+  // CRITICAL: viewport.panX and viewport.panY are in Fabric.js coordinates (0-8000, top-left origin)
+  // We need to convert them to center-origin coordinates (-4000 to +4000, center origin)
+  const panCenterOrigin = fabricToCenter(viewport.panX, viewport.panY);
+
   // Calculate viewport center (where the user is currently looking)
   // This is the center of the visible area based on pan position
-  // Note: panX and panY represent the top-left corner of the viewport in canvas coordinates
+  // Note: panX and panY represent the top-left corner of the viewport
   // We estimate viewport dimensions as ~1200x800 at 100% zoom (typical screen size)
   const estimatedViewportWidth = 1200 / viewport.zoom;
   const estimatedViewportHeight = 800 / viewport.zoom;
-  const viewportCenterX = viewport.panX + estimatedViewportWidth / 2;
-  const viewportCenterY = viewport.panY + estimatedViewportHeight / 2;
+  const viewportCenterX = panCenterOrigin.x + estimatedViewportWidth / 2;
+  const viewportCenterY = panCenterOrigin.y + estimatedViewportHeight / 2;
 
   // Get selected objects
   const selectedIds = store.selectedIds;
@@ -97,14 +102,18 @@ export function getCanvasContextForUser(
   const canvasWidth = 8000;
   const canvasHeight = 8000;
 
+  // CRITICAL: viewport.panX and viewport.panY are in Fabric.js coordinates (0-8000, top-left origin)
+  // We need to convert them to center-origin coordinates (-4000 to +4000, center origin)
+  const panCenterOrigin = fabricToCenter(viewport.panX, viewport.panY);
+
   // Calculate viewport center (where the user is currently looking)
   // This is the center of the visible area based on pan position
-  // Note: panX and panY represent the top-left corner of the viewport in canvas coordinates
+  // Note: panX and panY represent the top-left corner of the viewport
   // We estimate viewport dimensions as ~1200x800 at 100% zoom (typical screen size)
   const estimatedViewportWidth = 1200 / viewport.zoom;
   const estimatedViewportHeight = 800 / viewport.zoom;
-  const viewportCenterX = viewport.panX + estimatedViewportWidth / 2;
-  const viewportCenterY = viewport.panY + estimatedViewportHeight / 2;
+  const viewportCenterX = panCenterOrigin.x + estimatedViewportWidth / 2;
+  const viewportCenterY = panCenterOrigin.y + estimatedViewportHeight / 2;
 
   // Get selected objects
   const selectedIds = storeState.selectedIds;
