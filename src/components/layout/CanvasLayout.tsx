@@ -22,7 +22,7 @@ export function CanvasLayout({ leftSidebar, rightSidebar, children }: CanvasLayo
   const [rightOpen, setRightOpen] = useState(true);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-1 overflow-hidden">
       {/* Left Sidebar - Pages + Layers */}
       <aside
         className={cn(

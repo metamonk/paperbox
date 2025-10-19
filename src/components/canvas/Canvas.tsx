@@ -16,15 +16,12 @@ import { usePresence } from '../../hooks/usePresence';
 import { useCollaborativeOverlays } from '../../hooks/useCollaborativeOverlays';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
-import { useSidebarState } from '../../hooks/useSidebarState';
 import { useKeyboard } from '../../hooks/useKeyboard';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
 // TEMP DISABLED: import { RemoteSelectionOverlay } from '../collaboration/RemoteSelectionOverlay';
-import { UsersPanel } from '../collaboration/UsersPanel';
 import { Header } from '../layout/Header';
 import { CanvasLayout } from '../layout/CanvasLayout';
 import { LeftSidebar } from '../sidebar/LeftSidebar';
-import { Sidebar } from '../layout/Sidebar';
 import { BottomToolbar } from '../toolbar/BottomToolbar';
 import { PropertyPanel } from '../properties/PropertyPanel';
 import { CanvasLoadingOverlay } from './CanvasLoadingOverlay';
@@ -76,9 +73,6 @@ export function Canvas() {
 
   // Shape creation logic
   const { handleAddShape, createObjectAtPosition } = useShapeCreation({ fabricManager, user });
-
-  // Sidebar state management (only Users sidebar used - others are in fixed CanvasLayout)
-  const { sidebarOpen, sidebarContent, handleToggleUsers } = useSidebarState();
 
   // Zustand store for accessing canvas state
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
@@ -239,12 +233,10 @@ export function Canvas() {
   return (
     <div className="flex flex-col h-screen bg-background">
       <Header
-        userCount={onlineUsers.length}
+        onlineUsers={onlineUsers}
+        currentUserId={currentUserId}
         onSignOut={() => signOut()}
         userName={user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User'}
-        sidebarOpen={sidebarOpen}
-        sidebarContent={sidebarContent}
-        onToggleUsers={handleToggleUsers}
       />
 
       <CanvasLayout
@@ -339,25 +331,6 @@ export function Canvas() {
             />
           )}
         </div>
-
-        {/* Backdrop for mobile sidebar overlay (users only) */}
-        {sidebarOpen && sidebarContent === 'users' && (
-          <div
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={handleToggleUsers}
-            aria-hidden="true"
-          />
-        )}
-
-        {/* Mobile overlay sidebar for users only */}
-        {sidebarContent === 'users' && (
-          <Sidebar
-            isOpen={sidebarOpen}
-            onClose={handleToggleUsers}
-          >
-            <UsersPanel users={onlineUsers} currentUserId={currentUserId} />
-          </Sidebar>
-        )}
       </div>
       </CanvasLayout>
     </div>

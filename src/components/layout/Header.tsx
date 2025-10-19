@@ -1,4 +1,4 @@
-import { PresenceBadge } from '../collaboration/PresenceBadge';
+import { PresencePopover } from '../collaboration/PresencePopover';
 import { CanvasPicker } from '../canvas/CanvasPicker';
 import { CanvasManagementModal } from '../canvas/CanvasManagementModal';
 import { ThemeToggle } from './ThemeToggle';
@@ -8,23 +8,22 @@ import { Settings, LayoutGrid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePaperboxStore } from '@/stores';
 import type { Canvas } from '@/types/canvas';
+import type { OnlineUser } from '@/types/canvas';
 
 interface HeaderProps {
-  userCount: number;
+  onlineUsers: OnlineUser[];
+  currentUserId: string;
   onSignOut: () => void;
   userName: string;
-  sidebarOpen: boolean;
-  sidebarContent: 'users' | 'tools' | 'properties' | 'layers';
-  onToggleUsers: () => void;
 }
 
 /**
  * Header component displays the top navigation bar
  * - W5.D3: Canvas picker prominently placed like Figma (top-left)
- * - App title and presence badge
+ * - App title and presence popover
  * - User info and sign out button on the right
  */
-export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarContent, onToggleUsers }: HeaderProps) {
+export function Header({ onlineUsers, currentUserId, onSignOut, userName }: HeaderProps) {
   // W5.D3+W5.D5.3: Canvas management modal state + navigation
   const navigate = useNavigate();
   const [managementModalOpen, setManagementModalOpen] = useState(false);
@@ -67,17 +66,12 @@ export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarCon
         <h1 className="text-xl font-bold text-foreground hidden md:block">
           CollabCanvas
         </h1>
-
-        {/* Clickable presence badge for users sidebar - Mobile only overlay */}
-        <PresenceBadge
-          count={userCount}
-          onClick={onToggleUsers}
-          isActive={sidebarOpen && sidebarContent === 'users'}
-        />
       </div>
 
       {/* Right side: User actions */}
       <div className="flex items-center gap-3">
+        {/* Presence Popover */}
+        <PresencePopover users={onlineUsers} currentUserId={currentUserId} />
         <div className="text-sm text-muted-foreground hidden sm:block">
           <span className="font-medium text-foreground">{userName}</span>
         </div>
