@@ -34,13 +34,6 @@ export function RemoteSelectionOverlay() {
     user => user.userId !== currentUserId && user.isActive
   );
 
-  console.log('[RemoteSelectionOverlay] Rendering:', {
-    remoteUserCount: remoteUsers.length,
-    usersWithSelections: remoteUsers.filter(u => u.selection?.objectIds.length).length,
-    currentUserId,
-    transform: { zoom: zoom.toFixed(2), panX: Math.round(vpt[4]), panY: Math.round(vpt[5]) },
-  });
-
   return (
     <div
       className="absolute inset-0 pointer-events-none"
@@ -59,7 +52,6 @@ export function RemoteSelectionOverlay() {
           const obj = objects[objectId];
           
           if (!obj) {
-            console.warn('[RemoteSelectionOverlay] Object not found:', objectId);
             return null;
           }
 
@@ -72,18 +64,6 @@ export function RemoteSelectionOverlay() {
           const viewportTop = (canvasTop * zoom) + vpt[5];
           const viewportWidth = obj.width * zoom;
           const viewportHeight = obj.height * zoom;
-
-          console.log('[RemoteSelectionOverlay] Selection box:', {
-            objectId: objectId.slice(0, 8),
-            userName: user.userName,
-            canvas: { x: Math.round(obj.x), y: Math.round(obj.y) },
-            viewport: { 
-              left: Math.round(viewportLeft), 
-              top: Math.round(viewportTop),
-              width: Math.round(viewportWidth),
-              height: Math.round(viewportHeight),
-            },
-          });
 
           return (
             <div

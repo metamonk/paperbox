@@ -35,11 +35,6 @@ export function useCollaborativeOverlays(fabricManager: FabricCanvasManager | nu
 
     // Update overlays whenever presence data changes
     fabricManager.updateCollaborativeOverlays(presence, currentUserId);
-
-    console.log('[useCollaborativeOverlays] Updated overlays for', {
-      presenceCount: Object.keys(presence).length,
-      currentUserId: currentUserId.slice(0, 8),
-    });
   }, [fabricManager, presence, currentUserId]);
 
   // Cleanup overlays on unmount

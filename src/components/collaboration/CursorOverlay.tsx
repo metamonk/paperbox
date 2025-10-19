@@ -41,14 +41,6 @@ function CursorOverlayComponent({ cursors, fabricManager }: CursorOverlayProps) 
         const viewportX = (cursor.x * zoom) + vpt[4];
         const viewportY = (cursor.y * zoom) + vpt[5];
 
-        console.log('[CursorOverlay] Rendering cursor:', {
-          userId: cursor.userId.slice(0, 8),
-          displayName: cursor.displayName,
-          canvas: { x: Math.round(cursor.x), y: Math.round(cursor.y) },
-          viewport: { x: Math.round(viewportX), y: Math.round(viewportY) },
-          transform: { zoom: zoom.toFixed(2), panX: Math.round(vpt[4]), panY: Math.round(vpt[5]) },
-        });
-
         return (
           <div
             key={cursor.userId}
@@ -97,9 +89,7 @@ function CursorOverlayComponent({ cursors, fabricManager }: CursorOverlayProps) 
 }
 
 /**
- * STATIC CANVAS MIGRATION: Memoized CursorOverlay with custom comparison
- * 
- * Simplified - no need to check fabricManager since we don't use viewport transforms
+ * Memoized CursorOverlay with custom comparison
  * Only re-render when cursor positions actually change
  */
 export const CursorOverlay = memo(CursorOverlayComponent, (prevProps, nextProps) => {
