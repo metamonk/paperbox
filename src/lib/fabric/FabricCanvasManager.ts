@@ -22,6 +22,7 @@ import { Canvas, Rect, Circle, Textbox, FabricObject, Path, Point, Text } from '
 import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
 import type { CursorPosition, UserPresence } from '@/stores/slices/collaborationSlice';
 import { CollaborativeOverlayManager } from './CollaborativeOverlayManager';
+import { GRID_SIZE, GRID_ENABLED } from '@/lib/constants';
 
 /**
  * Extended FabricObject type with custom data property
@@ -246,6 +247,19 @@ export class FabricCanvasManager {
   // Canvas is fixed at 5000x5000, viewport resizing handled by browser scroll container
 
   /**
+   * SNAP-TO-GRID: Snap a coordinate value to the nearest grid point
+   * 
+   * With static canvas, snap-to-grid is trivial: value % gridSize
+   * 
+   * @param value - Coordinate value (x or y)
+   * @param gridSize - Grid size in pixels
+   * @returns Snapped coordinate value
+   */
+  private snapToGrid(value: number, gridSize: number): number {
+    return Math.round(value / gridSize) * gridSize;
+  }
+
+  /**
    * Setup event listeners for Fabric.js canvas events
    *
    * Routes canvas events to registered handlers, which typically
@@ -287,10 +301,21 @@ export class FabricCanvasManager {
     });
 
     // W5.D5+ Real-time collaboration: Fire during movement for live updates
+    // SNAP-TO-GRID: Apply grid snapping during object movement
     this.canvas.on('object:moving', (event) => {
       const target = event.target;
-      if (target && this.eventHandlers.onObjectMoving) {
-        this.eventHandlers.onObjectMoving(target);
+      if (target) {
+        // Apply snap-to-grid if enabled
+        if (GRID_ENABLED && target.left !== undefined && target.top !== undefined) {
+          target.left = this.snapToGrid(target.left, GRID_SIZE);
+          target.top = this.snapToGrid(target.top, GRID_SIZE);
+          target.setCoords(); // Update coordinates after snapping
+        }
+
+        // Broadcast movement for real-time collaboration
+        if (this.eventHandlers.onObjectMoving) {
+          this.eventHandlers.onObjectMoving(target);
+        }
       }
     });
 

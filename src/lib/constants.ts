@@ -13,6 +13,11 @@ export const MAX_ZOOM = 5;
 export const DEFAULT_ZOOM = 1;
 export const ZOOM_SPEED = 0.1;
 
+// Snap-to-grid settings
+export const GRID_SIZE = 10; // pixels - objects snap to 10px grid
+export const GRID_ENABLED = true; // enable/disable snap-to-grid
+export const SHOW_GRID = false; // show visual grid overlay (future feature)
+
 // Shape defaults
 export const SHAPE_DEFAULTS: ShapeDefaults = {
   rectangle: {
