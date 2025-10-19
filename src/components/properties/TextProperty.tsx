@@ -32,6 +32,8 @@ import {
   Underline,
   Strikethrough,
 } from 'lucide-react';
+import { usePropertyInput } from '@/hooks/usePropertyInput';
+import { useSliderInput } from '@/hooks/useSliderInput';
 import type { CanvasObject, TextTypeProperties } from '@/types/canvas';
 
 interface TextPropertyProps {
@@ -98,6 +100,18 @@ export function TextProperty({ object, onChange }: TextPropertyProps) {
     });
   };
 
+  // Use debounced input for font size typing
+  const fontSizeInput = usePropertyInput(
+    fontSize,
+    (value) => updateTextProperty({ font_size: value })
+  );
+
+  // Use slider input for font size slider (smooth dragging)
+  const fontSizeSlider = useSliderInput(
+    fontSize,
+    (value) => updateTextProperty({ font_size: value })
+  );
+
   return (
     <div className="space-y-4">
       {/* Font Family */}
@@ -129,13 +143,14 @@ export function TextProperty({ object, onChange }: TextPropertyProps) {
           <div className="flex items-center gap-2">
             <Input
               type="number"
-              value={fontSize}
+              value={fontSizeInput.value}
               onChange={(e) => {
                 const value = parseInt(e.target.value, 10);
                 if (!isNaN(value) && value >= 8 && value <= 144) {
-                  updateTextProperty({ font_size: value });
+                  fontSizeInput.onChange(value);
                 }
               }}
+              onBlur={fontSizeInput.onBlur}
               className="h-7 w-16 text-xs"
               min={8}
               max={144}
@@ -144,13 +159,12 @@ export function TextProperty({ object, onChange }: TextPropertyProps) {
           </div>
         </div>
         <Slider
-          value={[fontSize]}
+          value={[fontSizeSlider.value]}
+          onValueChange={fontSizeSlider.onValueChange}
+          onValueCommit={fontSizeSlider.onValueCommit}
           min={8}
           max={144}
           step={1}
-          onValueChange={(values) => {
-            updateTextProperty({ font_size: values[0] });
-          }}
         />
       </div>
 

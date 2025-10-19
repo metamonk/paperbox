@@ -13,6 +13,7 @@
 
 import type { StateCreator } from 'zustand';
 import type { PaperboxStore } from '../index';
+import { supabase } from '../../lib/supabase';
 
 /**
  * Layer metadata interface
@@ -34,11 +35,11 @@ export interface LayersSlice {
   layerOrder: string[]; // Ordered list of layer IDs (bottom to top)
 
   // Actions - Z-index management
-  moveToFront: (id: string) => void;
-  moveToBack: (id: string) => void;
-  moveUp: (id: string) => void;
-  moveDown: (id: string) => void;
-  setZIndex: (id: string, zIndex: number) => void;
+  moveToFront: (id: string) => Promise<void>;
+  moveToBack: (id: string) => Promise<void>;
+  moveUp: (id: string) => Promise<void>;
+  moveDown: (id: string) => Promise<void>;
+  setZIndex: (id: string, zIndex: number) => Promise<void>;
 
   // Actions - Visibility
   setLayerVisibility: (id: string, visible: boolean) => void;
@@ -53,7 +54,7 @@ export interface LayersSlice {
   // Actions - Layer management
   addLayer: (id: string, metadata?: Partial<LayerMetadata>) => void;
   removeLayer: (id: string) => void;
-  renameLayer: (id: string, name: string) => void;
+  renameLayer: (id: string, name: string) => Promise<void>;
 
   // Utilities
   getLayerById: (id: string) => LayerMetadata | undefined;
@@ -82,125 +83,72 @@ export const createLayersSlice: StateCreator<
 
   /**
    * Move layer to front (highest z-index)
+   * Async: Persists via setZIndex
    */
-  moveToFront: (id: string) =>
-    set(
-      (state) => {
-        const currentIndex = state.layerOrder.indexOf(id);
-        if (currentIndex === -1) return;
-
-        // Remove from current position
-        state.layerOrder.splice(currentIndex, 1);
-
-        // Add to end (top layer)
-        state.layerOrder.push(id);
-
-        // Update z-index values
-        state.layerOrder.forEach((layerId, index) => {
-          if (state.layers[layerId]) {
-            state.layers[layerId].zIndex = index;
-          }
-        });
-      },
-      undefined,
-      'layers/moveToFront',
-    ),
+  moveToFront: async (id: string) => {
+    const state = get();
+    const newZIndex = state.layerOrder.length - 1;
+    await get().setZIndex(id, newZIndex);
+  },
 
   /**
    * Move layer to back (lowest z-index)
+   * Async: Persists via setZIndex
    */
-  moveToBack: (id: string) =>
-    set(
-      (state) => {
-        const currentIndex = state.layerOrder.indexOf(id);
-        if (currentIndex === -1) return;
-
-        // Remove from current position
-        state.layerOrder.splice(currentIndex, 1);
-
-        // Add to beginning (bottom layer)
-        state.layerOrder.unshift(id);
-
-        // Update z-index values
-        state.layerOrder.forEach((layerId, index) => {
-          if (state.layers[layerId]) {
-            state.layers[layerId].zIndex = index;
-          }
-        });
-      },
-      undefined,
-      'layers/moveToBack',
-    ),
+  moveToBack: async (id: string) => {
+    await get().setZIndex(id, 0);
+  },
 
   /**
    * Move layer up one position
+   * Async: Persists via setZIndex
    */
-  moveUp: (id: string) =>
-    set(
-      (state) => {
-        const currentIndex = state.layerOrder.indexOf(id);
-        if (currentIndex === -1 || currentIndex === state.layerOrder.length - 1)
-          return;
-
-        // Swap with layer above
-        [state.layerOrder[currentIndex], state.layerOrder[currentIndex + 1]] = [
-          state.layerOrder[currentIndex + 1],
-          state.layerOrder[currentIndex],
-        ];
-
-        // Update z-index values
-        if (state.layers[state.layerOrder[currentIndex]]) {
-          state.layers[state.layerOrder[currentIndex]].zIndex = currentIndex;
-        }
-        if (state.layers[state.layerOrder[currentIndex + 1]]) {
-          state.layers[state.layerOrder[currentIndex + 1]].zIndex =
-            currentIndex + 1;
-        }
-      },
-      undefined,
-      'layers/moveUp',
-    ),
+  moveUp: async (id: string) => {
+    const state = get();
+    const currentIndex = state.layerOrder.indexOf(id);
+    if (currentIndex === -1 || currentIndex === state.layerOrder.length - 1) return;
+    
+    await get().setZIndex(id, currentIndex + 1);
+  },
 
   /**
    * Move layer down one position
+   * Async: Persists via setZIndex
    */
-  moveDown: (id: string) =>
-    set(
-      (state) => {
-        const currentIndex = state.layerOrder.indexOf(id);
-        if (currentIndex <= 0) return;
-
-        // Swap with layer below
-        [state.layerOrder[currentIndex], state.layerOrder[currentIndex - 1]] = [
-          state.layerOrder[currentIndex - 1],
-          state.layerOrder[currentIndex],
-        ];
-
-        // Update z-index values
-        if (state.layers[state.layerOrder[currentIndex]]) {
-          state.layers[state.layerOrder[currentIndex]].zIndex = currentIndex;
-        }
-        if (state.layers[state.layerOrder[currentIndex - 1]]) {
-          state.layers[state.layerOrder[currentIndex - 1]].zIndex =
-            currentIndex - 1;
-        }
-      },
-      undefined,
-      'layers/moveDown',
-    ),
+  moveDown: async (id: string) => {
+    const state = get();
+    const currentIndex = state.layerOrder.indexOf(id);
+    if (currentIndex === -1 || currentIndex === 0) return;
+    
+    await get().setZIndex(id, currentIndex - 1);
+  },
 
   /**
    * Set specific z-index for layer
+   * Async: Persists to database with optimistic update
+   * 
+   * PERFORMANCE: Uses atomic batch_update_z_index RPC for:
+   * - Single database query (vs N separate queries)
+   * - Single realtime broadcast (vs N events)
+   * - Atomic transaction (all layers update or none)
+   * 
+   * Result: 50x faster for 50 layers with 10 users (500 renders → 10 renders)
    */
-  setZIndex: (id: string, zIndex: number) =>
+  setZIndex: async (id: string, zIndex: number) => {
+    const state = get();
+    const layer = state.layers[id];
+    if (!layer) return;
+
+    const currentIndex = state.layerOrder.indexOf(id);
+    if (currentIndex === -1) return;
+
+    // Store for rollback
+    const previousOrder = [...state.layerOrder];
+    const previousLayers = JSON.parse(JSON.stringify(state.layers));
+
+    // 1. Optimistic update (instant UI)
     set(
       (state) => {
-        const layer = state.layers[id];
-        if (!layer) return;
-
-        const currentIndex = state.layerOrder.indexOf(id);
-        if (currentIndex === -1) return;
-
         // Clamp to valid range
         const newIndex = Math.max(
           0,
@@ -221,8 +169,47 @@ export const createLayersSlice: StateCreator<
         });
       },
       undefined,
-      'layers/setZIndex',
-    ),
+      'layers/setZIndexOptimistic',
+    );
+
+    // 2. Persist ALL layers' z_index values to database (atomic batch operation)
+    try {
+      // Get the updated layer order after optimistic update
+      const updatedOrder = get().layerOrder;
+      
+      // Prepare arrays for batch RPC call
+      const layer_ids = updatedOrder;
+      const new_z_indices = updatedOrder.map((_, index) => index);
+
+      // Single RPC call updates all layers atomically
+      // This triggers ONE realtime broadcast instead of N broadcasts
+      const { error } = await supabase.rpc('batch_update_z_index', {
+        layer_ids,
+        new_z_indices,
+      });
+
+      if (error) throw error;
+
+      console.log(
+        '[layersSlice] ✅ Atomically updated z_index for',
+        updatedOrder.length,
+        'layers (single query, single broadcast)',
+      );
+    } catch (error) {
+      // 3. Rollback on error
+      set(
+        (state) => {
+          state.layerOrder = previousOrder;
+          state.layers = previousLayers;
+        },
+        undefined,
+        'layers/setZIndexRollback',
+      );
+
+      console.error('[layersSlice] Failed to persist z-index:', error);
+      throw error;
+    }
+  },
 
   // Visibility actions
 
@@ -376,8 +363,17 @@ export const createLayersSlice: StateCreator<
 
   /**
    * Rename layer
+   * Async: Persists to database metadata with optimistic update
    */
-  renameLayer: (id: string, name: string) =>
+  renameLayer: async (id: string, name: string) => {
+    const state = get();
+    const layer = state.layers[id];
+    if (!layer) return;
+
+    // Store for rollback
+    const previousName = layer.name;
+
+    // 1. Optimistic update (instant UI)
     set(
       (state) => {
         const layer = state.layers[id];
@@ -386,8 +382,40 @@ export const createLayersSlice: StateCreator<
         }
       },
       undefined,
-      'layers/renameLayer',
-    ),
+      'layers/renameLayerOptimistic',
+    );
+
+    // 2. Persist to database (store in metadata.layer_name)
+    try {
+      const object = state.objects[id];
+      const updatedMetadata = {
+        ...(object?.metadata || {}),
+        layer_name: name,
+      };
+
+      const { error } = await supabase
+        .from('canvas_objects')
+        .update({ metadata: updatedMetadata })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (error) {
+      // 3. Rollback on error
+      set(
+        (state) => {
+          const layer = state.layers[id];
+          if (layer) {
+            layer.name = previousName;
+          }
+        },
+        undefined,
+        'layers/renameLayerRollback',
+      );
+
+      console.error('[layersSlice] Failed to persist layer name:', error);
+      throw error;
+    }
+  },
 
   // Utility functions
 

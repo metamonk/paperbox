@@ -18,8 +18,10 @@ import {
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { useSliderInput } from '@/hooks/useSliderInput';
 import { ColorProperty } from './ColorProperty';
 import { PositionProperty } from './PositionProperty';
 import { SizeProperty } from './SizeProperty';
@@ -42,6 +44,25 @@ export function PropertyPanel() {
   const [textOpen, setTextOpen] = useState(true);
   const [styleOpen, setStyleOpen] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Slider inputs for smooth dragging
+  const opacitySlider = useSliderInput(
+    activeObject ? activeObject.opacity * 100 : 100,
+    (value) => {
+      if (activeObject) {
+        updateObject(activeObject.id, { opacity: value / 100 });
+      }
+    }
+  );
+
+  const strokeWidthSlider = useSliderInput(
+    activeObject?.stroke_width ?? 0,
+    (value) => {
+      if (activeObject) {
+        updateObject(activeObject.id, { stroke_width: value });
+      }
+    }
+  );
 
   if (!activeObject) {
     return (
@@ -66,7 +87,7 @@ export function PropertyPanel() {
         e.stopPropagation();
       }}
     >
-      <div className="p-4 space-y-4">
+      <div className="p-3 space-y-3">
         {/* Object Info Header */}
         <div className="pb-3 border-b border-border">
           <h3 className="font-semibold text-sm capitalize">
@@ -82,66 +103,73 @@ export function PropertyPanel() {
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
-              className="w-full justify-between p-2 h-auto font-medium text-sm"
+              className="w-full justify-between py-1.5 px-2 h-auto font-medium text-xs"
             >
-              Position & Rotation
+              Position
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${
+                className={`h-3.5 w-3.5 transition-transform ${
                   positionOpen ? 'transform rotate-180' : ''
                 }`}
               />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3 space-y-3">
+          <CollapsibleContent className="pt-2 px-1 pb-3">
             <PositionProperty object={activeObject} />
           </CollapsibleContent>
         </Collapsible>
+
+        <Separator className="my-3" />
 
         {/* Size */}
         <Collapsible open={sizeOpen} onOpenChange={setSizeOpen}>
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
-              className="w-full justify-between p-2 h-auto font-medium text-sm"
+              className="w-full justify-between py-1.5 px-2 h-auto font-medium text-xs"
             >
               Size
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${
+                className={`h-3.5 w-3.5 transition-transform ${
                   sizeOpen ? 'transform rotate-180' : ''
                 }`}
               />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3 space-y-3">
+          <CollapsibleContent className="pt-2 px-1 pb-3">
             <SizeProperty object={activeObject} />
           </CollapsibleContent>
         </Collapsible>
 
+        <Separator className="my-3" />
+
         {/* Text Formatting (W6.D2: Only for text objects) */}
         {activeObject.type === 'text' && (
-          <Collapsible open={textOpen} onOpenChange={setTextOpen}>
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                className="w-full justify-between p-2 h-auto font-medium text-sm"
-              >
-                Text Formatting
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${
-                    textOpen ? 'transform rotate-180' : ''
-                  }`}
+          <>
+            <Collapsible open={textOpen} onOpenChange={setTextOpen}>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-between py-1.5 px-2 h-auto font-medium text-xs"
+                >
+                  Text
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${
+                      textOpen ? 'transform rotate-180' : ''
+                    }`}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 px-1 pb-3">
+                <TextProperty
+                  object={activeObject}
+                  onChange={(updates) => {
+                    updateObject(activeObject.id, updates);
+                  }}
                 />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-3">
-              <TextProperty
-                object={activeObject}
-                onChange={(updates) => {
-                  updateObject(activeObject.id, updates);
-                }}
-              />
-            </CollapsibleContent>
-          </Collapsible>
+              </CollapsibleContent>
+            </Collapsible>
+            <Separator className="my-3" />
+          </>
         )}
 
         {/* Style */}
@@ -149,17 +177,17 @@ export function PropertyPanel() {
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
-              className="w-full justify-between p-2 h-auto font-medium text-sm"
+              className="w-full justify-between py-1.5 px-2 h-auto font-medium text-xs"
             >
               Style
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${
+                className={`h-3.5 w-3.5 transition-transform ${
                   styleOpen ? 'transform rotate-180' : ''
                 }`}
               />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3 space-y-4">
+          <CollapsibleContent className="pt-2 px-1 pb-3 space-y-3">
             {/* Fill Color */}
             <ColorProperty
               label="Fill"
@@ -180,65 +208,69 @@ export function PropertyPanel() {
               />
             )}
 
-            {/* Stroke Width */}
+            {/* Stroke Width with smooth slider */}
             {activeObject.stroke_width !== null && (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs">Stroke Width</Label>
-                  <span className="text-xs text-muted-foreground">
-                    {activeObject.stroke_width}px
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Stroke Width
+                  </Label>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {Math.round(strokeWidthSlider.value)}px
                   </span>
                 </div>
                 <Slider
-                  value={[activeObject.stroke_width]}
+                  value={[strokeWidthSlider.value]}
+                  onValueChange={strokeWidthSlider.onValueChange}
+                  onValueCommit={strokeWidthSlider.onValueCommit}
                   min={0}
                   max={20}
                   step={1}
-                  onValueChange={(values) => {
-                    updateObject(activeObject.id, { stroke_width: values[0] });
-                  }}
                 />
               </div>
             )}
 
-            {/* Opacity */}
-            <div className="space-y-2">
+            {/* Opacity with smooth slider */}
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">Opacity</Label>
-                <span className="text-xs text-muted-foreground">
-                  {Math.round(activeObject.opacity * 100)}%
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Opacity
+                </Label>
+                <span className="text-[10px] tabular-nums text-muted-foreground">
+                  {Math.round(opacitySlider.value)}%
                 </span>
               </div>
               <Slider
-                value={[activeObject.opacity * 100]}
+                value={[opacitySlider.value]}
+                onValueChange={opacitySlider.onValueChange}
+                onValueCommit={opacitySlider.onValueCommit}
                 min={0}
                 max={100}
                 step={1}
-                onValueChange={(values) => {
-                  updateObject(activeObject.id, { opacity: values[0] / 100 });
-                }}
               />
             </div>
           </CollapsibleContent>
         </Collapsible>
+
+        <Separator className="my-3" />
 
         {/* Advanced (Shadow, Effects) */}
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
-              className="w-full justify-between p-2 h-auto font-medium text-sm"
+              className="w-full justify-between py-1.5 px-2 h-auto font-medium text-xs"
             >
               Advanced
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${
+                className={`h-3.5 w-3.5 transition-transform ${
                   advancedOpen ? 'transform rotate-180' : ''
                 }`}
               />
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="pt-3 space-y-3">
-            <p className="text-xs text-muted-foreground">
+          <CollapsibleContent className="pt-2 px-1 pb-3">
+            <p className="text-[10px] text-muted-foreground">
               Shadow and effects coming soon...
             </p>
           </CollapsibleContent>

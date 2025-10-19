@@ -230,20 +230,20 @@ export class FabricCanvasManager {
     // W2.D12 FIX: Fabric.js v6 Canvas constructor expects ID string, not HTMLCanvasElement
     // From official docs: new fabric.Canvas('canvasId', options)
     // Passing HTMLCanvasElement directly may cause rendering issues
-    console.log(`[FabricCanvasManager] Initializing Fabric.js v6 Canvas with ID: "${canvasId}"`);
-    console.log(`[FabricCanvasManager] Element dimensions after CSS layout:`, {
-      elementClientWidth: element.clientWidth,
-      elementClientHeight: element.clientHeight,
-      parentClientWidth: element.parentElement?.clientWidth,
-      parentClientHeight: element.parentElement?.clientHeight,
-    });
-    console.log(`[FabricCanvasManager] Config:`, {
-      backgroundColor,
-      width,
-      height,
-      selection: this.config.selection,
-      renderOnAddRemove: this.config.renderOnAddRemove,
-    });
+    // console.log(`[FabricCanvasManager] Initializing Fabric.js v6 Canvas with ID: "${canvasId}"`);
+    // console.log(`[FabricCanvasManager] Element dimensions after CSS layout:`, {
+    //   elementClientWidth: element.clientWidth,
+    //   elementClientHeight: element.clientHeight,
+    //   parentClientWidth: element.parentElement?.clientWidth,
+    //   parentClientHeight: element.parentElement?.clientHeight,
+    // });
+    // console.log(`[FabricCanvasManager] Config:`, {
+    //   backgroundColor,
+    //   width,
+    //   height,
+    //   selection: this.config.selection,
+    //   renderOnAddRemove: this.config.renderOnAddRemove,
+    // });
 
     this.canvas = new Canvas(canvasId, {
       backgroundColor,
@@ -732,12 +732,10 @@ export class FabricCanvasManager {
     // W5.D5+++++ Add to canvas at correct z-index position
     // Insert at specific index to maintain stacking order from database
     try {
-      const targetIndex = canvasObject.z_index ?? 0; // Default to 0 if undefined
-
       // Always use simple add() to avoid insertAt() issues
       // Z-index will be managed through bringToFront/sendToBack operations
       this.canvas.add(fabricObject);
-      console.log(`[FabricCanvasManager] ✅ Added object to canvas (z-index: ${targetIndex})`);
+      // console.log(`[FabricCanvasManager] ✅ Added object to canvas (z-index: ${canvasObject.z_index ?? 0})`);
       
     } catch (error) {
       console.error('[FabricCanvasManager] ❌ Error adding object to canvas:', error);
@@ -1185,13 +1183,13 @@ export class FabricCanvasManager {
         // Translate Fabric coordinates (0 to 8000) to center-origin (-4000 to +4000)
         const centerCoords = fabricToCenter(fabricX, fabricY);
 
-        console.log('[FabricCanvasManager] Placement click with center-origin coordinates:', {
-          screen: { x: opt.e.clientX, y: opt.e.clientY },
-          fabric: { x: Math.round(fabricX), y: Math.round(fabricY) },
-          centerOrigin: { x: Math.round(centerCoords.x), y: Math.round(centerCoords.y) },
-          zoom: this.canvas.getZoom(),
-          pan: { x: this.canvas.viewportTransform[4], y: this.canvas.viewportTransform[5] },
-        });
+        // console.log('[FabricCanvasManager] Placement click with center-origin coordinates:', {
+        //   screen: { x: opt.e.clientX, y: opt.e.clientY },
+        //   fabric: { x: Math.round(fabricX), y: Math.round(fabricY) },
+        //   centerOrigin: { x: Math.round(centerCoords.x), y: Math.round(centerCoords.y) },
+        //   zoom: this.canvas.getZoom(),
+        //   pan: { x: this.canvas.viewportTransform[4], y: this.canvas.viewportTransform[5] },
+        // });
 
         // Trigger placement handler with center-origin coordinates
         this.eventHandlers.onPlacementClick(centerCoords.x, centerCoords.y);
@@ -1502,12 +1500,12 @@ export class FabricCanvasManager {
     // Render the canvas
     this.canvas.renderAll();
 
-    console.log('[FabricCanvasManager] Viewport centered on origin (0,0):', {
-      fabricCenter,
-      viewportSize: { width: viewportWidth, height: viewportHeight },
-      zoom,
-      pan: { x: panX, y: panY },
-    });
+    // console.log('[FabricCanvasManager] Viewport centered on origin (0,0):', {
+    //   fabricCenter,
+    //   viewportSize: { width: viewportWidth, height: viewportHeight },
+    //   zoom,
+    //   pan: { x: panX, y: panY },
+    // });
   }
 
   // ────────────────────────────────────────────────────────────────────────────
