@@ -10,6 +10,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Canvas } from '../components/canvas/Canvas';
 import { usePaperboxStore } from '../stores';
 
+// Debug flag - set to true to enable verbose CanvasPage logs
+const DEBUG = false;
+
 /**
  * Canvas Page - Renders Canvas component and syncs URL params to store
  *
@@ -36,7 +39,7 @@ export function CanvasPage() {
   useEffect(() => {
     // Wait for canvases to load
     if (canvasesLoading) {
-      console.log('[CanvasPage] Waiting for canvases to load...');
+      if (DEBUG) console.log('[CanvasPage] Waiting for canvases to load...');
       return;
     }
 
@@ -55,7 +58,7 @@ export function CanvasPage() {
       // If canvases array is empty, it means initial load hasn't happened yet
       // This prevents premature redirects when visiting public canvas URLs
       if (canvases.length === 0) {
-        console.log('[CanvasPage] Canvases not loaded yet, waiting...');
+        if (DEBUG) console.log('[CanvasPage] Canvases not loaded yet, waiting...');
         return;
       }
 
@@ -67,7 +70,7 @@ export function CanvasPage() {
 
     // Sync URL to store if different
     if (canvasId !== activeCanvasId) {
-      console.log('[CanvasPage] Syncing URL → Store:', { url: canvasId, store: activeCanvasId });
+      if (DEBUG) console.log('[CanvasPage] Syncing URL → Store:', { url: canvasId, store: activeCanvasId });
       setActiveCanvas(canvasId);
     }
   }, [canvasId, activeCanvasId, canvases, canvasesLoading, navigate, setActiveCanvas]);

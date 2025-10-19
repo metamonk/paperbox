@@ -12,6 +12,7 @@ import { Point } from 'fabric';
 import { usePaperboxStore } from '@/stores';
 import type { FabricCanvasManager } from '@/lib/fabric/FabricCanvasManager';
 import { cn } from '@/lib/utils';
+import { centerToFabric } from '@/lib/fabric/coordinateTranslation';
 
 interface MinimapProps {
   fabricManager: FabricCanvasManager | null;
@@ -79,9 +80,12 @@ export function Minimap({ fabricManager }: MinimapProps) {
     Object.values(objects).forEach((obj) => {
       ctx.save();
 
-      // Scale object to minimap
-      const x = obj.x * SCALE;
-      const y = obj.y * SCALE;
+      // Translate center-origin (-4000 to +4000) to Fabric (0 to 8000)
+      const fabricCoords = centerToFabric(obj.x, obj.y);
+      
+      // Scale Fabric coordinates to minimap
+      const x = fabricCoords.x * SCALE;
+      const y = fabricCoords.y * SCALE;
       const width = obj.width * SCALE;
       const height = obj.height * SCALE;
 
@@ -129,8 +133,12 @@ export function Minimap({ fabricManager }: MinimapProps) {
       const canvas = fabricManager.getCanvas();
       if (canvas) {
         const canvasEl = canvas.getElement();
-        const viewportWidth = canvasEl.getBoundingClientRect().width / zoom;
-        const viewportHeight = canvasEl.getBoundingClientRect().height / zoom;
+        
+        // CRITICAL FIX: Get actual visible viewport dimensions from scroll container
+        // NOT the full canvas size (8000x8000) from getBoundingClientRect()
+        const scrollContainer = canvasEl.parentElement;
+        const viewportWidth = scrollContainer ? scrollContainer.clientWidth / zoom : 1920 / zoom;
+        const viewportHeight = scrollContainer ? scrollContainer.clientHeight / zoom : 1080 / zoom;
         
         // Calculate viewport position in canvas coordinates
         const scrollX = -panX / zoom;
@@ -188,8 +196,10 @@ export function Minimap({ fabricManager }: MinimapProps) {
     if (!canvas) return;
 
     const canvasEl = canvas.getElement();
-    const viewportWidth = canvasEl.getBoundingClientRect().width / zoom;
-    const viewportHeight = canvasEl.getBoundingClientRect().height / zoom;
+    // CRITICAL FIX: Get actual visible viewport from scroll container, not full canvas size
+    const scrollContainer = canvasEl.parentElement;
+    const viewportWidth = scrollContainer ? scrollContainer.clientWidth / zoom : 1920 / zoom;
+    const viewportHeight = scrollContainer ? scrollContainer.clientHeight / zoom : 1080 / zoom;
 
     // Center viewport on clicked position
     const newScrollX = canvasX - viewportWidth / 2;

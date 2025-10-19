@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { CursorPosition } from '../../types/user';
 import type { FabricCanvasManager } from '../../lib/fabric/FabricCanvasManager';
+import { centerToFabric } from '../../lib/fabric/coordinateTranslation';
 
 interface CursorOverlayProps {
   cursors: Map<string, CursorPosition>;
@@ -10,12 +11,14 @@ interface CursorOverlayProps {
 /**
  * Renders remote user cursors on top of the canvas
  * 
- * CRITICAL: Uses Fabric's viewport transform to position cursors
- * - Receives cursor positions in canvas-absolute coordinates (x, y)
- * - Transforms to viewport coordinates using viewer's zoom/pan
- * - This allows each user to see cursors at correct position regardless of their own viewport
- *
- * Formula: viewportX = (canvasX * zoom) + panX
+ * Coordinate System Flow:
+ * 1. Receives cursor positions in center-origin coordinates (-4000 to +4000)
+ * 2. Translates to Fabric coordinates (0 to 8000)
+ * 3. Applies viewer's viewport transform (zoom + pan) to get screen coordinates
+ * 
+ * Formula:
+ *   fabricCoord = centerCoord + 4000
+ *   viewportCoord = (fabricCoord * zoom) + pan
  *
  * Performance: Memoized to avoid re-renders when parent updates
  * but cursor positions haven't changed
@@ -36,10 +39,13 @@ function CursorOverlayComponent({ cursors, fabricManager }: CursorOverlayProps) 
       className="absolute inset-0 pointer-events-none z-50"
     >
       {Array.from(cursors.values()).map((cursor) => {
-        // Transform canvas coordinates to viewport coordinates using viewer's transform
-        // Formula: viewportX = (canvasX * zoom) + panX
-        const viewportX = (cursor.x * zoom) + vpt[4];
-        const viewportY = (cursor.y * zoom) + vpt[5];
+        // Step 1: Translate center-origin (-4000 to +4000) to Fabric (0 to 8000)
+        const fabricCoords = centerToFabric(cursor.x, cursor.y);
+        
+        // Step 2: Transform Fabric coordinates to viewport coordinates using viewer's transform
+        // Formula: viewportX = (fabricX * zoom) + panX
+        const viewportX = (fabricCoords.x * zoom) + vpt[4];
+        const viewportY = (fabricCoords.y * zoom) + vpt[5];
 
         return (
           <div

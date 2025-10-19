@@ -17,12 +17,13 @@
 // v6 removed the fabric namespace - use named exports instead
 // Official v6 pattern: import { Canvas, Rect, ... } from 'fabric'
 // See: https://github.com/fabricjs/fabric.js/issues/8299
-import { Canvas, Rect, Circle, Textbox, FabricObject, Path, Point, Text } from 'fabric';
+import { Canvas, Rect, Circle, Textbox, FabricObject, Point } from 'fabric';
 
 import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
-import type { CursorPosition, UserPresence } from '@/stores/slices/collaborationSlice';
+import type { UserPresence } from '@/stores/slices/collaborationSlice';
 import { CollaborativeOverlayManager } from './CollaborativeOverlayManager';
 import { GRID_SIZE, GRID_ENABLED } from '@/lib/constants';
+import { centerToFabric, fabricToCenter, getFabricCenterPoint } from './coordinateTranslation';
 
 /**
  * Extended FabricObject type with custom data property
@@ -143,7 +144,6 @@ export class FabricCanvasManager {
   private canvas: Canvas | null = null;
   private config: Required<FabricCanvasConfig>;
   private eventHandlers: FabricCanvasEventHandlers = {};
-  private cursorObjects: FabricObject[] = []; // W1.D6: Track cursor overlay objects
   private viewportSyncCallback: ((zoom: number, panX: number, panY: number) => void) | null = null; // W2.D6.6: Viewport sync callback
 
   // W2.D7.7: Performance optimization - RAF throttling
@@ -155,8 +155,8 @@ export class FabricCanvasManager {
   private pixelGridRenderHandler: (() => void) | null = null;
   private readonly PIXEL_GRID_THRESHOLD = 4; // Show grid when zoom > 4x (increased for better performance)
 
-  // W2.D8.7: Canvas boundary limits (Figma-style)
-  private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
+  // W2.D8.7: Canvas boundary limits (matches 8000x8000 canvas size)
+  private readonly CANVAS_BOUNDARY = 8000; // Match actual canvas size (8000x8000)
 
   // STATIC CANVAS MIGRATION: Resize handler properties removed (no longer needed)
 
@@ -210,7 +210,7 @@ export class FabricCanvasManager {
     }
 
     // W2.D12 DEBUG: Check canvas element state before Fabric.js initialization
-    // console.log('[FabricCanvasManager] Canvas element BEFORE Fabric init:', {
+    // if (DEBUG) console.log('[FabricCanvasManager] Canvas element BEFORE Fabric init:', {
     //   id: element.id,
     //   widthAttr: element.width,
     //   heightAttr: element.height,
@@ -260,14 +260,14 @@ export class FabricCanvasManager {
 
     // W2.D12 DEBUG: Expose canvas instance globally for debugging
     (window as any).__fabricCanvas = this.canvas;
-    // console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
+    // if (DEBUG) console.log('[FabricCanvasManager] Canvas instance exposed as window.__fabricCanvas for debugging');
 
     // STATIC CANVAS MIGRATION: No window resize handler needed (fixed size canvas)
     // Window resizing only affects the scrollable viewport, not the canvas itself
 
     // W5.D5++++: Initialize collaborative overlay manager
     this.overlayManager = new CollaborativeOverlayManager(this.canvas);
-    // console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
+    // if (DEBUG) console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
 
     // PERFORMANCE: Start object culling for large canvases
     this.startObjectCulling();
@@ -294,9 +294,9 @@ export class FabricCanvasManager {
   /**
    * PERFORMANCE: Update object visibility based on viewport
    * 
-   * STATIC CANVAS MIGRATION FIX: Calculate viewport using scroll position
-   * instead of viewport transform. The 8000x8000 canvas is in a scrollable
-   * container, so we need to check scroll offsets, not transform matrix.
+   * CRITICAL FIX: Use Fabric's viewport transform, NOT DOM scroll!
+   * The system uses Fabric's pan/zoom (viewportTransform), not DOM scrolling.
+   * DOM scrollLeft/scrollTop are ALWAYS 0 in this architecture.
    * 
    * Hides objects outside the visible viewport for better rendering performance
    * with large numbers of objects. Objects near viewport edges (within CULL_MARGIN)
@@ -305,26 +305,23 @@ export class FabricCanvasManager {
   private updateObjectCulling(): void {
     if (!this.canvas) return;
 
+    // Get viewport dimensions from canvas element
     const canvasElement = this.canvas.getElement();
-    const scrollContainer = canvasElement.parentElement;
+    const rect = canvasElement.getBoundingClientRect();
+    const viewportWidth = rect.width;
+    const viewportHeight = rect.height;
     
-    // STATIC CANVAS: Can't rely on parent element existing in all contexts
-    if (!scrollContainer) {
-      console.warn('[FabricCanvasManager] No scroll container found for culling');
-      return;
-    }
+    // Get Fabric's viewport transform (this is what actually controls view)
+    const vpt = this.canvas.viewportTransform;
+    const zoom = this.canvas.getZoom();
     
-    // STATIC CANVAS FIX: Get viewport bounds using scroll position
-    // The canvas is 8000x8000 inside a scrollable container
-    const scrollLeft = scrollContainer.scrollLeft;
-    const scrollTop = scrollContainer.scrollTop;
-    const viewportWidth = scrollContainer.clientWidth;
-    const viewportHeight = scrollContainer.clientHeight;
-    
-    const viewportLeft = scrollLeft;
-    const viewportTop = scrollTop;
-    const viewportRight = scrollLeft + viewportWidth;
-    const viewportBottom = scrollTop + viewportHeight;
+    // Calculate visible canvas bounds using Fabric's transform
+    // Formula: canvasCoord = (viewportCoord - pan) / zoom
+    // So: viewportLeft (0) in canvas coords = -pan/zoom
+    const viewportLeft = -vpt[4] / zoom;
+    const viewportTop = -vpt[5] / zoom;
+    const viewportRight = viewportLeft + (viewportWidth / zoom);
+    const viewportBottom = viewportTop + (viewportHeight / zoom);
 
     // Add margin for smoother transitions
     const cullLeft = viewportLeft - this.CULL_MARGIN;
@@ -362,10 +359,7 @@ export class FabricCanvasManager {
 
     if (culledCount > 0) {
       this.canvas.requestRenderAll();
-      // Note: Object culling is expected with static canvas - only log if excessive
-      if (culledCount > 10) {
-        console.log(`[FabricCanvasManager] Culled ${culledCount} objects outside viewport`);
-      }
+      // Performance note: Culling active for off-screen objects
     }
   }
 
@@ -384,8 +378,6 @@ export class FabricCanvasManager {
     this.cullInterval = window.setInterval(() => {
       this.updateObjectCulling();
     }, 500);
-
-    console.log('[FabricCanvasManager] Object culling started (500ms interval)');
   }
 
   /**
@@ -407,8 +399,6 @@ export class FabricCanvasManager {
       });
       this.canvas.requestRenderAll();
     }
-
-    console.log('[FabricCanvasManager] Object culling stopped');
   }
 
   /**
@@ -475,7 +465,6 @@ export class FabricCanvasManager {
     this.canvas.on('selection:created', (event) => {
       const targets = event.selected || [];
       if (this.eventHandlers.onSelectionCreated) {
-        console.log('[FabricCanvasManager] Calling onSelectionCreated handler');
         this.eventHandlers.onSelectionCreated(targets);
       } else {
         console.warn('[FabricCanvasManager] No onSelectionCreated handler registered!');
@@ -483,13 +472,8 @@ export class FabricCanvasManager {
     });
 
     this.canvas.on('selection:updated', (event) => {
-      console.log('[FabricCanvasManager] 🎯 selection:updated event fired', {
-        selectedCount: event.selected?.length || 0,
-        selected: event.selected
-      });
       const targets = event.selected || [];
       if (this.eventHandlers.onSelectionUpdated) {
-        console.log('[FabricCanvasManager] Calling onSelectionUpdated handler');
         this.eventHandlers.onSelectionUpdated(targets);
       } else {
         console.warn('[FabricCanvasManager] No onSelectionUpdated handler registered!');
@@ -497,9 +481,7 @@ export class FabricCanvasManager {
     });
 
     this.canvas.on('selection:cleared', () => {
-      console.log('[FabricCanvasManager] 🎯 selection:cleared event fired');
       if (this.eventHandlers.onSelectionCleared) {
-        console.log('[FabricCanvasManager] Calling onSelectionCleared handler');
         this.eventHandlers.onSelectionCleared();
       } else {
         console.warn('[FabricCanvasManager] No onSelectionCleared handler registered!');
@@ -519,10 +501,13 @@ export class FabricCanvasManager {
   createFabricObject(canvasObject: CanvasObject): FabricObject | null {
     let fabricObject: FabricObject | null = null;
 
+    // Translate center-origin coordinates (-4000 to +4000) to Fabric coordinates (0 to 8000)
+    const fabricCoords = centerToFabric(canvasObject.x, canvasObject.y);
+
     // Common properties for all objects
     const commonProps = {
-      left: canvasObject.x,
-      top: canvasObject.y,
+      left: fabricCoords.x,
+      top: fabricCoords.y,
       originX: 'center' as const, // W4.D3 FIX: Center object origin for placement
       originY: 'center' as const, // W4.D3 FIX: Center object origin for placement
       angle: canvasObject.rotation,
@@ -545,12 +530,6 @@ export class FabricCanvasManager {
     switch (canvasObject.type) {
       case 'rectangle': {
         const cornerRadius = canvasObject.type_properties.corner_radius || 0;
-        console.log('[FabricCanvasManager] Creating rectangle:', {
-          width: canvasObject.width,
-          height: canvasObject.height,
-          cornerRadius,
-          hasRectConstructor: typeof Rect === 'function'
-        });
         
         fabricObject = new Rect({
           ...commonProps,
@@ -564,10 +543,6 @@ export class FabricCanvasManager {
 
       case 'circle': {
         const radius = canvasObject.type_properties.radius;
-        console.log('[FabricCanvasManager] Creating circle:', {
-          radius,
-          hasCircleConstructor: typeof Circle === 'function'
-        });
         
         fabricObject = new Circle({
           ...commonProps,
@@ -585,12 +560,6 @@ export class FabricCanvasManager {
           font_style,
           text_align,
         } = canvasObject.type_properties;
-
-        console.log('[FabricCanvasManager] Creating text:', {
-          text_content,
-          width: canvasObject.width,
-          hasTextboxConstructor: typeof Textbox === 'function'
-        });
 
         fabricObject = new Textbox(text_content, {
           ...commonProps,
@@ -621,7 +590,6 @@ export class FabricCanvasManager {
       return null;
     }
 
-    console.log('[FabricCanvasManager] ✅ Successfully created', canvasObject.type, 'object');
     return fabricObject;
   }
 
@@ -656,10 +624,14 @@ export class FabricCanvasManager {
     // Extract common properties from Fabric.js object
     // Maps Fabric.js property names to our database schema
     // CRITICAL: Apply scale transforms to geometric properties before serialization
+    
+    // Translate Fabric coordinates (0 to 8000) back to center-origin (-4000 to +4000)
+    const centerCoords = fabricToCenter(obj.left || 0, obj.top || 0);
+    
     const baseProperties = {
       id: dbId,
-      x: obj.left || 0,
-      y: obj.top || 0,
+      x: centerCoords.x,
+      y: centerCoords.y,
       width: (obj.width || 0) * (obj.scaleX || 1), // FIX #1: Bake scaleX into width
       height: (obj.height || 0) * (obj.scaleY || 1), // FIX #1: Bake scaleY into height
       rotation: obj.angle || 0,
@@ -736,7 +708,6 @@ export class FabricCanvasManager {
    */
   addObject(canvasObject: CanvasObject): FabricObject | null {
     if (!this.canvas) {
-      console.log('[FabricCanvasManager] addObject: canvas is null');
       return null;
     }
 
@@ -744,7 +715,6 @@ export class FabricCanvasManager {
     const fabricObject = this.createFabricObject(canvasObject);
 
     if (!fabricObject) {
-      console.log('[FabricCanvasManager] addObject: createFabricObject returned null');
       return null;
     }
 
@@ -759,42 +729,10 @@ export class FabricCanvasManager {
       return null;
     }
 
-    console.log('[FabricCanvasManager] Adding object to canvas:', {
-      id: canvasObject.id,
-      type: canvasObject.type,
-      x: canvasObject.x,
-      y: canvasObject.y,
-      z_index: canvasObject.z_index,
-      objectCount: this.canvas.getObjects().length
-    });
-
-    // W2.D12 DEBUG: Log object details BEFORE adding
-    console.log('[FabricCanvasManager] fabricObject details:', {
-      type: fabricObject.type,
-      left: (fabricObject as any).left,
-      top: (fabricObject as any).top,
-      width: (fabricObject as any).width,
-      height: (fabricObject as any).height,
-      fill: (fabricObject as any).fill,
-      visible: (fabricObject as any).visible,
-      opacity: (fabricObject as any).opacity,
-      hasSetMethod: typeof fabricObject._set === 'function',
-      constructor: fabricObject.constructor?.name,
-    });
-
     // W5.D5+++++ Add to canvas at correct z-index position
     // Insert at specific index to maintain stacking order from database
     try {
       const targetIndex = canvasObject.z_index ?? 0; // Default to 0 if undefined
-      const currentObjects = this.canvas.getObjects();
-
-      console.log('[FabricCanvasManager] 🎯 Attempting to add object:', {
-        targetIndex,
-        currentObjectCount: currentObjects.length,
-        willInsert: targetIndex >= 0 && targetIndex < currentObjects.length,
-        fabricObjectType: typeof fabricObject,
-        hasSetMethod: typeof (fabricObject as any)._set
-      });
 
       // Always use simple add() to avoid insertAt() issues
       // Z-index will be managed through bringToFront/sendToBack operations
@@ -820,13 +758,6 @@ export class FabricCanvasManager {
     // requestRenderAll() schedules render on next animation frame (async)
     // renderAll() renders immediately (sync) - critical for initial object visibility
     this.canvas.renderAll();
-
-    console.log('[FabricCanvasManager] Object added, new count:', this.canvas.getObjects().length);
-
-    // W2.D12 DEBUG: Check if object is actually in canvas
-    const objectsInCanvas = this.canvas.getObjects();
-    console.log('[FabricCanvasManager] Objects in canvas:', objectsInCanvas);
-    console.log('[FabricCanvasManager] Last object in canvas:', objectsInCanvas[objectsInCanvas.length - 1]);
 
     return fabricObject;
   }
@@ -1099,71 +1030,6 @@ export class FabricCanvasManager {
     return this.canvas;
   }
 
-  /**
-   * W1.D6: Render remote collaborator cursors on the canvas
-   *
-   * Displays cursor icons and user name labels for all active collaborators.
-   * Clears previous cursor overlays before rendering new ones.
-   *
-   * @param cursors - Map of userId -> cursor position
-   * @param presence - Map of userId -> user presence data
-   */
-  renderRemoteCursors(
-    cursors: Record<string, CursorPosition>,
-    presence: Record<string, UserPresence>
-  ): void {
-    if (!this.canvas) {
-      return;
-    }
-
-    // Clear previous cursor objects from canvas
-    this.cursorObjects.forEach((obj) => {
-      this.canvas?.remove(obj);
-    });
-    this.cursorObjects = [];
-
-    // Render cursor for each user
-    Object.entries(cursors).forEach(([userId, cursor]) => {
-      const user = presence[userId];
-
-      // Skip if presence data is missing
-      if (!user) {
-        return;
-      }
-
-      // Create cursor icon (SVG path for pointer shape)
-      const cursorIcon = new Path('M0,0 L0,20 L5,15 L10,22 L14,20 L9,13 L17,13 Z', {
-        fill: user.userColor,
-        left: cursor.x,
-        top: cursor.y,
-        selectable: false,
-        evented: false, // Don't interfere with canvas events
-        hoverCursor: 'default',
-      });
-
-      // Create user name label
-      const nameLabel = new Text(user.userName, {
-        left: cursor.x + 20, // Offset 20px to the right of cursor
-        top: cursor.y,
-        fontSize: 12,
-        fill: user.userColor,
-        backgroundColor: 'white',
-        padding: 2,
-        selectable: false,
-        evented: false,
-        hoverCursor: 'default',
-      });
-
-      // Add to canvas and track for cleanup
-      if (this.canvas) {
-        this.canvas.add(cursorIcon as FabricObject, nameLabel as FabricObject);
-        this.cursorObjects.push(cursorIcon as FabricObject, nameLabel as FabricObject);
-      }
-    });
-
-    // Render all cursor objects
-    this.canvas.renderAll();
-  }
 
   // ────────────────────────────────────────────────────────────────────────────
   // Viewport Management (W2.D6.4-6.6)
@@ -1309,26 +1175,26 @@ export class FabricCanvasManager {
     this.canvas.on('mouse:down', (opt: any) => {
       // STATIC CANVAS MIGRATION: Check for placement mode first (higher priority than panning)
       // Only trigger placement if clicking empty canvas (no target object)
-      if (!opt.target && this.eventHandlers.onPlacementClick) {
-        // STATIC CANVAS MIGRATION: Simple direct coordinate calculation
-        // No viewport transforms needed - canvas coordinates = click coordinates
-        const canvasElement = this.canvas!.getElement();
-        const rect = canvasElement.getBoundingClientRect();
+      if (!opt.target && this.eventHandlers.onPlacementClick && this.canvas) {
+        // FIX: Use Fabric's getPointer WITHOUT ignoreZoom to respect viewport transform
+        // getPointer(e, false) applies zoom/pan transform: canvasCoord = (screenCoord - pan) / zoom
+        const pointer = this.canvas.getPointer(opt.e, false);
+        const fabricX = pointer.x;
+        const fabricY = pointer.y;
         
-        // Direct pixel coordinates on the 8000x8000 canvas
-        const canvasX = opt.e.clientX - rect.left;
-        const canvasY = opt.e.clientY - rect.top;
+        // Translate Fabric coordinates (0 to 8000) to center-origin (-4000 to +4000)
+        const centerCoords = fabricToCenter(fabricX, fabricY);
 
-        console.log('[FabricCanvasManager] Placement click detected (static canvas):', {
-          canvasX,
-          canvasY,
-          clientX: opt.e.clientX,
-          clientY: opt.e.clientY,
-          rect,
+        console.log('[FabricCanvasManager] Placement click with center-origin coordinates:', {
+          screen: { x: opt.e.clientX, y: opt.e.clientY },
+          fabric: { x: Math.round(fabricX), y: Math.round(fabricY) },
+          centerOrigin: { x: Math.round(centerCoords.x), y: Math.round(centerCoords.y) },
+          zoom: this.canvas.getZoom(),
+          pan: { x: this.canvas.viewportTransform[4], y: this.canvas.viewportTransform[5] },
         });
 
-        // Trigger placement handler with direct canvas coordinates
-        this.eventHandlers.onPlacementClick(canvasX, canvasY);
+        // Trigger placement handler with center-origin coordinates
+        this.eventHandlers.onPlacementClick(centerCoords.x, centerCoords.y);
         return; // Don't process as pan event
       }
 
@@ -1365,7 +1231,7 @@ export class FabricCanvasManager {
         let newPanX = vpt[4] + deltaX;
         let newPanY = vpt[5] + deltaY;
 
-        // Clamp pan to canvas boundaries (±50,000 pixels from origin)
+        // Clamp pan to canvas boundaries (8000×8000 canvas)
         const maxPan = this.CANVAS_BOUNDARY * zoom;
         const minPan = -this.CANVAS_BOUNDARY * zoom;
 
@@ -1441,16 +1307,6 @@ export class FabricCanvasManager {
 
       // Check for zoom modifier (Cmd on Mac, Ctrl on Windows/Linux)
       const isZoomModifier = event.metaKey || event.ctrlKey;
-
-      console.log('[FabricCanvasManager] mouse:wheel:', {
-        deltaX: event.deltaX,
-        deltaY: event.deltaY,
-        shiftKey: event.shiftKey,
-        metaKey: event.metaKey,
-        ctrlKey: event.ctrlKey,
-        isZoomModifier,
-        action: isZoomModifier ? 'ZOOM' : 'PAN',
-      });
 
       if (isZoomModifier) {
         // Cmd/Ctrl + Scroll = Zoom
@@ -1616,6 +1472,44 @@ export class FabricCanvasManager {
     this.canvas.renderAll();
   }
 
+  /**
+   * Center viewport on (0, 0) in center-origin coordinates
+   * 
+   * This is the default initial view - centered on the canvas.
+   * In Fabric coordinates, this means centering on (4000, 4000).
+   * 
+   * @param viewportWidth - Visible viewport width in pixels
+   * @param viewportHeight - Visible viewport height in pixels
+   * @param zoom - Optional zoom level (default: 1)
+   */
+  centerViewportOnOrigin(viewportWidth: number, viewportHeight: number, zoom: number = 1): void {
+    if (!this.canvas) {
+      throw new Error('Canvas not initialized');
+    }
+
+    // Get center point in Fabric coordinates (4000, 4000)
+    const fabricCenter = getFabricCenterPoint();
+
+    // Calculate pan to center the viewport on this point
+    // Formula: panX = viewportCenterX - (fabricCenterX * zoom)
+    const panX = (viewportWidth / 2) - (fabricCenter.x * zoom);
+    const panY = (viewportHeight / 2) - (fabricCenter.y * zoom);
+
+    // Apply zoom and pan
+    this.canvas.setZoom(zoom);
+    this.canvas.absolutePan(new Point(panX, panY));
+
+    // Render the canvas
+    this.canvas.renderAll();
+
+    console.log('[FabricCanvasManager] Viewport centered on origin (0,0):', {
+      fabricCenter,
+      viewportSize: { width: viewportWidth, height: viewportHeight },
+      zoom,
+      pan: { x: panX, y: panY },
+    });
+  }
+
   // ────────────────────────────────────────────────────────────────────────────
   // Pixel Grid Visualization (W2.D8.4-5)
   // ────────────────────────────────────────────────────────────────────────────
@@ -1725,8 +1619,6 @@ export class FabricCanvasManager {
 
     // Mark as initialized
     this.pixelGridInitialized = true;
-
-    console.log('[FabricCanvasManager] Pixel grid system initialized (optimized)');
   }
 
   /**
@@ -2038,7 +1930,6 @@ export class FabricCanvasManager {
     if (this.overlayManager) {
       this.overlayManager.destroy();
       this.overlayManager = null;
-      console.log('[FabricCanvasManager] Collaborative overlay manager destroyed');
     }
 
     if (this.canvas) {
@@ -2053,7 +1944,6 @@ export class FabricCanvasManager {
       this.canvas = null;
     }
     this.eventHandlers = {};
-    this.cursorObjects = [];
     this.viewportSyncCallback = null;
   }
 }

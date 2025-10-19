@@ -36,6 +36,9 @@ import { CanvasSyncManager } from '../lib/sync/CanvasSyncManager';
 import { FabricCanvasManager } from '../lib/fabric/FabricCanvasManager';
 import { NavigationShortcuts } from '../features/shortcuts/NavigationShortcuts';
 
+// Debug flag - set to true to enable verbose sync logs
+const DEBUG = false;
+
 interface UseCanvasSyncResult {
   initialized: boolean;
   error: string | null;
@@ -84,10 +87,10 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
 
     const setup = async () => {
       try {
-        console.log('[useCanvasSync] Starting initialization for user:', user.id);
+        if (DEBUG) console.log('[useCanvasSync] Starting initialization for user:', user.id);
 
         // Step 1: Initialize FabricCanvasManager
-        console.log('[useCanvasSync] Initializing FabricCanvasManager...');
+        if (DEBUG) console.log('[useCanvasSync] Initializing FabricCanvasManager...');
         const fabric = new FabricCanvasManager();
         await fabric.initialize(canvasElement);
 
@@ -98,10 +101,10 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
 
         fabricManagerRef.current = fabric;
         setFabricManager(fabric);
-        console.log('[useCanvasSync] FabricCanvasManager initialized');
+        if (DEBUG) console.log('[useCanvasSync] FabricCanvasManager initialized');
 
         // Step 2: Load canvases from database (W5: Multi-canvas architecture)
-        console.log('[useCanvasSync] Loading canvases from Supabase...');
+        if (DEBUG) console.log('[useCanvasSync] Loading canvases from Supabase...');
         await loadCanvases(user.id);
 
         if (!mounted) {
@@ -113,7 +116,7 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         let currentCanvases = usePaperboxStore.getState().canvases;
 
         if (currentCanvases.length === 0) {
-          console.log('[useCanvasSync] No canvases found, creating default canvas...');
+          if (DEBUG) console.log('[useCanvasSync] No canvases found, creating default canvas...');
           await createCanvas('Untitled Canvas', 'Your first canvas');
 
           if (!mounted) {
@@ -123,21 +126,21 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
 
           // Reload to get the newly created canvas
           currentCanvases = usePaperboxStore.getState().canvases;
-          console.log('[useCanvasSync] Default canvas created:', currentCanvases[0]?.id);
+          if (DEBUG) console.log('[useCanvasSync] Default canvas created:', currentCanvases[0]?.id);
         }
 
         // Step 2c: Set active canvas if none is set
         const currentActiveId = usePaperboxStore.getState().activeCanvasId;
 
         if (currentCanvases.length > 0 && !currentActiveId) {
-          console.log('[useCanvasSync] Setting active canvas:', currentCanvases[0].id);
+          if (DEBUG) console.log('[useCanvasSync] Setting active canvas:', currentCanvases[0].id);
           await setActiveCanvas(currentCanvases[0].id);
         }
 
-        console.log('[useCanvasSync] Canvases loaded and active canvas set');
+        if (DEBUG) console.log('[useCanvasSync] Canvases loaded and active canvas set');
 
         // Step 3: Setup Supabase→Zustand realtime subscription (SyncManager)
-        console.log('[useCanvasSync] Setting up Supabase realtime subscription...');
+        if (DEBUG) console.log('[useCanvasSync] Setting up Supabase realtime subscription...');
         syncManager = getSyncManager(user.id);
         await syncManager.initialize();
 
@@ -146,10 +149,10 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
           return;
         }
 
-        console.log('[useCanvasSync] Supabase subscription active');
+        if (DEBUG) console.log('[useCanvasSync] Supabase subscription active');
 
         // Step 4: Setup Fabric↔Zustand bidirectional sync (CanvasSyncManager)
-        console.log('[useCanvasSync] Setting up Fabric↔Zustand sync...');
+        if (DEBUG) console.log('[useCanvasSync] Setting up Fabric↔Zustand sync...');
         const canvasSync = new CanvasSyncManager(fabric, usePaperboxStore);
         canvasSync.initialize();
 
@@ -160,10 +163,10 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         }
 
         canvasSyncManagerRef.current = canvasSync;
-        console.log('[useCanvasSync] CanvasSyncManager initialized');
+        if (DEBUG) console.log('[useCanvasSync] CanvasSyncManager initialized');
 
         // Step 5: Setup navigation shortcuts (W2.D8)
-        console.log('[useCanvasSync] Setting up navigation shortcuts...');
+        if (DEBUG) console.log('[useCanvasSync] Setting up navigation shortcuts...');
         const navShortcuts = new NavigationShortcuts({ canvasManager: fabric });
         navShortcuts.initialize();
 
@@ -175,17 +178,17 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         }
 
         navigationShortcutsRef.current = navShortcuts;
-        console.log('[useCanvasSync] NavigationShortcuts initialized');
+        if (DEBUG) console.log('[useCanvasSync] NavigationShortcuts initialized');
 
         // Step 6: Setup scroll pan and zoom (W2.D12+: Figma-style interactions)
-        console.log('[useCanvasSync] Setting up scroll pan and zoom...');
+        if (DEBUG) console.log('[useCanvasSync] Setting up scroll pan and zoom...');
         fabric.setupSpacebarPan();
         fabric.setupScrollPanAndZoom();
-        console.log('[useCanvasSync] Scroll pan and zoom initialized');
+        if (DEBUG) console.log('[useCanvasSync] Scroll pan and zoom initialized');
 
         setInitialized(true);
         setError(null);
-        console.log('[useCanvasSync] Complete initialization successful ✅');
+        if (DEBUG) console.log('[useCanvasSync] Complete initialization successful ✅');
       } catch (err) {
         if (!mounted) return;
 
@@ -216,7 +219,7 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
     // Cleanup on unmount or user change
     return () => {
       mounted = false;
-      console.log('[useCanvasSync] Cleaning up');
+      if (DEBUG) console.log('[useCanvasSync] Cleaning up');
 
       // Cleanup NavigationShortcuts (W2.D8)
       if (navigationShortcutsRef.current) {

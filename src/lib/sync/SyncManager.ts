@@ -21,48 +21,9 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
 import { usePaperboxStore } from '../../stores';
 import type { Database } from '../../types/database';
-import type { CanvasObject } from '../../types/canvas';
+import { dbToCanvasObject } from './coordinateConversion';
 
 type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
-
-/**
- * Convert database row to CanvasObject discriminated union
- */
-function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
-  const base = {
-    id: row.id,
-    x: row.x,
-    y: row.y,
-    width: row.width,
-    height: row.height,
-    rotation: row.rotation || 0,
-    group_id: row.group_id,
-    z_index: row.z_index,
-    fill: row.fill,
-    stroke: row.stroke,
-    stroke_width: row.stroke_width,
-    opacity: row.opacity,
-    type_properties: row.type_properties || {},
-    style_properties: row.style_properties || {},
-    metadata: row.metadata || {},
-    created_by: row.created_by,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    locked_by: row.locked_by,
-    lock_acquired_at: row.lock_acquired_at,
-  };
-
-  switch (row.type) {
-    case 'rectangle':
-      return { ...base, type: 'rectangle' } as unknown as CanvasObject;
-    case 'circle':
-      return { ...base, type: 'circle' } as unknown as CanvasObject;
-    case 'text':
-      return { ...base, type: 'text' } as unknown as CanvasObject;
-    default:
-      throw new Error(`Unknown shape type: ${row.type}`);
-  }
-}
 
 /**
  * SyncManager class
@@ -135,7 +96,6 @@ export class SyncManager {
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             this.isSubscribed = true;
-            console.log('[SyncManager] Realtime subscription active');
           } else if (status === 'CHANNEL_ERROR') {
             console.error('[SyncManager] Subscription error');
             this.isSubscribed = false;
@@ -158,7 +118,6 @@ export class SyncManager {
   private handleInsert(row: DbCanvasObject): void {
     try {
       const obj = dbToCanvasObject(row);
-      console.log('[SyncManager] INSERT event:', obj.id);
 
       // Update Zustand store
       usePaperboxStore.getState()._addObject(obj);
@@ -189,7 +148,6 @@ export class SyncManager {
   private handleUpdate(row: DbCanvasObject): void {
     try {
       const obj = dbToCanvasObject(row);
-      console.log('[SyncManager] UPDATE event:', obj.id);
 
       // Update Zustand store
       usePaperboxStore.getState()._updateObject(obj.id, obj);
@@ -212,8 +170,6 @@ export class SyncManager {
    */
   private handleDelete(row: DbCanvasObject): void {
     try {
-      console.log('[SyncManager] DELETE event:', row.id);
-
       // Update Zustand store
       usePaperboxStore.getState()._removeObject(row.id);
 
@@ -241,7 +197,6 @@ export class SyncManager {
       await supabase.removeChannel(this.channel);
       this.channel = null;
       this.isSubscribed = false;
-      console.log('[SyncManager] Subscription cleaned up');
     }
   }
 

@@ -16,50 +16,11 @@ import { useState, useEffect, useCallback} from 'react';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
-import type { CanvasObject, RectangleObject, CircleObject, TextObject } from '../types/canvas';
+import type { CanvasObject } from '../types/canvas';
 import type { Database } from '../types/database';
+import { dbToCanvasObject } from '../lib/sync/coordinateConversion';
 
 type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
-
-/**
- * Convert database row to CanvasObject
- * Pure function - no hooks needed
- */
-function dbToCanvasObject(row: DbCanvasObject): CanvasObject {
-  const base = {
-    id: row.id,
-    x: row.x,
-    y: row.y,
-    width: row.width,
-    height: row.height,
-    rotation: row.rotation || 0,
-    group_id: row.group_id,
-    z_index: row.z_index,
-    fill: row.fill,
-    stroke: row.stroke,
-    stroke_width: row.stroke_width,
-    opacity: row.opacity,
-    type_properties: row.type_properties || {},
-    style_properties: row.style_properties || {},
-    metadata: row.metadata || {},
-    created_by: row.created_by,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    locked_by: row.locked_by,
-    lock_acquired_at: row.lock_acquired_at,
-  };
-
-  switch (row.type) {
-    case 'rectangle':
-      return { ...base, type: 'rectangle' } as RectangleObject;
-    case 'circle':
-      return { ...base, type: 'circle' } as CircleObject;
-    case 'text':
-      return { ...base, type: 'text' } as TextObject;
-    default:
-      throw new Error(`Unknown shape type: ${row.type}`);
-  }
-}
 
 export function useRealtimeObjects() {
   const { user } = useAuth();

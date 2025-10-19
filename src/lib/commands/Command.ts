@@ -154,6 +154,13 @@ export abstract class BaseCommand implements Command {
 export const CommandRegistry: Record<string, any> = {};
 
 /**
+ * Register a command class in the registry
+ */
+export function registerCommand(type: CommandType, commandClass: any) {
+  CommandRegistry[type] = commandClass;
+}
+
+/**
  * Command Factory (for AI integration - Phase III)
  *
  * Creates command instances from AI-parsed parameters

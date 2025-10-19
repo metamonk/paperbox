@@ -29,6 +29,7 @@ import { CanvasNavigationIndicator } from './CanvasNavigationIndicator';
 import { Minimap } from './Minimap';
 import { usePaperboxStore } from '../../stores';
 import { generateColorFromId } from '../../lib/constants';
+import { fabricToCenter } from '../../lib/fabric/coordinateTranslation';
 
 export function Canvas() {
   // Canvas element ref for Fabric.js - use state to trigger hook when element mounts
@@ -40,14 +41,11 @@ export function Canvas() {
   // Callback ref to capture canvas element immediately
   const canvasCallbackRef = useCallback((node: HTMLCanvasElement | null) => {
     if (node) {
-      console.log('[Canvas] Canvas element mounted, setting state');
-
       // STATIC CANVAS MIGRATION: Set fixed 8000x8000 canvas dimensions
       // Canvas is always 8000x8000, viewport scrolls to show different portions
       const CANVAS_SIZE = 8000;
       node.width = CANVAS_SIZE;
       node.height = CANVAS_SIZE;
-      console.log('[Canvas] Set static canvas dimensions:', { width: CANVAS_SIZE, height: CANVAS_SIZE });
 
       setCanvasElement(node);
     }
@@ -78,24 +76,11 @@ export function Canvas() {
 
   useEffect(() => {
     if (!user?.id || !activeCanvasId) {
-      console.log('[Canvas] Skipping presence setup - missing requirements:', {
-        hasUser: !!user?.id,
-        hasActiveCanvas: !!activeCanvasId,
-        activeCanvasId: activeCanvasId,
-      });
       return;
     }
 
     const userName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Anonymous';
     const userColor = generateColorFromId(user.id); // Consistent color based on user ID
-
-    console.log('[Canvas] Setting up collaboration presence channel:', {
-      userId: user.id.slice(0, 8),
-      userName,
-      userColor,
-      activeCanvasId: activeCanvasId,
-      activeCanvasIdShort: activeCanvasId.slice(0, 8),
-    });
 
     // Set current user in collaboration slice
     setCurrentUser(user.id, userName, userColor);
@@ -104,7 +89,6 @@ export function Canvas() {
     setupPresenceChannel(user.id, userName, userColor, activeCanvasId);
 
     return () => {
-      console.log('[Canvas] Cleaning up collaboration presence channel');
       cleanupPresenceChannel();
     };
   }, [user?.id, activeCanvasId, setupPresenceChannel, cleanupPresenceChannel, setCurrentUser, user?.email, user?.user_metadata?.display_name]);
@@ -152,8 +136,6 @@ export function Canvas() {
         return;
       }
 
-      console.log('[Canvas] Handling placement click:', { x, y, config });
-
       // Create object at clicked position
       createObjectAtPosition(
         config.type,
@@ -169,8 +151,6 @@ export function Canvas() {
     fabricManager.setupEventListeners({
       onPlacementClick: isPlacementMode ? handlePlacementClick : undefined,
     });
-
-    console.log('[Canvas] Placement mode updated:', { isPlacementMode });
   }, [fabricManager, isPlacementMode, createObjectAtPosition]);
 
   /**
@@ -204,26 +184,16 @@ export function Canvas() {
     const vpt = canvas.viewportTransform;
     const zoom = canvas.getZoom();
     
-    // Transform viewport coordinates to canvas coordinates
-    // Formula: canvasX = (viewportX - panX) / zoom
-    const canvasX = (viewportX - vpt[4]) / zoom;
-    const canvasY = (viewportY - vpt[5]) / zoom;
+    // Transform viewport coordinates to Fabric canvas coordinates
+    // Formula: fabricCoord = (viewportCoord - pan) / zoom
+    const fabricX = (viewportX - vpt[4]) / zoom;
+    const fabricY = (viewportY - vpt[5]) / zoom;
 
-    // Debug logging
-    if (Math.random() < 0.15) {
-      console.log('[✅ FIXED] Cursor with Fabric Viewport:', {
-        viewport: { x: Math.round(viewportX), y: Math.round(viewportY) },
-        transform: { 
-          zoom: zoom.toFixed(2), 
-          panX: Math.round(vpt[4]), 
-          panY: Math.round(vpt[5]) 
-        },
-        canvas: { x: Math.round(canvasX), y: Math.round(canvasY) },
-      });
-    }
+    // Translate Fabric coordinates (0 to 8000) to center-origin (-4000 to +4000)
+    const centerCoords = fabricToCenter(fabricX, fabricY);
 
-    // Broadcast canvas-absolute coordinates
-    sendCursorUpdate(canvasX, canvasY);
+    // Broadcast center-origin coordinates to other users
+    sendCursorUpdate(centerCoords.x, centerCoords.y);
 
     updateActivity();
   };
@@ -324,21 +294,21 @@ export function Canvas() {
             ref={canvasCallbackRef}
             className="absolute top-0 left-0"
             onClick={(e) => {
-              // STATIC CANVAS MIGRATION: React onClick fallback for placement mode
-              // Simplified coordinate system - direct pixel coordinates on 8000x8000 canvas
+              // FIX: React onClick fallback for placement mode
+              // Use Fabric's getPointer() to handle zoom/pan correctly
               if (isPlacementMode && fabricManager) {
-                // Direct pixel coordinates - no transforms needed
-                const rect = e.currentTarget.getBoundingClientRect();
-                const canvasX = e.clientX - rect.left;
-                const canvasY = e.clientY - rect.top;
+                const canvas = fabricManager.getCanvas();
+                if (!canvas) return;
 
-                console.log('[Canvas] React onClick placement (static canvas):', {
-                  canvasX,
-                  canvasY,
+                // Create a mock event object for Fabric's getPointer
+                // getPointer(e, false) applies zoom/pan transform automatically
+                const mockEvent = {
                   clientX: e.clientX,
                   clientY: e.clientY,
-                  isPlacementMode
-                });
+                } as MouseEvent;
+                const pointer = canvas.getPointer(mockEvent, false);
+                const canvasX = pointer.x;
+                const canvasY = pointer.y;
 
                 // Get placement config and create shape
                 const config = usePaperboxStore.getState().placementConfig;
@@ -379,11 +349,11 @@ export function Canvas() {
           {canvasInitialized && <Minimap fabricManager={fabricManager} />}
           </div>
 
-          {/* AI Text Box Overlay - fixed to viewport, appears above toolbar */}
-          <AITextBox isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
+          {/* AI Text Box Overlay - fixed to viewport, replaces toolbar when open */}
+          {isAIOpen && <AITextBox onClose={() => setIsAIOpen(false)} />}
 
           {/* Bottom Toolbar - Figma-style centered tool palette, fixed to viewport */}
-          {canvasInitialized && (
+          {!isAIOpen && canvasInitialized && (
             <BottomToolbar
               onAddShape={handleAddShape}
               activeTool={isPlacementMode ? 'rectangle' : 'select'}

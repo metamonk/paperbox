@@ -1,18 +1,20 @@
 /**
  * RemoteSelectionOverlay - Visual Indicators for Other Users' Selections
  *
- * Uses Fabric's viewport transform to position selection boxes
+ * Coordinate System Flow:
+ * 1. Objects stored in center-origin coordinates (-4000 to +4000)
+ * 2. Translate to Fabric coordinates (0 to 8000) 
+ * 3. Convert center-based to top-left for div positioning
+ * 4. Apply viewer's viewport transform (zoom + pan) to screen coordinates
  * 
  * Displays colored borders around objects selected by other users,
  * with user name labels. This makes collaborative editing visible
  * and helps users understand what others are doing.
- *
- * Pattern: Transforms canvas coordinates to viewport coordinates
- * using the viewer's zoom/pan so selections appear in correct position
  */
 
 import { usePaperboxStore } from '../../stores';
 import type { FabricCanvasManager } from '../../lib/fabric/FabricCanvasManager';
+import { centerToFabric } from '../../lib/fabric/coordinateTranslation';
 
 interface RemoteSelectionOverlayProps {
   fabricManager: FabricCanvasManager | null;
@@ -58,13 +60,16 @@ export function RemoteSelectionOverlay({ fabricManager }: RemoteSelectionOverlay
             return null;
           }
 
-          // Transform canvas coordinates to viewport coordinates
-          // Objects use center-based positioning, convert to top-left for div
-          const canvasLeft = obj.x - (obj.width / 2);
-          const canvasTop = obj.y - (obj.height / 2);
+          // Step 1: Translate center-origin (-4000 to +4000) to Fabric (0 to 8000)
+          const fabricCoords = centerToFabric(obj.x, obj.y);
           
-          const viewportLeft = (canvasLeft * zoom) + vpt[4];
-          const viewportTop = (canvasTop * zoom) + vpt[5];
+          // Step 2: Objects use center-based positioning, convert to top-left for div
+          const fabricLeft = fabricCoords.x - (obj.width / 2);
+          const fabricTop = fabricCoords.y - (obj.height / 2);
+          
+          // Step 3: Apply viewer's viewport transform to get screen coordinates
+          const viewportLeft = (fabricLeft * zoom) + vpt[4];
+          const viewportTop = (fabricTop * zoom) + vpt[5];
           const viewportWidth = obj.width * zoom;
           const viewportHeight = obj.height * zoom;
 

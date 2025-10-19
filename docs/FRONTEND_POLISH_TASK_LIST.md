@@ -2,7 +2,7 @@
 ## Production-Quality Figma Clone UI Transformation
 
 **Created**: 2025-10-18
-**Goal**: Transform Baseboard into a professional, production-ready Figma clone
+**Goal**: Transform PaperBox into a professional, production-ready Figma clone
 **Design Reference**: Scira project + Figma screenshot
 **Estimated Duration**: 8-13 days (48-78 hours)
 
@@ -784,8 +784,8 @@
 - [ ] **FP3.17**: Add brand logo to header
   - **File**: `src/components/layout/Header.tsx`
   - **Action**:
-    - Create simple logo SVG or use icon
-    - Add "Baseboard" wordmark
+    - Use Logo.tsx component
+    - Add "PaperBox" wordmark
     - Style appropriately
   - **Success**: Professional branding in header
 
@@ -1077,11 +1077,56 @@
     - Show in separate sections
   - **Success**: Quick access to favorite components
 
-**Sprint 4 Deliverable**: Fully functional component library with drag-drop
+**Sprint 4 Deliverable**: Fully functional component library with click-to-add
 
 ---
 
-# SPRINT 5: ACCESSIBILITY & QUALITY (1-2 days)
+# ~~SPRINT 5: ACCESSIBILITY & QUALITY~~ (DEFERRED)
+
+**Decision**: Focus on core UI transformation first (Sprints 1-4), then assess accessibility needs after visual redesign is complete.
+
+**Deferred Tasks**:
+- Accessibility audit and WCAG compliance
+- Screen reader testing
+- Error handling enhancements
+- Performance optimization deep-dive
+
+**When to revisit**: After Sprint 4 completion, evaluate need for accessibility sprint based on:
+- User feedback on new UI
+- Actual performance metrics observed
+- Specific accessibility requirements identified
+
+---
+
+# ~~SPRINT 5 CONTENT REMOVED~~
+
+The following sections have been removed from this task list:
+- Day 11: Accessibility Audit (FP5.1-FP5.8)
+- Day 12: Error Handling & Performance (FP5.9-FP5.16)
+- Day 13: Final Polish & Validation (FP5.17-FP5.24)
+
+**Rationale**: Build and test the UI redesign first, then determine what accessibility and performance work is actually needed based on real usage.
+
+---
+
+# REVISED SPRINT SCOPE
+
+## Focused Implementation (8-10 days)
+
+### Core Sprints (MUST DO):
+1. **Sprint 1** (Days 1-2): Dark Theme Foundation - 12-16 hours
+2. **Sprint 2** (Days 3-5): Layout Transformation - 16-24 hours
+3. **Sprint 3** (Days 6-8): Visual Polish & Animations - 16-24 hours
+4. **Sprint 4** (Days 9-10): Component Library - 12-16 hours
+
+### Optional Polish (IF TIME/NEEDED):
+5. ~~**Sprint 5** (Days 11-13): Accessibility & Quality~~ - DEFERRED
+
+**New Total Duration**: 8-10 days (48-60 hours)
+
+---
+
+# FINAL VALIDATION CHECKLIST
 
 ## Day 11: Accessibility Audit
 
