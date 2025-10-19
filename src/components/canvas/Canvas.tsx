@@ -25,7 +25,6 @@ import { Header } from '../layout/Header';
 import { CanvasLayout } from '../layout/CanvasLayout';
 import { LeftSidebar } from '../sidebar/LeftSidebar';
 import { Sidebar } from '../layout/Sidebar';
-import { ToolsSidebar } from './ToolsSidebar';
 import { BottomToolbar } from '../toolbar/BottomToolbar';
 import { PropertyPanel } from '../properties/PropertyPanel';
 import { CanvasLoadingOverlay } from './CanvasLoadingOverlay';
@@ -78,8 +77,8 @@ export function Canvas() {
   // Shape creation logic
   const { handleAddShape, createObjectAtPosition } = useShapeCreation({ fabricManager, user });
 
-  // Sidebar state management
-  const { sidebarOpen, sidebarContent, handleToggleTools, handleToggleUsers, handleToggleProperties, handleToggleLayers } = useSidebarState();
+  // Sidebar state management (only Users sidebar used - others are in fixed CanvasLayout)
+  const { sidebarOpen, sidebarContent, handleToggleUsers } = useSidebarState();
 
   // Zustand store for accessing canvas state
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
@@ -185,14 +184,6 @@ export function Canvas() {
   };
 
 
-  /**
-   * Handle delete requests from toolbar
-   */
-  const handleDelete = () => {
-    if (selectedIds.length > 0) {
-      deleteObjects(selectedIds);
-    }
-  };
 
   /**
    * W4.D4: Keyboard shortcuts for delete, selection, and z-index operations
@@ -253,10 +244,7 @@ export function Canvas() {
         userName={user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'User'}
         sidebarOpen={sidebarOpen}
         sidebarContent={sidebarContent}
-        onToggleTools={handleToggleTools}
         onToggleUsers={handleToggleUsers}
-        onToggleProperties={handleToggleProperties}
-        onToggleLayers={handleToggleLayers}
       />
 
       <CanvasLayout
@@ -352,40 +340,22 @@ export function Canvas() {
           )}
         </div>
 
-        {/* Backdrop for mobile sidebar overlay (users/tools only) */}
-        {sidebarOpen && (sidebarContent === 'users' || sidebarContent === 'tools') && (
+        {/* Backdrop for mobile sidebar overlay (users only) */}
+        {sidebarOpen && sidebarContent === 'users' && (
           <div
             className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={() => {
-              if (sidebarContent === 'tools') handleToggleTools();
-              else handleToggleUsers();
-            }}
+            onClick={handleToggleUsers}
             aria-hidden="true"
           />
         )}
 
-        {/* Mobile overlay sidebar for users/tools only */}
-        {(sidebarContent === 'users' || sidebarContent === 'tools') && (
+        {/* Mobile overlay sidebar for users only */}
+        {sidebarContent === 'users' && (
           <Sidebar
             isOpen={sidebarOpen}
-            onClose={() => {
-              if (sidebarContent === 'tools') handleToggleTools();
-              else handleToggleUsers();
-            }}
+            onClose={handleToggleUsers}
           >
-            {sidebarContent === 'users' ? (
-              <UsersPanel users={onlineUsers} currentUserId={currentUserId} />
-            ) : (
-              <ToolsSidebar
-                onAddShape={handleAddShape}
-                onDelete={handleDelete}
-                hasSelection={selectedIds.length > 0}
-                onMoveToFront={selectedIds.length === 1 ? () => moveToFront(selectedIds[0]) : undefined}
-                onMoveToBack={selectedIds.length === 1 ? () => moveToBack(selectedIds[0]) : undefined}
-                onMoveUp={selectedIds.length === 1 ? () => moveUp(selectedIds[0]) : undefined}
-                onMoveDown={selectedIds.length === 1 ? () => moveDown(selectedIds[0]) : undefined}
-              />
-            )}
+            <UsersPanel users={onlineUsers} currentUserId={currentUserId} />
           </Sidebar>
         )}
       </div>
