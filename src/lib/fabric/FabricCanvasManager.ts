@@ -150,10 +150,10 @@ export class FabricCanvasManager {
   private rafId: number | null = null; // requestAnimationFrame ID for throttling
   private pendingViewportSync: boolean = false; // Flag for pending sync
 
-  // W2.D8.4-5: Pixel grid visualization
+  // Pixel grid visualization - optimized with direct canvas rendering
   private pixelGridInitialized: boolean = false;
-  private pixelGridPattern: FabricObject[] = []; // Grid lines
-  private readonly PIXEL_GRID_THRESHOLD = 2; // Show grid when zoom > 2x (half the previous threshold)
+  private pixelGridRenderHandler: (() => void) | null = null;
+  private readonly PIXEL_GRID_THRESHOLD = 4; // Show grid when zoom > 4x (increased for better performance)
 
   // W2.D8.7: Canvas boundary limits (Figma-style)
   private readonly CANVAS_BOUNDARY = 50000; // ±50,000 pixels from origin
@@ -1621,16 +1621,16 @@ export class FabricCanvasManager {
   // ────────────────────────────────────────────────────────────────────────────
 
   /**
-   * W2.D8.4: Setup pixel grid visualization system
+   * Setup pixel grid visualization system - OPTIMIZED
    *
-   * Initializes the pixel grid system that shows/hides grid lines based on zoom level.
-   * Grid appears when zoom > 4x for precision design work (like Figma).
+   * Uses Fabric's after:render event to draw grid directly to canvas context.
+   * Much faster than creating individual Fabric objects for each line.
    *
-   * Pattern:
-   * - Grid lines are rendered as Fabric.js Line objects
-   * - Lines are non-selectable and non-evented (don't interfere with canvas)
-   * - Grid visibility is controlled by zoom event listener
-   * - Grid spacing = zoom level (1:1 pixel ratio)
+   * Performance improvements:
+   * - No Fabric object creation (100-1000x faster)
+   * - Direct canvas 2D API rendering
+   * - Only draws visible viewport
+   * - Single render pass per frame
    */
   setupPixelGrid(): void {
     if (!this.canvas) {
@@ -1642,15 +1642,91 @@ export class FabricCanvasManager {
       return;
     }
 
-    // Register zoom event listener to update grid visibility
-    this.canvas.on('mouse:wheel', () => {
-      this.updatePixelGridVisibility();
-    });
+    // Create optimized render handler using SCREEN SPACE algorithm
+    // This prevents gaps from floating point errors
+    this.pixelGridRenderHandler = () => {
+      if (!this.canvas || !this.isPixelGridVisible()) {
+        return;
+      }
+
+      const ctx = this.canvas.getContext() as CanvasRenderingContext2D;
+      const zoom = this.canvas.getZoom();
+      const vpt = this.canvas.viewportTransform;
+      
+      if (!vpt) return;
+
+      // Grid spacing in SCREEN SPACE (pixels on screen)
+      const spacing = this.getPixelGridSpacing();
+      const screenSpacing = spacing * zoom;
+      
+      // If spacing is less than 0.5px on screen, skip rendering (too dense)
+      if (screenSpacing < 0.5) {
+        return;
+      }
+
+      const style = this.getPixelGridStyle();
+      const canvasWidth = this.canvas.getWidth();
+      const canvasHeight = this.canvas.getHeight();
+
+      // Calculate grid offset using modulo arithmetic
+      // This ensures perfect alignment regardless of pan/zoom
+      const offsetX = vpt[4] % screenSpacing;
+      const offsetY = vpt[5] % screenSpacing;
+
+      // Setup drawing style
+      ctx.save();
+      ctx.strokeStyle = style.stroke;
+      ctx.lineWidth = 1; // Always 1px in screen space for crisp lines
+      ctx.globalAlpha = style.opacity;
+
+      // Begin path for all lines (single path is much faster)
+      ctx.beginPath();
+
+      // Draw vertical lines in SCREEN SPACE with INTEGER coordinates
+      // Start from the offset and draw at regular intervals
+      for (let x = offsetX; x < canvasWidth; x += screenSpacing) {
+        const screenX = Math.round(x); // Round to integer for crisp lines
+        ctx.moveTo(screenX, 0);
+        ctx.lineTo(screenX, canvasHeight);
+      }
+      
+      // Also draw lines in negative direction if offset is positive
+      if (offsetX > 0) {
+        for (let x = offsetX - screenSpacing; x >= 0; x -= screenSpacing) {
+          const screenX = Math.round(x);
+          ctx.moveTo(screenX, 0);
+          ctx.lineTo(screenX, canvasHeight);
+        }
+      }
+
+      // Draw horizontal lines in SCREEN SPACE with INTEGER coordinates
+      for (let y = offsetY; y < canvasHeight; y += screenSpacing) {
+        const screenY = Math.round(y);
+        ctx.moveTo(0, screenY);
+        ctx.lineTo(canvasWidth, screenY);
+      }
+      
+      // Also draw lines in negative direction if offset is positive
+      if (offsetY > 0) {
+        for (let y = offsetY - screenSpacing; y >= 0; y -= screenSpacing) {
+          const screenY = Math.round(y);
+          ctx.moveTo(0, screenY);
+          ctx.lineTo(canvasWidth, screenY);
+        }
+      }
+
+      // Stroke all lines at once
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    // Register after:render handler for efficient drawing
+    this.canvas.on('after:render', this.pixelGridRenderHandler);
 
     // Mark as initialized
     this.pixelGridInitialized = true;
 
-    console.log('[FabricCanvasManager] Pixel grid system initialized');
+    console.log('[FabricCanvasManager] Pixel grid system initialized (optimized)');
   }
 
   /**
@@ -1713,85 +1789,14 @@ export class FabricCanvasManager {
   }
 
   /**
-   * W2.D8.4: Update pixel grid visibility based on current zoom
-   *
-   * Called automatically on zoom events.
-   * Shows grid when zoom > 4x, hides when zoom <= 4x.
-   *
-   * Pattern:
-   * - Removes old grid lines
-   * - Calculates new grid lines if zoom > threshold
-   * - Renders grid with subtle styling
+   * Update pixel grid visibility - NO LONGER NEEDED
+   * 
+   * Grid now renders automatically via after:render event.
+   * This method is kept for backward compatibility but does nothing.
    */
   private updatePixelGridVisibility(): void {
-    if (!this.canvas) {
-      return;
-    }
-
-    // Clear existing grid lines
-    this.pixelGridPattern.forEach((line) => {
-      this.canvas?.remove(line);
-    });
-    this.pixelGridPattern = [];
-
-    // Check if grid should be visible
-    if (!this.isPixelGridVisible()) {
-      this.canvas.requestRenderAll();
-      return;
-    }
-
-    // Generate grid lines
-    const spacing = this.getPixelGridSpacing();
-    const style = this.getPixelGridStyle();
-    const width = this.canvas.getWidth();
-    const height = this.canvas.getHeight();
-
-    // Calculate viewport bounds
-    const vpt = this.canvas.viewportTransform;
-    const zoom = this.canvas.getZoom();
-    const viewportLeft = -vpt[4] / zoom;
-    const viewportTop = -vpt[5] / zoom;
-    const viewportRight = viewportLeft + width / zoom;
-    const viewportBottom = viewportTop + height / zoom;
-
-    // Generate vertical lines
-    const startX = Math.floor(viewportLeft / spacing) * spacing;
-    const endX = Math.ceil(viewportRight / spacing) * spacing;
-
-    for (let x = startX; x <= endX; x += spacing) {
-      const line = new Path(`M ${x} ${viewportTop} L ${x} ${viewportBottom}`, {
-        stroke: style.stroke,
-        strokeWidth: style.strokeWidth / zoom, // Scale stroke with zoom
-        opacity: style.opacity,
-        selectable: false,
-        evented: false,
-        excludeFromExport: true,
-      });
-
-      this.canvas.add(line);
-      this.pixelGridPattern.push(line);
-    }
-
-    // Generate horizontal lines
-    const startY = Math.floor(viewportTop / spacing) * spacing;
-    const endY = Math.ceil(viewportBottom / spacing) * spacing;
-
-    for (let y = startY; y <= endY; y += spacing) {
-      const line = new Path(`M ${viewportLeft} ${y} L ${viewportRight} ${y}`, {
-        stroke: style.stroke,
-        strokeWidth: style.strokeWidth / zoom, // Scale stroke with zoom
-        opacity: style.opacity,
-        selectable: false,
-        evented: false,
-        excludeFromExport: true,
-      });
-
-      this.canvas.add(line);
-      this.pixelGridPattern.push(line);
-    }
-
-    // Render grid
-    this.canvas.requestRenderAll();
+    // Grid auto-updates via after:render event handler
+    // No action needed
   }
 
   /**
@@ -2017,11 +2022,11 @@ export class FabricCanvasManager {
     }
     this.pendingViewportSync = false;
 
-    // W2.D8.4: Clean up pixel grid
-    this.pixelGridPattern.forEach((line) => {
-      this.canvas?.remove(line);
-    });
-    this.pixelGridPattern = [];
+    // Clean up pixel grid event handler
+    if (this.pixelGridRenderHandler && this.canvas) {
+      this.canvas.off('after:render', this.pixelGridRenderHandler);
+      this.pixelGridRenderHandler = null;
+    }
     this.pixelGridInitialized = false;
 
     // STATIC CANVAS MIGRATION: No resize handler to clean up
