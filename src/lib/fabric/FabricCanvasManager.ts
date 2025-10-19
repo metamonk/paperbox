@@ -1642,7 +1642,8 @@ export class FabricCanvasManager {
       return;
     }
 
-    // Create optimized render handler
+    // Create optimized render handler using SCREEN SPACE algorithm
+    // This prevents gaps from floating point errors
     this.pixelGridRenderHandler = () => {
       if (!this.canvas || !this.isPixelGridVisible()) {
         return;
@@ -1654,51 +1655,64 @@ export class FabricCanvasManager {
       
       if (!vpt) return;
 
-      // Calculate viewport bounds in canvas coordinates
-      const viewportLeft = -vpt[4] / zoom;
-      const viewportTop = -vpt[5] / zoom;
-      const viewportRight = viewportLeft + this.canvas.getWidth() / zoom;
-      const viewportBottom = viewportTop + this.canvas.getHeight() / zoom;
-
-      // Grid spacing (1 pixel at current zoom)
+      // Grid spacing in SCREEN SPACE (pixels on screen)
       const spacing = this.getPixelGridSpacing();
+      const screenSpacing = spacing * zoom;
+      
+      // If spacing is less than 0.5px on screen, skip rendering (too dense)
+      if (screenSpacing < 0.5) {
+        return;
+      }
+
       const style = this.getPixelGridStyle();
+      const canvasWidth = this.canvas.getWidth();
+      const canvasHeight = this.canvas.getHeight();
+
+      // Calculate grid offset using modulo arithmetic
+      // This ensures perfect alignment regardless of pan/zoom
+      const offsetX = vpt[4] % screenSpacing;
+      const offsetY = vpt[5] % screenSpacing;
 
       // Setup drawing style
       ctx.save();
       ctx.strokeStyle = style.stroke;
-      ctx.lineWidth = style.strokeWidth / zoom;
+      ctx.lineWidth = 1; // Always 1px in screen space for crisp lines
       ctx.globalAlpha = style.opacity;
 
       // Begin path for all lines (single path is much faster)
       ctx.beginPath();
 
-      // Draw vertical lines
-      const startX = Math.floor(viewportLeft / spacing) * spacing;
-      const endX = Math.ceil(viewportRight / spacing) * spacing;
+      // Draw vertical lines in SCREEN SPACE with INTEGER coordinates
+      // Start from the offset and draw at regular intervals
+      for (let x = offsetX; x < canvasWidth; x += screenSpacing) {
+        const screenX = Math.round(x); // Round to integer for crisp lines
+        ctx.moveTo(screenX, 0);
+        ctx.lineTo(screenX, canvasHeight);
+      }
       
-      for (let x = startX; x <= endX; x += spacing) {
-        // Transform to viewport coordinates
-        const vx = x * zoom + vpt[4];
-        const vy1 = viewportTop * zoom + vpt[5];
-        const vy2 = viewportBottom * zoom + vpt[5];
-        
-        ctx.moveTo(vx, vy1);
-        ctx.lineTo(vx, vy2);
+      // Also draw lines in negative direction if offset is positive
+      if (offsetX > 0) {
+        for (let x = offsetX - screenSpacing; x >= 0; x -= screenSpacing) {
+          const screenX = Math.round(x);
+          ctx.moveTo(screenX, 0);
+          ctx.lineTo(screenX, canvasHeight);
+        }
       }
 
-      // Draw horizontal lines
-      const startY = Math.floor(viewportTop / spacing) * spacing;
-      const endY = Math.ceil(viewportBottom / spacing) * spacing;
+      // Draw horizontal lines in SCREEN SPACE with INTEGER coordinates
+      for (let y = offsetY; y < canvasHeight; y += screenSpacing) {
+        const screenY = Math.round(y);
+        ctx.moveTo(0, screenY);
+        ctx.lineTo(canvasWidth, screenY);
+      }
       
-      for (let y = startY; y <= endY; y += spacing) {
-        // Transform to viewport coordinates
-        const vx1 = viewportLeft * zoom + vpt[4];
-        const vx2 = viewportRight * zoom + vpt[4];
-        const vy = y * zoom + vpt[5];
-        
-        ctx.moveTo(vx1, vy);
-        ctx.lineTo(vx2, vy);
+      // Also draw lines in negative direction if offset is positive
+      if (offsetY > 0) {
+        for (let y = offsetY - screenSpacing; y >= 0; y -= screenSpacing) {
+          const screenY = Math.round(y);
+          ctx.moveTo(0, screenY);
+          ctx.lineTo(canvasWidth, screenY);
+        }
       }
 
       // Stroke all lines at once
