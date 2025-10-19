@@ -2,6 +2,9 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 /**
  * Login form component
@@ -42,25 +45,19 @@ export function LoginForm() {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+      <h2 className="text-2xl font-bold text-foreground mb-6 text-center">
         Sign In
       </h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Email Input */}
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Email
-          </label>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
             id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="you@example.com"
             disabled={isSubmitting}
             required
@@ -68,19 +65,13 @@ export function LoginForm() {
         </div>
 
         {/* Password Input */}
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Password
-          </label>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input
             id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="••••••••"
             disabled={isSubmitting}
             required
@@ -89,27 +80,27 @@ export function LoginForm() {
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-50 text-red-700 px-4 py-3 rounded-md text-sm">
+          <div className="bg-destructive/10 text-destructive border border-destructive/20 px-4 py-3 rounded-md text-sm">
             {error}
           </div>
         )}
 
         {/* Submit Button */}
-        <button
+        <Button
           type="submit"
           disabled={isSubmitting || loading}
-          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full"
         >
           {isSubmitting ? 'Signing in...' : 'Sign In'}
-        </button>
+        </Button>
       </form>
 
       {/* Link to Signup */}
-      <p className="mt-6 text-center text-sm text-gray-600">
+      <p className="mt-6 text-center text-sm text-muted-foreground">
         Don't have an account?{' '}
         <Link
           to="/signup"
-          className="text-blue-500 hover:text-blue-600 font-medium"
+          className="text-primary hover:underline font-medium"
         >
           Sign up
         </Link>

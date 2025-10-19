@@ -75,13 +75,13 @@ export function CanvasSelectorPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <header className="bg-card border-b border-border px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Your Canvases</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <h1 className="text-2xl font-semibold text-foreground">Your Canvases</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               {canvases.length} {canvases.length === 1 ? 'canvas' : 'canvases'}
             </p>
           </div>
@@ -114,9 +114,9 @@ export function CanvasSelectorPage() {
           </div>
         ) : canvases.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <FileText className="h-16 w-16 text-gray-300 mb-4" />
-            <h2 className="text-xl font-medium text-gray-700 mb-2">No canvases yet</h2>
-            <p className="text-gray-500 mb-6">Create your first canvas to get started</p>
+            <FileText className="h-16 w-16 text-muted-foreground/40 mb-4" />
+            <h2 className="text-xl font-medium text-foreground mb-2">No canvases yet</h2>
+            <p className="text-muted-foreground mb-6">Create your first canvas to get started</p>
             <Button onClick={handleCreateCanvas} disabled={isCreating} className="gap-2">
               {isCreating ? (
                 <>
@@ -137,33 +137,33 @@ export function CanvasSelectorPage() {
               <div
                 key={canvas.id}
                 onClick={() => handleCanvasClick(canvas.id)}
-                className="group bg-white rounded-lg border border-gray-200 overflow-hidden hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer"
+                className="group bg-card rounded-lg border border-border overflow-hidden hover:border-primary hover:shadow-lg transition-all cursor-pointer"
               >
                 {/* Canvas Thumbnail Placeholder */}
-                <div className="aspect-video bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center relative">
-                  <FileText className="h-12 w-12 text-gray-300 group-hover:text-blue-400 transition-colors" />
+                <div className="aspect-video bg-muted flex items-center justify-center relative">
+                  <FileText className="h-12 w-12 text-muted-foreground/40 group-hover:text-primary transition-colors" />
 
                   {/* Settings Button */}
                   <button
                     onClick={(e) => handleSettingsClick(e, canvas)}
-                    className="absolute top-2 right-2 p-2 bg-white/80 hover:bg-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                    className="absolute top-2 right-2 p-2 bg-card/80 hover:bg-card rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-border"
                     title="Canvas settings"
                   >
-                    <Settings className="h-4 w-4 text-gray-600" />
+                    <Settings className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </div>
 
                 {/* Canvas Metadata */}
                 <div className="p-4">
-                  <h3 className="font-medium text-gray-900 truncate mb-1">
+                  <h3 className="font-medium text-foreground truncate mb-1">
                     {canvas.name}
                   </h3>
                   {canvas.description && (
-                    <p className="text-sm text-gray-500 truncate mb-2">
+                    <p className="text-sm text-muted-foreground truncate mb-2">
                       {canvas.description}
                     </p>
                   )}
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-muted-foreground/70">
                     Updated {formatDate(canvas.updated_at)}
                   </p>
                 </div>

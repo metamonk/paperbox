@@ -1,9 +1,10 @@
 import { PresenceBadge } from '../collaboration/PresenceBadge';
 import { CanvasPicker } from '../canvas/CanvasPicker';
 import { CanvasManagementModal } from '../canvas/CanvasManagementModal';
+import { ThemeToggle } from './ThemeToggle';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings, LayoutGrid } from 'lucide-react';
+import { Settings, LayoutGrid, Palette, Sliders, Layers as LayersIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePaperboxStore } from '@/stores';
 import type { Canvas } from '@/types/canvas';
@@ -35,7 +36,7 @@ export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarCon
   const activeCanvas = canvases.find((c: Canvas) => c.id === activeCanvasId);
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 px-4 md:px-6 flex items-center justify-between gap-4">
+    <header className="h-14 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between gap-4">
       {/* Left side: Canvas Picker (Figma-style) + Tools + Presence */}
       <div className="flex items-center gap-3">
         {/* W5.D3+W5.D5.3: Canvas Picker + Browse + Settings */}
@@ -64,56 +65,47 @@ export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarCon
           </Button>
         </div>
 
-        <div className="h-6 w-px bg-gray-300" /> {/* Separator */}
+        <div className="h-6 w-px bg-border" /> {/* Separator */}
 
-        <h1 className="text-xl font-bold text-gray-900 hidden md:block">
+        <h1 className="text-xl font-bold text-foreground hidden md:block">
           CollabCanvas
         </h1>
 
         {/* Tools button */}
-        <button
+        <Button
+          variant={sidebarOpen && sidebarContent === 'tools' ? 'default' : 'ghost'}
+          size="sm"
           onClick={onToggleTools}
-          className={`
-            px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-            ${sidebarOpen && sidebarContent === 'tools'
-              ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300 ring-offset-1'
-              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-            }
-          `}
           aria-label="Toggle tools sidebar"
+          className="gap-2"
         >
-          🎨 <span className="hidden sm:inline">Tools</span>
-        </button>
+          <Palette className="h-4 w-4" />
+          <span className="hidden sm:inline">Tools</span>
+        </Button>
 
         {/* Properties button */}
-        <button
+        <Button
+          variant={sidebarOpen && sidebarContent === 'properties' ? 'default' : 'ghost'}
+          size="sm"
           onClick={onToggleProperties}
-          className={`
-            px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-            ${sidebarOpen && sidebarContent === 'properties'
-              ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300 ring-offset-1'
-              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-            }
-          `}
           aria-label="Toggle properties sidebar"
+          className="gap-2"
         >
-          ⚙️ <span className="hidden sm:inline">Properties</span>
-        </button>
+          <Sliders className="h-4 w-4" />
+          <span className="hidden sm:inline">Properties</span>
+        </Button>
 
         {/* Layers button */}
-        <button
+        <Button
+          variant={sidebarOpen && sidebarContent === 'layers' ? 'default' : 'ghost'}
+          size="sm"
           onClick={onToggleLayers}
-          className={`
-            px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-            ${sidebarOpen && sidebarContent === 'layers'
-              ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300 ring-offset-1'
-              : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
-            }
-          `}
           aria-label="Toggle layers sidebar"
+          className="gap-2"
         >
-          📊 <span className="hidden sm:inline">Layers</span>
-        </button>
+          <LayersIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">Layers</span>
+        </Button>
 
         {/* Clickable presence badge for users sidebar */}
         <PresenceBadge
@@ -125,15 +117,17 @@ export function Header({ userCount, onSignOut, userName, sidebarOpen, sidebarCon
 
       {/* Right side: User actions */}
       <div className="flex items-center gap-3">
-        <div className="text-sm text-gray-700 hidden sm:block">
-          <span className="font-medium">{userName}</span>
+        <div className="text-sm text-muted-foreground hidden sm:block">
+          <span className="font-medium text-foreground">{userName}</span>
         </div>
-        <button
+        <ThemeToggle />
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onSignOut}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
         >
           Sign Out
-        </button>
+        </Button>
       </div>
 
       {/* W5.D3: Canvas Management Modal */}
