@@ -141,6 +141,10 @@ export class FabricCanvasManager {
   // W5.D5++++: Collaborative overlays (lock/selection indicators)
   private overlayManager: CollaborativeOverlayManager | null = null;
 
+  // PERFORMANCE: Object culling for large canvases
+  private cullInterval: number | null = null;
+  private readonly CULL_MARGIN = 500; // pixels - show objects 500px outside viewport
+
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
@@ -240,6 +244,9 @@ export class FabricCanvasManager {
     this.overlayManager = new CollaborativeOverlayManager(this.canvas);
     console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
 
+    // PERFORMANCE: Start object culling for large canvases
+    this.startObjectCulling();
+
     return this.canvas;
   }
 
@@ -257,6 +264,107 @@ export class FabricCanvasManager {
    */
   private snapToGrid(value: number, gridSize: number): number {
     return Math.round(value / gridSize) * gridSize;
+  }
+
+  /**
+   * PERFORMANCE: Update object visibility based on viewport
+   * 
+   * Hides objects outside the visible viewport for better rendering performance
+   * with large numbers of objects. Objects near viewport edges (within CULL_MARGIN)
+   * remain visible for smooth scrolling experience.
+   */
+  private updateObjectCulling(): void {
+    if (!this.canvas) return;
+
+    const canvasElement = this.canvas.getElement();
+    const rect = canvasElement.getBoundingClientRect();
+    
+    // Get viewport bounds (visible area of the 5000x5000 canvas)
+    const viewportLeft = -rect.left;
+    const viewportTop = -rect.top;
+    const viewportRight = viewportLeft + window.innerWidth;
+    const viewportBottom = viewportTop + window.innerHeight;
+
+    // Add margin for smoother transitions
+    const cullLeft = viewportLeft - this.CULL_MARGIN;
+    const cullTop = viewportTop - this.CULL_MARGIN;
+    const cullRight = viewportRight + this.CULL_MARGIN;
+    const cullBottom = viewportBottom + this.CULL_MARGIN;
+
+    // Update visibility for each object
+    const objects = this.canvas.getObjects();
+    let culledCount = 0;
+
+    objects.forEach((obj) => {
+      // Skip overlay objects (cursors, etc.)
+      const objWithData = obj as FabricObjectWithData;
+      if (!objWithData.data || !objWithData.data.id) return;
+
+      // Get object bounds
+      const objLeft = (obj.left || 0) - (obj.width || 0) / 2;
+      const objTop = (obj.top || 0) - (obj.height || 0) / 2;
+      const objRight = objLeft + (obj.width || 0);
+      const objBottom = objTop + (obj.height || 0);
+
+      // Check if object intersects viewport (with margin)
+      const isVisible =
+        objRight >= cullLeft &&
+        objLeft <= cullRight &&
+        objBottom >= cullTop &&
+        objTop <= cullBottom;
+
+      if (obj.visible !== isVisible) {
+        obj.visible = isVisible;
+        if (!isVisible) culledCount++;
+      }
+    });
+
+    if (culledCount > 0) {
+      this.canvas.requestRenderAll();
+      console.log(`[FabricCanvasManager] Culled ${culledCount} objects outside viewport`);
+    }
+  }
+
+  /**
+   * PERFORMANCE: Start periodic object culling
+   * 
+   * Runs culling check every 500ms to hide off-screen objects
+   */
+  private startObjectCulling(): void {
+    if (this.cullInterval !== null) return;
+
+    // Initial cull
+    this.updateObjectCulling();
+
+    // Periodic culling (500ms interval)
+    this.cullInterval = window.setInterval(() => {
+      this.updateObjectCulling();
+    }, 500);
+
+    console.log('[FabricCanvasManager] Object culling started (500ms interval)');
+  }
+
+  /**
+   * PERFORMANCE: Stop object culling and restore all objects
+   */
+  private stopObjectCulling(): void {
+    if (this.cullInterval !== null) {
+      window.clearInterval(this.cullInterval);
+      this.cullInterval = null;
+    }
+
+    // Restore all objects
+    if (this.canvas) {
+      this.canvas.getObjects().forEach((obj) => {
+        const objWithData = obj as FabricObjectWithData;
+        if (objWithData.data && objWithData.data.id) {
+          obj.visible = true;
+        }
+      });
+      this.canvas.requestRenderAll();
+    }
+
+    console.log('[FabricCanvasManager] Object culling stopped');
   }
 
   /**
@@ -1873,6 +1981,9 @@ export class FabricCanvasManager {
     this.pixelGridInitialized = false;
 
     // STATIC CANVAS MIGRATION: No resize handler to clean up
+
+    // PERFORMANCE: Stop object culling
+    this.stopObjectCulling();
 
     // W5.D5++++: Clean up collaborative overlays
     if (this.overlayManager) {
