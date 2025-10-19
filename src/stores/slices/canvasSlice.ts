@@ -970,18 +970,17 @@ export const createCanvasSlice: StateCreator<
 
           switch (eventType) {
             case 'INSERT': {
-              // Add new object to state
               const insertedObj = dbToCanvasObject(newRecord as DbCanvasObject);
-              get()._addObject(insertedObj);
               
-              // Add layer metadata
-              const layerName = insertedObj.metadata?.layer_name || `${insertedObj.type} ${insertedObj.id.slice(0, 6)}`;
-              get().addLayer(insertedObj.id, {
-                name: layerName,
-                zIndex: insertedObj.z_index || 0,
-                visible: true,
-                locked: false,
-              });
+              // Skip if object already exists (self-broadcast from optimistic update)
+              if (get().objects[insertedObj.id]) {
+                // Object already added optimistically, skip realtime duplicate
+                return;
+              }
+              
+              // Add new object to state (from other users or initial load)
+              // NOTE: _addObject already calls addLayer internally (line 805)
+              get()._addObject(insertedObj);
               break;
             }
 
