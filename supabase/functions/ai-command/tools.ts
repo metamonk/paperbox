@@ -62,10 +62,57 @@ export const createTextTool = tool({
 });
 
 /**
+ * Tool: Move Object
+ * Moves an object to a new position (absolute or relative)
+ */
+export const moveObjectTool = tool({
+  description: 'Move a selected object to a new position. Use absolute coordinates (x, y) OR relative offsets (deltaX, deltaY).',
+  inputSchema: z.object({
+    objectId: z.string().describe('ID of the object to move. Use context.selectedObjects to get IDs of selected objects.'),
+    x: z.number().optional().describe('Absolute X coordinate (use with y for absolute positioning)'),
+    y: z.number().optional().describe('Absolute Y coordinate (use with x for absolute positioning)'),
+    deltaX: z.number().optional().describe('Horizontal offset in pixels (positive = right, negative = left)'),
+    deltaY: z.number().optional().describe('Vertical offset in pixels (positive = down, negative = up)'),
+  }),
+});
+
+/**
+ * Tool: Resize Object
+ * Resizes an object by changing width/height or radius
+ */
+export const resizeObjectTool = tool({
+  description: 'Resize a selected object. For rectangles/text use width/height, for circles use radius.',
+  inputSchema: z.object({
+    objectId: z.string().describe('ID of the object to resize. Use context.selectedObjects to get IDs of selected objects.'),
+    width: z.number().positive().optional().describe('New width in pixels (for rectangles/text)'),
+    height: z.number().positive().optional().describe('New height in pixels (for rectangles/text)'),
+    radius: z.number().positive().optional().describe('New radius in pixels (for circles)'),
+    scaleX: z.number().positive().optional().describe('Scale factor for width (e.g., 2 = double width, 0.5 = half width)'),
+    scaleY: z.number().positive().optional().describe('Scale factor for height (e.g., 2 = double height, 0.5 = half height)'),
+  }),
+});
+
+/**
+ * Tool: Rotate Object
+ * Rotates an object by specified angle
+ */
+export const rotateObjectTool = tool({
+  description: 'Rotate a selected object by a specified angle in degrees',
+  inputSchema: z.object({
+    objectId: z.string().describe('ID of the object to rotate. Use context.selectedObjects to get IDs of selected objects.'),
+    angle: z.number().optional().describe('Absolute rotation angle in degrees (0-360)'),
+    deltaAngle: z.number().optional().describe('Relative rotation in degrees (positive = clockwise, negative = counter-clockwise)'),
+  }),
+});
+
+/**
  * All available tools for the AI
  */
 export const tools = {
   createCircle: createCircleTool,
   createRectangle: createRectangleTool,
   createText: createTextTool,
+  moveObject: moveObjectTool,
+  resizeObject: resizeObjectTool,
+  rotateObject: rotateObjectTool,
 };
