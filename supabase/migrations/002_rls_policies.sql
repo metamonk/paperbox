@@ -1,4 +1,4 @@
--- CollabCanvas Row Level Security Policies
+-- Paperbox Row Level Security Policies
 -- Implements collaborative model: any authenticated user can read/write any object
 
 -- ============================================================================

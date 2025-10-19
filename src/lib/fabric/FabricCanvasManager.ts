@@ -339,10 +339,25 @@ export class FabricCanvasManager {
       if (!objWithData.data || !objWithData.data.id) return;
 
       // Get object bounds
-      const objLeft = (obj.left || 0) - (obj.width || 0) / 2;
-      const objTop = (obj.top || 0) - (obj.height || 0) / 2;
-      const objRight = objLeft + (obj.width || 0);
-      const objBottom = objTop + (obj.height || 0);
+      // CRITICAL FIX: Handle circles (which use radius) vs rectangles/text (which use width/height)
+      let objLeft: number, objTop: number, objRight: number, objBottom: number;
+      
+      if ((obj as any).radius !== undefined) {
+        // Circle: use radius for bounds calculation
+        const radius = (obj as any).radius * (obj.scaleX || 1);
+        objLeft = (obj.left || 0) - radius;
+        objTop = (obj.top || 0) - radius;
+        objRight = (obj.left || 0) + radius;
+        objBottom = (obj.top || 0) + radius;
+      } else {
+        // Rectangle/Text: use width/height for bounds calculation
+        const width = (obj.width || 0) * (obj.scaleX || 1);
+        const height = (obj.height || 0) * (obj.scaleY || 1);
+        objLeft = (obj.left || 0) - width / 2;
+        objTop = (obj.top || 0) - height / 2;
+        objRight = objLeft + width;
+        objBottom = objTop + height;
+      }
 
       // Check if object intersects viewport (with margin)
       const isVisible =

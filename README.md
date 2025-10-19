@@ -1,4 +1,4 @@
-# CollabCanvas
+# Paperbox
 
 A real-time collaborative design canvas where multiple users can simultaneously create, move, and manipulate shapes while seeing each other's cursors in real-time. Built as a Figma clone MVP.
 
@@ -84,7 +84,7 @@ pnpm test:coverage
 ## 🏗️ Project Structure
 
 ```
-collabcanvas/
+paperbox/
 ├── docs/                          # Project documentation
 ├── src/
 │   ├── components/

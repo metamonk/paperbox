@@ -37,12 +37,18 @@ export function getCanvasContext(): CanvasContext | null {
   // CENTER-ORIGIN COORDINATE SYSTEM:
   // Canvas center is at (0, 0) in center-origin coordinates
   // This matches Figma's coordinate system and allows negative coordinates
-  const centerX = 0;
-  const centerY = 0;
-
   // Canvas dimensions (fixed size, ranges from -4000 to +4000 in each direction)
-  const viewportWidth = 8000;
-  const viewportHeight = 8000;
+  const canvasWidth = 8000;
+  const canvasHeight = 8000;
+
+  // Calculate viewport center (where the user is currently looking)
+  // This is the center of the visible area based on pan position
+  // Note: panX and panY represent the top-left corner of the viewport in canvas coordinates
+  // We estimate viewport dimensions as ~1200x800 at 100% zoom (typical screen size)
+  const estimatedViewportWidth = 1200 / viewport.zoom;
+  const estimatedViewportHeight = 800 / viewport.zoom;
+  const viewportCenterX = viewport.panX + estimatedViewportWidth / 2;
+  const viewportCenterY = viewport.panY + estimatedViewportHeight / 2;
 
   // Get selected objects
   const selectedIds = store.selectedIds;
@@ -61,10 +67,10 @@ export function getCanvasContext(): CanvasContext | null {
       zoom: viewport.zoom,
       panX: viewport.panX,
       panY: viewport.panY,
-      centerX,
-      centerY,
-      width: viewportWidth,
-      height: viewportHeight,
+      centerX: viewportCenterX, // Where user is currently looking
+      centerY: viewportCenterY, // Where user is currently looking
+      width: canvasWidth,
+      height: canvasHeight,
     },
     selectedObjects,
     allObjects,
@@ -87,12 +93,18 @@ export function getCanvasContextForUser(
   // CENTER-ORIGIN COORDINATE SYSTEM:
   // Canvas center is at (0, 0) in center-origin coordinates
   // This matches Figma's coordinate system and allows negative coordinates
-  const centerX = 0;
-  const centerY = 0;
-
   // Canvas dimensions (fixed size, ranges from -4000 to +4000 in each direction)
-  const viewportWidth = 8000;
-  const viewportHeight = 8000;
+  const canvasWidth = 8000;
+  const canvasHeight = 8000;
+
+  // Calculate viewport center (where the user is currently looking)
+  // This is the center of the visible area based on pan position
+  // Note: panX and panY represent the top-left corner of the viewport in canvas coordinates
+  // We estimate viewport dimensions as ~1200x800 at 100% zoom (typical screen size)
+  const estimatedViewportWidth = 1200 / viewport.zoom;
+  const estimatedViewportHeight = 800 / viewport.zoom;
+  const viewportCenterX = viewport.panX + estimatedViewportWidth / 2;
+  const viewportCenterY = viewport.panY + estimatedViewportHeight / 2;
 
   // Get selected objects
   const selectedIds = storeState.selectedIds;
@@ -111,10 +123,10 @@ export function getCanvasContextForUser(
       zoom: viewport.zoom,
       panX: viewport.panX,
       panY: viewport.panY,
-      centerX,
-      centerY,
-      width: viewportWidth,
-      height: viewportHeight,
+      centerX: viewportCenterX, // Where user is currently looking
+      centerY: viewportCenterY, // Where user is currently looking
+      width: canvasWidth,
+      height: canvasHeight,
     },
     selectedObjects,
     allObjects,

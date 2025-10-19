@@ -1,4 +1,4 @@
--- CollabCanvas Initial Schema Migration
+-- Paperbox Initial Schema Migration
 -- Creates tables, triggers, and functions for the collaborative canvas application
 
 -- ============================================================================

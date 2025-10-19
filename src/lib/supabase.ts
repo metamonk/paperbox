@@ -28,7 +28,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
   global: {
     headers: {
-      'X-Client-Info': 'collabcanvas-web',
+      'X-Client-Info': 'paperbox-web',
     },
   },
 });

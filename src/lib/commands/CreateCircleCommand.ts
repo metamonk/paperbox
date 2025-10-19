@@ -46,8 +46,8 @@ export class CreateCircleCommand extends BaseCommand {
       width: this.params.radius * 2,
       height: this.params.radius * 2,
       fill: this.params.fill ?? '#3b82f6', // Default blue
-      stroke: this.params.stroke ?? null,
-      stroke_width: this.params.stroke_width ?? null,
+      stroke: this.params.stroke ?? '#000000', // Default black stroke for visibility
+      stroke_width: this.params.stroke_width ?? 2, // Default 2px stroke
       opacity: this.params.opacity ?? 1,
       rotation: 0,
       type_properties: {

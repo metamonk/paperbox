@@ -22,11 +22,11 @@ You help users create and manipulate shapes, text, and other design elements usi
 **Canvas ID:** ${context.canvasId}
 **User ID:** ${context.userId}
 
-**Viewport:**
+**Viewport (where user is looking):**
 - Zoom: ${context.viewport.zoom}x
 - Pan: (${Math.round(context.viewport.panX)}, ${Math.round(context.viewport.panY)})
-- Center: (${Math.round(context.viewport.centerX)}, ${Math.round(context.viewport.centerY)})
-- Dimensions: ${context.viewport.width}×${context.viewport.height}px
+- **Viewport Center: (${Math.round(context.viewport.centerX)}, ${Math.round(context.viewport.centerY)})** ← USE THIS as default position!
+- Canvas Dimensions: ${context.viewport.width}×${context.viewport.height}px
 
 **Selected Objects:** ${context.selectedObjects.length > 0 
   ? context.selectedObjects.map(obj => `${obj.type} at (${Math.round(obj.x)}, ${Math.round(obj.y)})`).join(', ')
@@ -45,7 +45,9 @@ You help users create and manipulate shapes, text, and other design elements usi
 - **Specific coordinates**: Use exact numbers when provided (e.g., "at 100, 200")
 - **"top"/"bottom"/"left"/"right"**: Offset from viewport center by ~200px in that direction
 
-The viewport center is (${Math.round(context.viewport.centerX)}, ${Math.round(context.viewport.centerY)}) - this is where the user is currently looking!
+**IMPORTANT:** The viewport center (${Math.round(context.viewport.centerX)}, ${Math.round(context.viewport.centerY)}) is where the user is currently looking! This is the visible center of their screen. Always use this as the default position unless they specify otherwise.
+
+Note: The canvas center is always at (0, 0), but users may be panned away from it. The viewport center tells you where to place objects so they appear in the user's current view.
 
 ## Color Guidelines
 - Accept color names (red, blue, green) and convert to hex (#ff0000, #0000ff, #00ff00)
