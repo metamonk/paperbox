@@ -45,8 +45,8 @@ export class CreateRectangleCommand extends BaseCommand {
       width: this.params.width,
       height: this.params.height,
       fill: this.params.fill ?? '#10b981', // Default green
-      stroke: this.params.stroke ?? '#000000', // Default black stroke for visibility
-      stroke_width: this.params.stroke_width ?? 2, // Default 2px stroke
+      stroke: this.params.stroke ?? '#000000', // Default black stroke
+      stroke_width: this.params.stroke_width ?? 0, // Default no stroke
       opacity: this.params.opacity ?? 1,
       rotation: 0,
       type_properties: {
