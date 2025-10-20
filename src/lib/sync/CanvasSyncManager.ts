@@ -312,6 +312,12 @@ export class CanvasSyncManager {
           this.flushMovementBatch();
         }
 
+        // Clear transform state and actively editing
+        console.log('[CanvasSyncManager] 💡 onObjectModified - clearing state (movement already batched)');
+        this.transformStartState.clear();
+        this.activelyEditingIds.clear();
+        this.store.getState().broadcastActivelyEditing([]);
+
         this._isSyncingFromCanvas = true;
         try {
           // Check for ActiveSelection (group) by ._objects property
