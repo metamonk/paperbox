@@ -445,8 +445,8 @@ export class CanvasSyncManager {
           this._isSyncingFromCanvas = false;
         }
 
-        // Update collaborative overlays after modification
-        this.fabricManager.updateOverlayPositions();
+        // DISABLED: Collaborative overlays temporarily disabled
+        // this.fabricManager.updateOverlayPositions();
       },
 
       onSelectionCreated: async (targets: FabricObject[]) => {

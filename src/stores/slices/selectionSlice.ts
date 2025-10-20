@@ -139,7 +139,8 @@ export const createSelectionSlice: StateCreator<
       );
 
       // 4. Broadcast selection to other users (Supabase Presence)
-      store.broadcastSelection(successfulIds);
+      // DISABLED: Collaborative features temporarily disabled
+      // store.broadcastSelection(successfulIds);
     } else {
       // All locks failed - clear selection
       set(
@@ -151,7 +152,8 @@ export const createSelectionSlice: StateCreator<
         'selection/selectObjectsWithLocks/allFailed'
       );
 
-      store.broadcastSelection([]);
+      // DISABLED: Collaborative features temporarily disabled
+      // store.broadcastSelection([]);
     }
 
     // 5. Build result with failed lock details for UI feedback

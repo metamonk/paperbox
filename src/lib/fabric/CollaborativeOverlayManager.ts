@@ -346,6 +346,9 @@ export class CollaborativeOverlayManager {
    * Call this during object:modified events
    */
   updateOverlaysForMovement(): void {
+    // DISABLED: Collaborative overlays temporarily disabled
+    return;
+    
     // Update all overlays to match their target objects
     this.overlays.forEach((overlay, key) => {
       const targetObjectId = (overlay as any).targetObjectId;
