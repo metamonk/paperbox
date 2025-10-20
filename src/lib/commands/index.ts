@@ -15,6 +15,8 @@ import { AlignObjectsCommand } from './AlignObjectsCommand';
 import { DistributeObjectsCommand } from './DistributeObjectsCommand';
 import { CompositeCommand } from './CompositeCommand';
 import { GridLayoutCommand } from './GridLayoutCommand';
+// @ts-expect-error - Import is used for export
+import { BatchTransformCommand } from './BatchTransformCommand';
 
 // Register creation commands
 registerCommand('CREATE_CIRCLE', CreateCircleCommand);
@@ -50,6 +52,7 @@ export * from './AlignObjectsCommand';
 export * from './DistributeObjectsCommand';
 export * from './CompositeCommand';
 export * from './GridLayoutCommand';
+export * from './BatchTransformCommand';
 
 // console.log('[Commands] Registered 11 commands (3 creation, 3 manipulation, 1 style, 2 layout, 2 complex)');
 

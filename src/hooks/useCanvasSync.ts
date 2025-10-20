@@ -44,7 +44,7 @@ import { OperationQueue } from '../lib/sync/OperationQueue';
 import { toast } from 'sonner';
 
 // Debug flag - set to true to enable verbose sync logs
-const DEBUG = true;
+const DEBUG = false;
 
 interface UseCanvasSyncResult {
   initialized: boolean;

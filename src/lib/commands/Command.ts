@@ -86,6 +86,7 @@ export type CommandType =
   | 'RESIZE_OBJECT'
   | 'ROTATE_OBJECT'
   | 'SCALE_OBJECT'
+  | 'TRANSFORM_BATCH'
 
   // Styling
   | 'CHANGE_FILL'

@@ -307,56 +307,122 @@ export class CanvasSyncManager {
           
           const objectsToProcess = isGroupSelection ? objects : [target];
 
-          // Create transform commands for undo/redo
-          objectsToProcess.forEach((obj: FabricObject) => {
-            const canvasObject = this.fabricManager.toCanvasObject(obj);
-            if (!canvasObject) return;
+          // CRITICAL FIX: For group selections, batch all updates together
+          // This ensures single RPC call + single realtime broadcast for group movements
+          if (isGroupSelection && objectsToProcess.length > 1) {
+            const batchUpdates: Array<{ id: string; updates: Partial<CanvasObject> }> = [];
+            const beforeStates: Array<{ id: string; beforeState: any; afterState: any }> = [];
 
-            const id = canvasObject.id;
-            const beforeState = this.transformStartState.get(id);
+            objectsToProcess.forEach((obj: FabricObject) => {
+              const canvasObject = this.fabricManager.toCanvasObject(obj);
+              if (!canvasObject) return;
 
-            if (beforeState) {
-              // We have before state, create undo-able command
-              const afterState = {
-                id: id,
-                x: canvasObject.x,
-                y: canvasObject.y,
-                width: canvasObject.width,
-                height: canvasObject.height,
-                rotation: canvasObject.rotation,
-                type_properties: canvasObject.type_properties,
-              };
+              const id = canvasObject.id;
+              const beforeState = this.transformStartState.get(id);
 
-              // Check if there's a meaningful change
-              const hasChanged = 
-                Math.abs(beforeState.x - afterState.x) > 0.01 ||
-                Math.abs(beforeState.y - afterState.y) > 0.01 ||
-                Math.abs(beforeState.width - afterState.width) > 0.01 ||
-                Math.abs(beforeState.height - afterState.height) > 0.01 ||
-                Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+              if (beforeState) {
+                const afterState = {
+                  id: id,
+                  x: canvasObject.x,
+                  y: canvasObject.y,
+                  width: canvasObject.width,
+                  height: canvasObject.height,
+                  rotation: canvasObject.rotation,
+                  type_properties: canvasObject.type_properties,
+                };
 
-              if (hasChanged) {
-                // Create and execute transform command
-                const command = new TransformCommand(id, beforeState, afterState);
-                this.updateQueue.enqueue(async () => {
-                  await this.store.getState().executeCommand(command);
-                }).catch((error) => {
-                  console.error('[CanvasSyncManager] Transform command failed:', error);
-                });
+                // Check if there's a meaningful change
+                const hasChanged = 
+                  Math.abs(beforeState.x - afterState.x) > 0.01 ||
+                  Math.abs(beforeState.y - afterState.y) > 0.01 ||
+                  Math.abs(beforeState.width - afterState.width) > 0.01 ||
+                  Math.abs(beforeState.height - afterState.height) > 0.01 ||
+                  Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+
+                if (hasChanged) {
+                  beforeStates.push({ id, beforeState, afterState });
+                  batchUpdates.push({
+                    id,
+                    updates: {
+                      x: canvasObject.x,
+                      y: canvasObject.y,
+                      width: canvasObject.width,
+                      height: canvasObject.height,
+                      rotation: canvasObject.rotation,
+                      type_properties: canvasObject.type_properties as any,
+                    },
+                  });
+                }
+
+                this.transformStartState.delete(id);
               }
+            });
 
-              // Clear the captured state
-              this.transformStartState.delete(id);
-            } else {
-              // No before state captured (shouldn't happen in normal use)
-              // Fall back to direct update without undo
+            // Apply batch update if there are changes
+            if (batchUpdates.length > 0) {
               this.updateQueue.enqueue(async () => {
-                await this.store.getState().updateObject(id, canvasObject);
+                // Create batch transform command for undo/redo
+                const { BatchTransformCommand } = await import('../commands/BatchTransformCommand');
+                const command = new BatchTransformCommand(beforeStates);
+                
+                // Execute command (which calls batchUpdateObjects internally)
+                await this.store.getState().executeCommand(command);
               }).catch((error) => {
-                console.error('[CanvasSyncManager] Update failed:', error);
+                console.error('[CanvasSyncManager] Batch transform failed:', error);
               });
             }
-          });
+          } else {
+            // Single object selection: use existing individual command logic
+            objectsToProcess.forEach((obj: FabricObject) => {
+              const canvasObject = this.fabricManager.toCanvasObject(obj);
+              if (!canvasObject) return;
+
+              const id = canvasObject.id;
+              const beforeState = this.transformStartState.get(id);
+
+              if (beforeState) {
+                // We have before state, create undo-able command
+                const afterState = {
+                  id: id,
+                  x: canvasObject.x,
+                  y: canvasObject.y,
+                  width: canvasObject.width,
+                  height: canvasObject.height,
+                  rotation: canvasObject.rotation,
+                  type_properties: canvasObject.type_properties,
+                };
+
+                // Check if there's a meaningful change
+                const hasChanged = 
+                  Math.abs(beforeState.x - afterState.x) > 0.01 ||
+                  Math.abs(beforeState.y - afterState.y) > 0.01 ||
+                  Math.abs(beforeState.width - afterState.width) > 0.01 ||
+                  Math.abs(beforeState.height - afterState.height) > 0.01 ||
+                  Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+
+                if (hasChanged) {
+                  // Create and execute transform command
+                  const command = new TransformCommand(id, beforeState, afterState);
+                  this.updateQueue.enqueue(async () => {
+                    await this.store.getState().executeCommand(command);
+                  }).catch((error) => {
+                    console.error('[CanvasSyncManager] Transform command failed:', error);
+                  });
+                }
+
+                // Clear the captured state
+                this.transformStartState.delete(id);
+              } else {
+                // No before state captured (shouldn't happen in normal use)
+                // Fall back to direct update without undo
+                this.updateQueue.enqueue(async () => {
+                  await this.store.getState().updateObject(id, canvasObject);
+                }).catch((error) => {
+                  console.error('[CanvasSyncManager] Update failed:', error);
+                });
+              }
+            });
+          }
 
           // Clear active editing state after drag ends
           this.activelyEditingIds.clear();
