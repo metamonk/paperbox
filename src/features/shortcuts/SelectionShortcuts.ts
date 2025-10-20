@@ -33,12 +33,15 @@ export class SelectionShortcuts {
    * Register a keyboard shortcut with hotkeys-js
    */
   private registerShortcut(keys: string, handler: () => void): void {
+    console.log('[SelectionShortcuts] Registering shortcut:', keys);
     const boundHandler = handler.bind(this);
     this.boundHandlers.set(keys, boundHandler);
-    hotkeys(keys, (event) => {
+    const result = hotkeys(keys, (event) => {
+      console.log('[SelectionShortcuts] Hotkey triggered:', keys);
       event?.preventDefault();
       boundHandler();
     });
+    console.log('[SelectionShortcuts] Hotkey registration result:', result, 'for keys:', keys);
   }
 
   /**

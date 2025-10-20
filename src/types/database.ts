@@ -261,6 +261,17 @@ export type Database = {
         }
         Returns: undefined
       }
+      batch_update_canvas_objects: {
+        Args: {
+          object_ids: string[]
+          x_values: number[]
+          y_values: number[]
+          width_values: number[]
+          height_values: number[]
+          rotation_values: number[]
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       canvas_permission: "owner" | "editor" | "viewer"

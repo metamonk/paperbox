@@ -40,9 +40,13 @@ export function CanvasManagementModal({
   open,
   onOpenChange,
 }: CanvasManagementModalProps) {
-  // Read canvas data reactively - extract only the fields we need to avoid reference changes
-  const canvasData = usePaperboxStore((state) => {
-    const canvas = state.canvases.find((c) => c.id === canvasId);
+  // Subscribe to canvases array
+  const canvases = usePaperboxStore((state) => state.canvases);
+  
+  // Memoize canvas data extraction to prevent infinite loops
+  // Only recomputes when canvasId or canvases array reference changes
+  const canvasData = React.useMemo(() => {
+    const canvas = canvases.find((c) => c.id === canvasId);
     if (!canvas) return null;
     return {
       id: canvas.id,
@@ -53,7 +57,7 @@ export function CanvasManagementModal({
       created_at: canvas.created_at,
       updated_at: canvas.updated_at,
     };
-  });
+  }, [canvasId, canvases]);
   
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
@@ -66,7 +70,6 @@ export function CanvasManagementModal({
   const updateCanvas = usePaperboxStore((state) => state.updateCanvas);
   const deleteCanvas = usePaperboxStore((state) => state.deleteCanvas);
   const toggleCanvasPublic = usePaperboxStore((state) => state.toggleCanvasPublic);
-  const canvases = usePaperboxStore((state) => state.canvases);
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
 

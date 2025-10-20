@@ -45,8 +45,10 @@ export function CanvasRedirect() {
       }
 
       // Redirect to active canvas or first canvas
+      // SAFETY: Verify activeCanvasId exists before using it
       const currentActiveId = usePaperboxStore.getState().activeCanvasId;
-      const targetCanvasId = currentActiveId || currentCanvases[0]?.id;
+      const activeCanvasExists = currentActiveId && currentCanvases.some(c => c.id === currentActiveId);
+      const targetCanvasId = activeCanvasExists ? currentActiveId : currentCanvases[0]?.id;
 
       if (targetCanvasId) {
         console.log('[CanvasRedirect] Redirecting to canvas:', targetCanvasId);
@@ -66,7 +68,11 @@ export function CanvasRedirect() {
 
     if (canvasesLoading || !canvases.length) return;
 
-    const targetCanvasId = activeCanvasId || canvases[0].id;
+    // SAFETY: Verify activeCanvasId exists in canvases array before using it
+    // This prevents infinite redirect loops if activeCanvasId references deleted canvas
+    const activeCanvasExists = activeCanvasId && canvases.some(c => c.id === activeCanvasId);
+    const targetCanvasId = activeCanvasExists ? activeCanvasId : canvases[0].id;
+    
     console.log('[CanvasRedirect] Canvases already loaded, redirecting to:', targetCanvasId);
     navigate(`/canvas/${targetCanvasId}`, { replace: true });
   }, [location.pathname, canvases, canvasesLoading, activeCanvasId, navigate]);
