@@ -14,6 +14,7 @@ import { useCanvasSync } from '../../hooks/useCanvasSync';
 // import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
 // import { usePresence } from '../../hooks/usePresence';
 // import { useCollaborativeOverlays } from '../../hooks/useCollaborativeOverlays';
+import type { PresenceUser } from '../../hooks/usePresence';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
 import { ShapeCreationShortcuts, UIShortcuts } from '../../features/shortcuts';
@@ -76,8 +77,8 @@ export function Canvas() {
 
   // Stub values for temporarily disabled features
   const cursors = new Map();
-  const sendCursorUpdate = (_x: number, _y: number) => {};
-  const onlineUsers: any[] = [];
+  const sendCursorUpdate = (_x: number, _y: number) => { void _x; void _y; };
+  const onlineUsers: PresenceUser[] = [];
   const updateActivity = () => {};
   const currentUserId = '';
 

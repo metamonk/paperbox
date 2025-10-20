@@ -50,6 +50,10 @@ export class CollaborativeOverlayManager {
    * Call this whenever presence data changes
    */
   updateOverlays(presence: Record<string, UserPresence>, currentUserId: string): void {
+    // DISABLED: Collaborative overlays temporarily disabled
+    this.clearAll();
+    return;
+    
     // Track which overlays should exist
     const activeOverlays = new Set<string>();
 

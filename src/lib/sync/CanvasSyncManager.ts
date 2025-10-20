@@ -248,7 +248,8 @@ export class CanvasSyncManager {
           .filter(Boolean) as string[];
 
         this.activelyEditingIds = new Set(ids);
-        this.store.getState().broadcastActivelyEditing(ids);
+        // DISABLED: Collaborative features temporarily disabled
+        // this.store.getState().broadcastActivelyEditing(ids);
 
         // Capture initial state on first movement for undo/redo
         objects.forEach((obj: FabricObject) => {
@@ -258,7 +259,6 @@ export class CanvasSyncManager {
             // Get current state from store (before transformation)
             const storeObj = this.store.getState().objects[id];
             if (storeObj) {
-              console.log(`[CanvasSyncManager] 📸 Capturing start state for ${id.slice(0, 8)}: (${storeObj.x}, ${storeObj.y})`);
               this.transformStartState.set(id, {
                 id: id,
                 x: storeObj.x,
@@ -268,13 +268,7 @@ export class CanvasSyncManager {
                 rotation: storeObj.rotation,
                 type_properties: storeObj.type_properties,
               });
-            } else {
-              console.warn(`[CanvasSyncManager] ⚠️ No storeObj found for ${id.slice(0, 8)}`);
             }
-          } else if (id) {
-            console.log(`[CanvasSyncManager] 🔄 Already have start state for ${id.slice(0, 8)}`);
-          } else {
-            console.warn(`[CanvasSyncManager] ⚠️ No ID found on object`);
           }
 
           // PERFORMANCE OPTIMIZATION #5: Queue position updates for batching
@@ -313,10 +307,10 @@ export class CanvasSyncManager {
         }
 
         // Clear transform state and actively editing
-        console.log('[CanvasSyncManager] 💡 onObjectModified - clearing state (movement already batched)');
         this.transformStartState.clear();
         this.activelyEditingIds.clear();
-        this.store.getState().broadcastActivelyEditing([]);
+        // DISABLED: Collaborative features temporarily disabled
+        // this.store.getState().broadcastActivelyEditing([]);
 
         this._isSyncingFromCanvas = true;
         try {
@@ -330,24 +324,17 @@ export class CanvasSyncManager {
           // CRITICAL FIX: For group selections, batch all updates together
           // This ensures single RPC call + single realtime broadcast for group movements
           if (isGroupSelection && objectsToProcess.length > 1) {
-            console.log(`[CanvasSyncManager] 🎯 GROUP DETECTED: ${objectsToProcess.length} objects`);
             const batchUpdates: Array<{ id: string; updates: Partial<CanvasObject> }> = [];
             const beforeStates: Array<{ id: string; beforeState: any; afterState: any }> = [];
 
             objectsToProcess.forEach((obj: FabricObject) => {
               const canvasObject = this.fabricManager.toCanvasObject(obj);
-              if (!canvasObject) {
-                console.warn('[CanvasSyncManager] ⚠️ toCanvasObject returned null');
-                return;
-              }
+              if (!canvasObject) return;
 
               const id = canvasObject.id;
-              console.log(`[CanvasSyncManager] 🔍 Looking for beforeState for ${id.slice(0, 8)}`);
-              console.log(`[CanvasSyncManager] 📋 transformStartState has keys:`, Array.from(this.transformStartState.keys()).map(k => k.slice(0, 8)));
               const beforeState = this.transformStartState.get(id);
 
               if (beforeState) {
-                console.log(`[CanvasSyncManager] ✅ Found beforeState for ${id.slice(0, 8)}: (${beforeState.x}, ${beforeState.y})`);
                 const afterState = {
                   id: id,
                   x: canvasObject.x,
@@ -358,13 +345,6 @@ export class CanvasSyncManager {
                   type_properties: canvasObject.type_properties,
                 };
 
-                console.log(`[CanvasSyncManager] 🎯 Comparing states for ${id.slice(0, 8)}:`, {
-                  before: `(${beforeState.x}, ${beforeState.y})`,
-                  after: `(${afterState.x}, ${afterState.y})`,
-                  deltaX: Math.abs(beforeState.x - afterState.x),
-                  deltaY: Math.abs(beforeState.y - afterState.y),
-                });
-
                 // Check if there's a meaningful change
                 const hasChanged = 
                   Math.abs(beforeState.x - afterState.x) > 0.01 ||
@@ -372,8 +352,6 @@ export class CanvasSyncManager {
                   Math.abs(beforeState.width - afterState.width) > 0.01 ||
                   Math.abs(beforeState.height - afterState.height) > 0.01 ||
                   Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
-                
-                console.log(`[CanvasSyncManager] ${hasChanged ? '✅ HAS CHANGED' : '❌ NO CHANGE DETECTED'}`);
 
                 if (hasChanged) {
                   beforeStates.push({ id, beforeState, afterState });
@@ -391,28 +369,21 @@ export class CanvasSyncManager {
                 }
 
                 this.transformStartState.delete(id);
-              } else {
-                console.warn(`[CanvasSyncManager] ❌ No beforeState found for ${id.slice(0, 8)}`);
               }
             });
 
             // Apply batch update if there are changes
-            console.log(`[CanvasSyncManager] 📦 Batch updates queued: ${batchUpdates.length}`);
             if (batchUpdates.length > 0) {
               this.updateQueue.enqueue(async () => {
                 // Create batch transform command for undo/redo
-                console.log(`[CanvasSyncManager] ⚡ Executing BatchTransformCommand for ${batchUpdates.length} objects`);
                 const { BatchTransformCommand } = await import('../commands/BatchTransformCommand');
                 const command = new BatchTransformCommand(beforeStates);
                 
                 // Execute command (which calls batchUpdateObjects internally)
                 await this.store.getState().executeCommand(command);
-                console.log(`[CanvasSyncManager] ✅ BatchTransformCommand executed successfully`);
               }).catch((error) => {
-                console.error('[CanvasSyncManager] ❌ Batch transform failed:', error);
+                console.error('[CanvasSyncManager] Batch transform failed:', error);
               });
-            } else {
-              console.warn('[CanvasSyncManager] ⚠️ No batch updates to apply (no beforeStates found?)');
             }
           } else {
             // Single object selection: use existing individual command logic
@@ -524,9 +495,10 @@ export class CanvasSyncManager {
         //   }
         // }
 
-        // Update selection state and broadcast
+        // Update selection state
         state.selectObjects(ids);
-        state.broadcastSelection(ids);
+        // DISABLED: Collaborative features temporarily disabled
+        // state.broadcastSelection(ids);
       },
 
       onSelectionUpdated: async (targets: FabricObject[]) => {
@@ -589,9 +561,10 @@ export class CanvasSyncManager {
         //   }
         // }
 
-        // Update selection state and broadcast
+        // Update selection state
         state.selectObjects(ids);
-        state.broadcastSelection(ids);
+        // DISABLED: Collaborative features temporarily disabled
+        // state.broadcastSelection(ids);
       },
 
       onSelectionCleared: () => {
@@ -615,9 +588,10 @@ export class CanvasSyncManager {
         // Clear any captured transform states
         this.transformStartState.clear();
 
-        // Update selection state and broadcast
+        // Update selection state
         state.deselectAll();
-        state.broadcastSelection([]);
+        // DISABLED: Collaborative features temporarily disabled
+        // state.broadcastSelection([]);
       },
     };
     

@@ -385,8 +385,6 @@ export const createCanvasSlice: StateCreator<
     set({ loading: true, activeCanvasId: canvasId }, undefined, 'canvas/setActiveCanvasStart');
 
     try {
-      console.log(`[canvasSlice] 🔄 Loading objects for canvas ${canvasId.slice(0, 8)}...`);
-      
       // Load objects for the new canvas
       const { data, error } = await supabase
         .from('canvas_objects')
@@ -394,15 +392,6 @@ export const createCanvasSlice: StateCreator<
         .eq('canvas_id', canvasId);  // W5.D2.3: Canvas scoping
 
       if (error) throw error;
-
-      console.log(`[canvasSlice] 📦 Fetched ${data?.length || 0} objects from database`);
-      if (data && data.length > 0) {
-        console.log(`[canvasSlice] 📍 Sample coordinates from DB:`, data.slice(0, 2).map((row: any) => ({
-          id: row.id.slice(0, 8),
-          x: row.x,
-          y: row.y,
-        })));
-      }
 
       // Convert array to Record<id, CanvasObject>
       const objectsMap = (data || []).reduce(
@@ -763,12 +752,6 @@ export const createCanvasSlice: StateCreator<
       const rotation_values = updates.map(u => u.updates.rotation ?? get().objects[u.id]?.rotation ?? 0);
 
       // Call atomic RPC function
-      console.log(`[canvasSlice] 🔥 Calling batch_update_canvas_objects RPC for ${object_ids.length} objects`, {
-        object_ids,
-        sample_x: x_values[0],
-        sample_y: y_values[0],
-      });
-      
       const { data: rowsUpdated, error } = await supabase.rpc('batch_update_canvas_objects', {
         object_ids,
         x_values,
@@ -779,15 +762,11 @@ export const createCanvasSlice: StateCreator<
       });
 
       if (error) {
-        console.error(`[canvasSlice] ❌ RPC ERROR:`, error);
         throw new Error(`Batch update RPC failed: ${error.message}`);
       }
       
-      console.log(`[canvasSlice] ✅ RPC succeeded - Updated ${rowsUpdated} of ${object_ids.length} rows`);
-      
       if (rowsUpdated !== object_ids.length) {
-        console.error(`[canvasSlice] ⚠️ ROW COUNT MISMATCH! Expected ${object_ids.length}, got ${rowsUpdated}`);
-        console.error(`[canvasSlice] IDs that may not exist:`, object_ids);
+        console.warn(`[canvasSlice] Batch update: Expected ${object_ids.length} rows, updated ${rowsUpdated}`);
       }
 
       // console.log(`[canvasSlice] ✅ Batch update successful: ${updates.length} objects (single query, single broadcast)`);
@@ -1222,19 +1201,12 @@ export const createCanvasSlice: StateCreator<
               const updatedObj = dbToCanvasObject(newRecord as DbCanvasObject);
               const currentObj = get().objects[updatedObj.id];
 
-              console.log(`[canvasSlice] 📡 Received UPDATE event for ${updatedObj.id.slice(0, 8)}:`, {
-                old: currentObj ? `(${currentObj.x}, ${currentObj.y})` : 'NOT IN STORE',
-                new: `(${updatedObj.x}, ${updatedObj.y})`,
-              });
-
               // Only update if data meaningfully changed (with precision tolerance)
               if (currentObj && !hasSignificantChange(currentObj, updatedObj)) {
-                console.log(`[canvasSlice] ⏭️ Skipping UPDATE - no significant change (self-broadcast or duplicate)`);
                 // No-op: self-broadcast or duplicate data
                 return;
               }
 
-              console.log(`[canvasSlice] ✅ Applying UPDATE from other user or genuine change`);
               // Apply update from other users or genuinely different data
               get()._updateObject(updatedObj.id, updatedObj);
               

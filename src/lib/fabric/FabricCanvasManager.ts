@@ -290,6 +290,8 @@ export class FabricCanvasManager {
 
     // W5.D5++++: Initialize collaborative overlay manager
     this.overlayManager = new CollaborativeOverlayManager(this.canvas);
+    // DISABLED: Clear all overlays since collaborative features are temporarily disabled
+    this.overlayManager.updateOverlays({}, '');
     // if (DEBUG) console.log('[FabricCanvasManager] Collaborative overlay manager initialized');
 
     // PERFORMANCE: Start object culling for large canvases
