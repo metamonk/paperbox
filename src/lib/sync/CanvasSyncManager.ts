@@ -242,10 +242,14 @@ export class CanvasSyncManager {
       onObjectMoving: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
 
+        // Check if this is a group selection
+        const isGroup = !!(target as any)._objects;
         const objects = (target as any)._objects || [target];
         const ids = objects
           .map((obj: FabricObject) => (obj as any).data?.id)
           .filter(Boolean) as string[];
+
+        console.log(`[onObjectMoving] ${isGroup ? 'GROUP' : 'SINGLE'} moving with ${objects.length} object(s)`);
 
         this.activelyEditingIds = new Set(ids);
         // DISABLED: Collaborative features temporarily disabled
@@ -273,11 +277,29 @@ export class CanvasSyncManager {
 
           // PERFORMANCE OPTIMIZATION #5: Queue position updates for batching
           // This prevents excessive state updates during rapid movement
-          // CRITICAL FIX: Convert Fabric coordinates to center-origin before storing
-          if (id && obj.left !== undefined && obj.top !== undefined) {
-            const fabricCoords = { left: obj.left, top: obj.top };
-            const centerCoords = fabricToCenter(obj.left, obj.top);
-            console.log(`[onObjectMoving] 📍 ${id.slice(0, 8)}: fabric(${fabricCoords.left.toFixed(1)}, ${fabricCoords.top.toFixed(1)}) → center(${centerCoords.x.toFixed(1)}, ${centerCoords.y.toFixed(1)})`);
+          // CRITICAL FIX: For groups, must get absolute position, not relative
+          if (id) {
+            let absoluteLeft: number;
+            let absoluteTop: number;
+
+            if (isGroup) {
+              // CRITICAL FIX: In a group, obj.left/top are relative to group
+              // Use getCenterPoint() to get absolute canvas position
+              const centerPoint = obj.getCenterPoint();
+              absoluteLeft = centerPoint.x;
+              absoluteTop = centerPoint.y;
+              console.log(`[onObjectMoving] 📍 ${id.slice(0, 8)} GROUP: center(${absoluteLeft.toFixed(1)}, ${absoluteTop.toFixed(1)})`);
+            } else {
+              // Single object: left/top are already absolute
+              absoluteLeft = obj.left!;
+              absoluteTop = obj.top!;
+              console.log(`[onObjectMoving] 📍 ${id.slice(0, 8)} SINGLE: fabric(${absoluteLeft.toFixed(1)}, ${absoluteTop.toFixed(1)})`);
+            }
+
+            // Convert Fabric coordinates to center-origin before storing
+            const centerCoords = fabricToCenter(absoluteLeft, absoluteTop);
+            console.log(`[onObjectMoving]   → center(${centerCoords.x.toFixed(1)}, ${centerCoords.y.toFixed(1)})`);
+            
             this.movementBatchQueue.set(id, {
               x: centerCoords.x,
               y: centerCoords.y,
