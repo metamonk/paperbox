@@ -34,8 +34,12 @@ import { usePaperboxStore } from '../stores';
 import { getSyncManager, cleanupSyncManager } from '../lib/sync/SyncManager';
 import { CanvasSyncManager } from '../lib/sync/CanvasSyncManager';
 import { FabricCanvasManager } from '../lib/fabric/FabricCanvasManager';
-import { NavigationShortcuts } from '../features/shortcuts/NavigationShortcuts';
-import { EditingShortcuts } from '../features/shortcuts/EditingShortcuts';
+import {
+  NavigationShortcuts,
+  EditingShortcuts,
+  SelectionShortcuts,
+  LayeringShortcuts,
+} from '../features/shortcuts';
 import { OperationQueue } from '../lib/sync/OperationQueue';
 import { toast } from 'sonner';
 
@@ -72,6 +76,8 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
   const fabricManagerRef = useRef<FabricCanvasManager | null>(null);
   const navigationShortcutsRef = useRef<NavigationShortcuts | null>(null);
   const editingShortcutsRef = useRef<EditingShortcuts | null>(null);
+  const selectionShortcutsRef = useRef<SelectionShortcuts | null>(null);
+  const layeringShortcutsRef = useRef<LayeringShortcuts | null>(null);
 
   // W5: Multi-canvas API (loadCanvases + setActiveCanvas replaces deprecated initialize)
   const loadCanvases = usePaperboxStore((state) => state.loadCanvases);
@@ -212,6 +218,41 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         editingShortcutsRef.current = editShortcuts;
         if (DEBUG) console.log('[useCanvasSync] EditingShortcuts initialized');
 
+        // Step 5.6: Setup selection shortcuts (Cmd+A select all)
+        if (DEBUG) console.log('[useCanvasSync] Setting up selection shortcuts...');
+        const selectionShortcuts = new SelectionShortcuts();
+        selectionShortcuts.initialize();
+
+        if (!mounted) {
+          selectionShortcuts.dispose();
+          editShortcuts.dispose();
+          navShortcuts.dispose();
+          canvasSync.dispose();
+          fabric.dispose();
+          return;
+        }
+
+        selectionShortcutsRef.current = selectionShortcuts;
+        if (DEBUG) console.log('[useCanvasSync] SelectionShortcuts initialized');
+
+        // Step 5.7: Setup layering shortcuts (Cmd+], Cmd+[, etc.)
+        if (DEBUG) console.log('[useCanvasSync] Setting up layering shortcuts...');
+        const layeringShortcuts = new LayeringShortcuts();
+        layeringShortcuts.initialize();
+
+        if (!mounted) {
+          layeringShortcuts.dispose();
+          selectionShortcuts.dispose();
+          editShortcuts.dispose();
+          navShortcuts.dispose();
+          canvasSync.dispose();
+          fabric.dispose();
+          return;
+        }
+
+        layeringShortcutsRef.current = layeringShortcuts;
+        if (DEBUG) console.log('[useCanvasSync] LayeringShortcuts initialized');
+
         // Step 6: Setup scroll pan and zoom (W2.D12+: Figma-style interactions)
         if (DEBUG) console.log('[useCanvasSync] Setting up scroll pan and zoom...');
         fabric.setupSpacebarPan();
@@ -230,6 +271,18 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
         console.error('[useCanvasSync] Initialization error:', err);
 
         // Cleanup on error
+        if (layeringShortcutsRef.current) {
+          layeringShortcutsRef.current.dispose();
+          layeringShortcutsRef.current = null;
+        }
+        if (selectionShortcutsRef.current) {
+          selectionShortcutsRef.current.dispose();
+          selectionShortcutsRef.current = null;
+        }
+        if (editingShortcutsRef.current) {
+          editingShortcutsRef.current.dispose();
+          editingShortcutsRef.current = null;
+        }
         if (navigationShortcutsRef.current) {
           navigationShortcutsRef.current.dispose();
           navigationShortcutsRef.current = null;
@@ -252,6 +305,18 @@ export function useCanvasSync(canvasElement: HTMLCanvasElement | null): UseCanva
     return () => {
       mounted = false;
       if (DEBUG) console.log('[useCanvasSync] Cleaning up');
+
+      // Cleanup LayeringShortcuts
+      if (layeringShortcutsRef.current) {
+        layeringShortcutsRef.current.dispose();
+        layeringShortcutsRef.current = null;
+      }
+
+      // Cleanup SelectionShortcuts
+      if (selectionShortcutsRef.current) {
+        selectionShortcutsRef.current.dispose();
+        selectionShortcutsRef.current = null;
+      }
 
       // Cleanup EditingShortcuts
       if (editingShortcutsRef.current) {

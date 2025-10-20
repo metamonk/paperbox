@@ -8,14 +8,14 @@
  * User interactions on the Fabric canvas automatically sync through the pipeline.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCanvasSync } from '../../hooks/useCanvasSync';
 import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
 import { usePresence } from '../../hooks/usePresence';
 import { useCollaborativeOverlays } from '../../hooks/useCollaborativeOverlays';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
-import { useKeyboard } from '../../hooks/useKeyboard';
+import { ShapeCreationShortcuts, UIShortcuts } from '../../features/shortcuts';
 import { CursorOverlay } from '../collaboration/CursorOverlay';
 import { RemoteSelectionOverlay } from '../collaboration/RemoteSelectionOverlay';
 import { Header } from '../layout/Header';
@@ -37,6 +37,10 @@ export function Canvas() {
   
   // AI interface state
   const [isAIOpen, setIsAIOpen] = useState(false);
+
+  // Refs for managing keyboard shortcuts
+  const shapeCreationShortcutsRef = useRef<ShapeCreationShortcuts | null>(null);
+  const uiShortcutsRef = useRef<UIShortcuts | null>(null);
 
   // Callback ref to capture canvas element immediately
   const canvasCallbackRef = useCallback((node: HTMLCanvasElement | null) => {
@@ -100,17 +104,6 @@ export function Canvas() {
   const handleAIToggle = () => {
     setIsAIOpen((prev) => !prev);
   };
-
-  // Zustand store for accessing canvas state
-  const selectedIds = usePaperboxStore((state) => state.selectedIds);
-  const deleteObjects = usePaperboxStore((state) => state.deleteObjects);
-  const selectAll = usePaperboxStore((state) => state.selectAll);
-
-  // Z-index operations
-  const moveToFront = usePaperboxStore((state) => state.moveToFront);
-  const moveToBack = usePaperboxStore((state) => state.moveToBack);
-  const moveUp = usePaperboxStore((state) => state.moveUp);
-  const moveDown = usePaperboxStore((state) => state.moveDown);
 
   // Placement mode state
   const isPlacementMode = usePaperboxStore((state) => state.isPlacementMode);
@@ -201,62 +194,41 @@ export function Canvas() {
 
 
   /**
-   * Keyboard shortcuts for delete, selection, and z-index operations
-   * - Delete/Backspace: Delete selected objects
-   * - Ctrl/Cmd + A: Select all objects
-   * - Ctrl/Cmd + ]: Bring to front
-   * - Ctrl/Cmd + [: Send to back
-   * - Ctrl/Cmd + Shift + ]: Bring forward (move up)
-   * - Ctrl/Cmd + Shift + [: Send backward (move down)
-   * - Ctrl/Cmd + /: Toggle AI interface
+   * Initialize keyboard shortcuts for shape creation (R, C, T) and UI (Cmd+/)
+   * Note: Other shortcuts (delete, select all, layering, duplicate, undo/redo, navigation)
+   * are initialized in useCanvasSync hook for better lifecycle management.
    */
-  useKeyboard({
-    'delete': () => {
-      if (selectedIds.length > 0) {
-        deleteObjects(selectedIds);
+  useEffect(() => {
+    if (!fabricManager) return;
+
+    // Initialize shape creation shortcuts
+    const shapeShortcuts = new ShapeCreationShortcuts({
+      onCreateRectangle: () => handleAddShape('rectangle'),
+      onCreateCircle: () => handleAddShape('circle'),
+      onCreateText: () => handleAddShape('text'),
+    });
+    shapeShortcuts.initialize();
+    shapeCreationShortcutsRef.current = shapeShortcuts;
+
+    // Initialize UI shortcuts
+    const uiShortcuts = new UIShortcuts({
+      onToggleAI: handleAIToggle,
+    });
+    uiShortcuts.initialize();
+    uiShortcutsRef.current = uiShortcuts;
+
+    // Cleanup on unmount
+    return () => {
+      if (shapeCreationShortcutsRef.current) {
+        shapeCreationShortcutsRef.current.dispose();
+        shapeCreationShortcutsRef.current = null;
       }
-    },
-    'backspace': () => {
-      if (selectedIds.length > 0) {
-        deleteObjects(selectedIds);
+      if (uiShortcutsRef.current) {
+        uiShortcutsRef.current.dispose();
+        uiShortcutsRef.current = null;
       }
-    },
-    'a': (e) => {
-      if (e && (e.ctrlKey || e.metaKey)) {
-        // Ctrl/Cmd + A: Select all objects
-        selectAll();
-      }
-    },
-    ']': (e) => {
-      if (e && (e.ctrlKey || e.metaKey) && selectedIds.length === 1) {
-        if (e.shiftKey) {
-          // Ctrl/Cmd + Shift + ]: Move up (bring forward)
-          moveUp(selectedIds[0]);
-        } else {
-          // Ctrl/Cmd + ]: Move to front
-          moveToFront(selectedIds[0]);
-        }
-      }
-    },
-    '[': (e) => {
-      if (e && (e.ctrlKey || e.metaKey) && selectedIds.length === 1) {
-        if (e.shiftKey) {
-          // Ctrl/Cmd + Shift + [: Move down (send backward)
-          moveDown(selectedIds[0]);
-        } else {
-          // Ctrl/Cmd + [: Move to back
-          moveToBack(selectedIds[0]);
-        }
-      }
-    },
-    '/': (e) => {
-      if (e && (e.ctrlKey || e.metaKey)) {
-        // Ctrl/Cmd + /: Toggle AI interface
-        e.preventDefault();
-        setIsAIOpen((prev) => !prev);
-      }
-    },
-  });
+    };
+  }, [fabricManager, handleAddShape]);
 
 
   return (

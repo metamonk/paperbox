@@ -3,6 +3,7 @@
  * Manages keyboard shortcuts for canvas editing operations
  *
  * Shortcuts:
+ * - Delete/Backspace: Delete selected objects
  * - Cmd+D: Duplicate selected objects
  * - Cmd+Z: Undo last action
  * - Cmd+Shift+Z: Redo last undone action
@@ -28,6 +29,7 @@ export class EditingShortcuts {
    * Initialize all editing shortcuts
    */
   public initialize(): void {
+    this.registerShortcut('delete,backspace', this.handleDelete);
     this.registerShortcut('cmd+d,ctrl+d', this.handleDuplicate);
     this.registerShortcut('cmd+z,ctrl+z', this.handleUndo);
     this.registerShortcut('cmd+shift+z,ctrl+shift+z', this.handleRedo);
@@ -53,6 +55,21 @@ export class EditingShortcuts {
       event?.preventDefault();
       boundHandler();
     });
+  }
+
+  /**
+   * Delete/Backspace: Delete selected objects
+   */
+  private handleDelete(): void {
+    const store = usePaperboxStore.getState();
+    const { selectedIds, deleteObjects } = store;
+
+    // No-op if nothing selected
+    if (selectedIds.length === 0) {
+      return;
+    }
+
+    deleteObjects(selectedIds);
   }
 
   /**
