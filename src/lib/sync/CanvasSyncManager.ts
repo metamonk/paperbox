@@ -352,6 +352,13 @@ export class CanvasSyncManager {
                   type_properties: canvasObject.type_properties,
                 };
 
+                console.log(`[CanvasSyncManager] 🎯 Comparing states for ${id.slice(0, 8)}:`, {
+                  before: `(${beforeState.x}, ${beforeState.y})`,
+                  after: `(${afterState.x}, ${afterState.y})`,
+                  deltaX: Math.abs(beforeState.x - afterState.x),
+                  deltaY: Math.abs(beforeState.y - afterState.y),
+                });
+
                 // Check if there's a meaningful change
                 const hasChanged = 
                   Math.abs(beforeState.x - afterState.x) > 0.01 ||
@@ -359,6 +366,8 @@ export class CanvasSyncManager {
                   Math.abs(beforeState.width - afterState.width) > 0.01 ||
                   Math.abs(beforeState.height - afterState.height) > 0.01 ||
                   Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+                
+                console.log(`[CanvasSyncManager] ${hasChanged ? '✅ HAS CHANGED' : '❌ NO CHANGE DETECTED'}`);
 
                 if (hasChanged) {
                   beforeStates.push({ id, beforeState, afterState });

@@ -1211,12 +1211,19 @@ export const createCanvasSlice: StateCreator<
               const updatedObj = dbToCanvasObject(newRecord as DbCanvasObject);
               const currentObj = get().objects[updatedObj.id];
 
+              console.log(`[canvasSlice] 📡 Received UPDATE event for ${updatedObj.id.slice(0, 8)}:`, {
+                old: currentObj ? `(${currentObj.x}, ${currentObj.y})` : 'NOT IN STORE',
+                new: `(${updatedObj.x}, ${updatedObj.y})`,
+              });
+
               // Only update if data meaningfully changed (with precision tolerance)
               if (currentObj && !hasSignificantChange(currentObj, updatedObj)) {
+                console.log(`[canvasSlice] ⏭️ Skipping UPDATE - no significant change (self-broadcast or duplicate)`);
                 // No-op: self-broadcast or duplicate data
                 return;
               }
 
+              console.log(`[canvasSlice] ✅ Applying UPDATE from other user or genuine change`);
               // Apply update from other users or genuinely different data
               get()._updateObject(updatedObj.id, updatedObj);
               
