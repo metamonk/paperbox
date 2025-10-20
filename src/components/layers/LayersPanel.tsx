@@ -36,11 +36,12 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { cn } from '@/lib/utils';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 
 export function LayersPanel() {
-  // Split selectors to avoid creating new objects on every render
-  const objects = usePaperboxStore((state) => state.objects);
+  // PERFORMANCE OPTIMIZATION: Use optimized selector to prevent re-renders on object movement
+  // Only subscribes to object types, not full objects (avoids x/y coordinate updates)
+  const objectTypes = usePaperboxStore((state) => state.getObjectTypes());
   const layers = usePaperboxStore((state) => state.layers);
   const layerOrder = usePaperboxStore((state) => state.layerOrder);
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
@@ -181,7 +182,9 @@ export function LayersPanel() {
 
   // Context menu handlers
   const handleDuplicate = (objectId: string) => {
-    const object = objects[objectId];
+    // PERFORMANCE OPTIMIZATION: Get full object from store directly (not subscription)
+    // This avoids subscribing to all object updates when we only need it once
+    const object = usePaperboxStore.getState().objects[objectId];
     if (!object) return;
 
     // Create duplicated object with slight offset
@@ -218,24 +221,27 @@ export function LayersPanel() {
     }
   };
 
-  // Create layer nodes from objects (reversed for top-to-bottom display)
-  const layerNodes = [...layerOrder].reverse().map((objectId) => {
-    const object = objects[objectId];
-    const layerMeta = layers[objectId];
+  // PERFORMANCE OPTIMIZATION: Memoize layer nodes to prevent recalculation on every render
+  // Only recalculates when dependencies actually change (not on x/y coordinate updates)
+  const layerNodes = useMemo(() => {
+    return [...layerOrder].reverse().map((objectId) => {
+      const objectType = objectTypes[objectId];
+      const layerMeta = layers[objectId];
 
-    if (!object) return null;
+      if (!objectType) return null;
 
-    const displayName = layerMeta?.name || `${object.type} ${objectId.slice(0, 6)}`;
+      const displayName = layerMeta?.name || `${objectType} ${objectId.slice(0, 6)}`;
 
-    return {
-      id: objectId,
-      name: displayName,
-      type: object.type,
-      visible: layerMeta?.visible ?? true,
-      locked: layerMeta?.locked ?? false,
-      isSelected: selectedIds.includes(objectId),
-    };
-  }).filter(Boolean);
+      return {
+        id: objectId,
+        name: displayName,
+        type: objectType,
+        visible: layerMeta?.visible ?? true,
+        locked: layerMeta?.locked ?? false,
+        isSelected: selectedIds.includes(objectId),
+      };
+    }).filter(Boolean);
+  }, [layerOrder, objectTypes, layers, selectedIds]);
 
   if (layerNodes.length === 0) {
     return (

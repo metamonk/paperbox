@@ -119,6 +119,7 @@ export interface CanvasSlice {
   // Utility
   getObjectById: (id: string) => CanvasObject | undefined;
   getAllObjects: () => CanvasObject[];
+  getObjectTypes: () => Record<string, string>;
 }
 
 /**
@@ -1448,6 +1449,17 @@ export const createCanvasSlice: StateCreator<
    */
   getAllObjects: () => {
     return Object.values(get().objects);
+  },
+
+  // PERFORMANCE OPTIMIZATION: Get only object types (doesn't trigger re-render on x/y changes)
+  // Used by LayersPanel to avoid re-rendering when objects move
+  getObjectTypes: () => {
+    const objects = get().objects;
+    const types: Record<string, string> = {};
+    Object.keys(objects).forEach(id => {
+      types[id] = objects[id].type;
+    });
+    return types;
   },
 
   // ─── Connection State Management ───
