@@ -67,6 +67,13 @@ export class CanvasSyncManager {
   private movementBatchTimeout: number | null = null;
   private readonly MOVEMENT_BATCH_DELAY_MS = 50; // Flush after 50ms of inactivity
 
+  // CRITICAL FIX: State→Canvas sync batching to prevent selection issues
+  // When multiple realtime UPDATE events arrive rapidly (from batch_update_canvas_objects),
+  // we need to process them together to avoid removing/re-adding objects individually
+  private stateToCanvasBatchQueue: Set<string> = new Set();
+  private stateToCanvasBatchTimeout: number | null = null;
+  private readonly STATE_TO_CANVAS_BATCH_DELAY_MS = 16; // ~1 frame (60fps)
+
   constructor(fabricManager: FabricCanvasManager, store: any) {
     this.fabricManager = fabricManager;
     this.store = store;
@@ -607,18 +614,30 @@ export class CanvasSyncManager {
           });
 
           // Handle updates
+          // CRITICAL FIX: Queue updates and process in batch to prevent selection issues
+          // This allows multiple rapid realtime UPDATE events to be processed together
           currentIds.forEach((id) => {
             if (prevIds.has(id)) {
               const current = objects[id];
               const prev = prevObjects[id];
 
               if (this.hasObjectChanged(current, prev)) {
-                // Remove and re-add to ensure all properties are in sync
-                this.fabricManager.removeObject(id);
-                this.fabricManager.addObject(current);
+                this.stateToCanvasBatchQueue.add(id);
               }
             }
           });
+
+          // Debounce batch processing
+          if (this.stateToCanvasBatchQueue.size > 0) {
+            if (this.stateToCanvasBatchTimeout) {
+              clearTimeout(this.stateToCanvasBatchTimeout);
+            }
+
+            this.stateToCanvasBatchTimeout = window.setTimeout(() => {
+              this.flushStateToCanvasBatch();
+              this.stateToCanvasBatchTimeout = null;
+            }, this.STATE_TO_CANVAS_BATCH_DELAY_MS);
+          }
 
           // Restore ActiveSelection after updates
           // When objects are removed and re-added, Fabric loses the selection
@@ -650,6 +669,62 @@ export class CanvasSyncManager {
         }
       }
     );
+  }
+
+  /**
+   * CRITICAL FIX: Flush batched State→Canvas updates
+   * Process all queued object updates together to prevent selection issues
+   */
+  private flushStateToCanvasBatch(): void {
+    if (this.stateToCanvasBatchQueue.size === 0) return;
+
+    const objectsToUpdate = Array.from(this.stateToCanvasBatchQueue);
+    this.stateToCanvasBatchQueue.clear();
+
+    const objects = this.store.getState().objects;
+    const canvas = this.fabricManager.getCanvas();
+    const selectedIds = this.store.getState().selectedIds;
+
+    // Process all updates at once
+    this._isSyncingFromStore = true;
+    try {
+      objectsToUpdate.forEach((id) => {
+        const current = objects[id];
+        if (current) {
+          // Remove and re-add to ensure all properties are in sync
+          this.fabricManager.removeObject(id);
+          this.fabricManager.addObject(current);
+        }
+      });
+
+      // Restore ActiveSelection after batch update
+      // When objects are removed and re-added, Fabric loses the selection
+      if (canvas && selectedIds.length > 0) {
+        const objectsToSelect = selectedIds
+          .map(id => {
+            const fabricObj = canvas.getObjects().find(obj => 
+              (obj as FabricObjectWithData).data?.id === id
+            );
+            return fabricObj;
+          })
+          .filter(Boolean) as FabricObject[];
+
+        if (objectsToSelect.length > 0) {
+          if (objectsToSelect.length === 1) {
+            canvas.setActiveObject(objectsToSelect[0]);
+          } else {
+            const fabric = (window as any).fabric;
+            if (fabric && fabric.ActiveSelection) {
+              const activeSelection = new fabric.ActiveSelection(objectsToSelect, { canvas });
+              canvas.setActiveObject(activeSelection);
+            }
+          }
+          canvas.renderAll();
+        }
+      }
+    } finally {
+      this._isSyncingFromStore = false;
+    }
   }
 
   /**
@@ -730,6 +805,13 @@ export class CanvasSyncManager {
       this.movementBatchTimeout = null;
     }
     this.movementBatchQueue.clear();
+
+    // CRITICAL FIX: Clear State→Canvas batch timeout
+    if (this.stateToCanvasBatchTimeout) {
+      clearTimeout(this.stateToCanvasBatchTimeout);
+      this.stateToCanvasBatchTimeout = null;
+    }
+    this.stateToCanvasBatchQueue.clear();
 
     if (this.unsubscribe) {
       this.unsubscribe();
