@@ -758,7 +758,7 @@ export const createCanvasSlice: StateCreator<
         sample_y: y_values[0],
       });
       
-      const { error } = await supabase.rpc('batch_update_canvas_objects', {
+      const { data: rowsUpdated, error } = await supabase.rpc('batch_update_canvas_objects', {
         object_ids,
         x_values,
         y_values,
@@ -772,7 +772,12 @@ export const createCanvasSlice: StateCreator<
         throw new Error(`Batch update RPC failed: ${error.message}`);
       }
       
-      console.log(`[canvasSlice] ✅ RPC succeeded for ${object_ids.length} objects`);
+      console.log(`[canvasSlice] ✅ RPC succeeded - Updated ${rowsUpdated} of ${object_ids.length} rows`);
+      
+      if (rowsUpdated !== object_ids.length) {
+        console.error(`[canvasSlice] ⚠️ ROW COUNT MISMATCH! Expected ${object_ids.length}, got ${rowsUpdated}`);
+        console.error(`[canvasSlice] IDs that may not exist:`, object_ids);
+      }
 
       // console.log(`[canvasSlice] ✅ Batch update successful: ${updates.length} objects (single query, single broadcast)`);
     } catch (error) {
