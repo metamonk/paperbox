@@ -258,6 +258,7 @@ export class CanvasSyncManager {
             // Get current state from store (before transformation)
             const storeObj = this.store.getState().objects[id];
             if (storeObj) {
+              console.log(`[CanvasSyncManager] 📸 Capturing start state for ${id.slice(0, 8)}: (${storeObj.x}, ${storeObj.y})`);
               this.transformStartState.set(id, {
                 id: id,
                 x: storeObj.x,
@@ -267,7 +268,13 @@ export class CanvasSyncManager {
                 rotation: storeObj.rotation,
                 type_properties: storeObj.type_properties,
               });
+            } else {
+              console.warn(`[CanvasSyncManager] ⚠️ No storeObj found for ${id.slice(0, 8)}`);
             }
+          } else if (id) {
+            console.log(`[CanvasSyncManager] 🔄 Already have start state for ${id.slice(0, 8)}`);
+          } else {
+            console.warn(`[CanvasSyncManager] ⚠️ No ID found on object`);
           }
 
           // PERFORMANCE OPTIMIZATION #5: Queue position updates for batching
@@ -323,12 +330,18 @@ export class CanvasSyncManager {
 
             objectsToProcess.forEach((obj: FabricObject) => {
               const canvasObject = this.fabricManager.toCanvasObject(obj);
-              if (!canvasObject) return;
+              if (!canvasObject) {
+                console.warn('[CanvasSyncManager] ⚠️ toCanvasObject returned null');
+                return;
+              }
 
               const id = canvasObject.id;
+              console.log(`[CanvasSyncManager] 🔍 Looking for beforeState for ${id.slice(0, 8)}`);
+              console.log(`[CanvasSyncManager] 📋 transformStartState has keys:`, Array.from(this.transformStartState.keys()).map(k => k.slice(0, 8)));
               const beforeState = this.transformStartState.get(id);
 
               if (beforeState) {
+                console.log(`[CanvasSyncManager] ✅ Found beforeState for ${id.slice(0, 8)}: (${beforeState.x}, ${beforeState.y})`);
                 const afterState = {
                   id: id,
                   x: canvasObject.x,
@@ -363,6 +376,8 @@ export class CanvasSyncManager {
                 }
 
                 this.transformStartState.delete(id);
+              } else {
+                console.warn(`[CanvasSyncManager] ❌ No beforeState found for ${id.slice(0, 8)}`);
               }
             });
 
