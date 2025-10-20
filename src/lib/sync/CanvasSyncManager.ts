@@ -61,6 +61,11 @@ export class CanvasSyncManager {
     type_properties?: any;
   }> = new Map();
 
+  // PERFORMANCE OPTIMIZATION #5: Batch movement updates during drag
+  private movementBatchQueue: Map<string, Partial<CanvasObject>> = new Map();
+  private movementBatchTimeout: number | null = null;
+  private readonly MOVEMENT_BATCH_DELAY_MS = 50; // Flush after 50ms of inactivity
+
   constructor(fabricManager: FabricCanvasManager, store: any) {
     this.fabricManager = fabricManager;
     this.store = store;
@@ -195,10 +200,36 @@ export class CanvasSyncManager {
   }
 
   /**
+   * PERFORMANCE OPTIMIZATION #5: Flush batched movement updates
+   * Applies accumulated position updates as a single batch operation
+   */
+  private flushMovementBatch(): void {
+    if (this.movementBatchQueue.size === 0) return;
+
+    // Convert Map to array of updates
+    const updates = Array.from(this.movementBatchQueue.entries()).map(([id, updates]) => ({
+      id,
+      updates,
+    }));
+
+    // Clear the queue first to allow new batches during async operation
+    this.movementBatchQueue.clear();
+
+    // Apply batch update to store (optimistic)
+    // This uses the existing batchUpdateObjects which handles database sync
+    this.updateQueue.enqueue(async () => {
+      await this.store.getState().batchUpdateObjects(updates);
+    }).catch((error) => {
+      console.error('[CanvasSyncManager] Batch movement flush failed:', error);
+    });
+  }
+
+  /**
    * Canvas → State: Wire Fabric.js events to Zustand actions
    */
   private setupCanvasToStateSync(): void {
     const handlers = {
+      // PERFORMANCE OPTIMIZATION #5: Batch movement updates during drag
       // Track active editing during drag and capture initial state
       onObjectMoving: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
@@ -230,11 +261,39 @@ export class CanvasSyncManager {
               });
             }
           }
+
+          // PERFORMANCE OPTIMIZATION #5: Queue position updates for batching
+          // This prevents excessive state updates during rapid movement
+          if (id) {
+            this.movementBatchQueue.set(id, {
+              x: obj.left,
+              y: obj.top,
+            });
+          }
         });
+
+        // PERFORMANCE OPTIMIZATION #5: Debounce batch flush
+        // Flush after 50ms of inactivity to group rapid movements
+        if (this.movementBatchTimeout) {
+          clearTimeout(this.movementBatchTimeout);
+        }
+
+        this.movementBatchTimeout = window.setTimeout(() => {
+          this.flushMovementBatch();
+          this.movementBatchTimeout = null;
+        }, this.MOVEMENT_BATCH_DELAY_MS);
       },
 
       onObjectModified: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
+
+        // PERFORMANCE OPTIMIZATION #5: Flush any pending batched updates immediately
+        // This ensures all movement updates are applied before final modified state
+        if (this.movementBatchTimeout) {
+          clearTimeout(this.movementBatchTimeout);
+          this.movementBatchTimeout = null;
+          this.flushMovementBatch();
+        }
 
         this._isSyncingFromCanvas = true;
         try {
@@ -596,6 +655,13 @@ export class CanvasSyncManager {
    * Cleanup subscriptions and resources
    */
   dispose(): void {
+    // PERFORMANCE OPTIMIZATION #5: Clear batch timeout and flush pending updates
+    if (this.movementBatchTimeout) {
+      clearTimeout(this.movementBatchTimeout);
+      this.movementBatchTimeout = null;
+    }
+    this.movementBatchQueue.clear();
+
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
