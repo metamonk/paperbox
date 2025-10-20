@@ -8,6 +8,10 @@
 -- This helps diagnose issues where RPC succeeds but no rows match the WHERE clause
 -- ============================================================================
 
+-- Drop the existing function first (required to change return type)
+DROP FUNCTION IF EXISTS batch_update_canvas_objects(UUID[], DOUBLE PRECISION[], DOUBLE PRECISION[], DOUBLE PRECISION[], DOUBLE PRECISION[], DOUBLE PRECISION[]);
+
+-- Recreate with INTEGER return type
 CREATE OR REPLACE FUNCTION batch_update_canvas_objects(
   object_ids UUID[],
   x_values DOUBLE PRECISION[],
@@ -72,7 +76,8 @@ BEGIN
 END;
 $$;
 
--- No need to re-grant permissions (already granted in 021)
+-- Re-grant permissions (required after DROP FUNCTION)
+GRANT EXECUTE ON FUNCTION batch_update_canvas_objects(UUID[], DOUBLE PRECISION[], DOUBLE PRECISION[], DOUBLE PRECISION[], DOUBLE PRECISION[], DOUBLE PRECISION[]) TO authenticated;
 
 COMMENT ON FUNCTION batch_update_canvas_objects IS 
 'Atomically updates position and transform properties for multiple canvas objects.
