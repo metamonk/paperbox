@@ -451,12 +451,15 @@ export const createCanvasSlice: StateCreator<
 
       if (error) throw error;
 
-      // Update local state optimistically
+      // Update local state immutably to trigger Zustand reactivity
       set((state) => {
-        const canvas = state.canvases.find(c => c.id === canvasId);
-        if (canvas) {
-          canvas.is_public = isPublic;
-          canvas.updated_at = new Date().toISOString();
+        const index = state.canvases.findIndex(c => c.id === canvasId);
+        if (index !== -1) {
+          state.canvases[index] = {
+            ...state.canvases[index],
+            is_public: isPublic,
+            updated_at: new Date().toISOString()
+          };
         }
       }, undefined, 'canvas/toggleCanvasPublicSuccess');
 
