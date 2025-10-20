@@ -51,5 +51,5 @@ export * from './DistributeObjectsCommand';
 export * from './CompositeCommand';
 export * from './GridLayoutCommand';
 
-console.log('[Commands] Registered 11 commands (3 creation, 3 manipulation, 1 style, 2 layout, 2 complex)');
+// console.log('[Commands] Registered 11 commands (3 creation, 3 manipulation, 1 style, 2 layout, 2 complex)');
 

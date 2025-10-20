@@ -119,7 +119,6 @@ export interface CanvasSlice {
   // Utility
   getObjectById: (id: string) => CanvasObject | undefined;
   getAllObjects: () => CanvasObject[];
-  getObjectTypes: () => Record<string, string>;
 }
 
 /**
@@ -451,15 +450,12 @@ export const createCanvasSlice: StateCreator<
 
       if (error) throw error;
 
-      // Update local state immutably to trigger Zustand reactivity
+      // Update local state (Immer middleware handles immutability)
       set((state) => {
-        const index = state.canvases.findIndex(c => c.id === canvasId);
-        if (index !== -1) {
-          state.canvases[index] = {
-            ...state.canvases[index],
-            is_public: isPublic,
-            updated_at: new Date().toISOString()
-          };
+        const canvas = state.canvases.find(c => c.id === canvasId);
+        if (canvas) {
+          canvas.is_public = isPublic;
+          canvas.updated_at = new Date().toISOString();
         }
       }, undefined, 'canvas/toggleCanvasPublicSuccess');
 
@@ -1454,16 +1450,6 @@ export const createCanvasSlice: StateCreator<
     return Object.values(get().objects);
   },
 
-  // PERFORMANCE OPTIMIZATION: Get only object types (doesn't trigger re-render on x/y changes)
-  // Used by LayersPanel to avoid re-rendering when objects move
-  getObjectTypes: () => {
-    const objects = get().objects;
-    const types: Record<string, string> = {};
-    Object.keys(objects).forEach(id => {
-      types[id] = objects[id].type;
-    });
-    return types;
-  },
 
   // ─── Connection State Management ───
 

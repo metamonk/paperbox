@@ -36,12 +36,11 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { cn } from '@/lib/utils';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export function LayersPanel() {
-  // PERFORMANCE OPTIMIZATION: Use optimized selector to prevent re-renders on object movement
-  // Only subscribes to object types, not full objects (avoids x/y coordinate updates)
-  const objectTypes = usePaperboxStore((state) => state.getObjectTypes());
+  // Subscribe to full objects state
+  const objects = usePaperboxStore((state) => state.objects);
   const layers = usePaperboxStore((state) => state.layers);
   const layerOrder = usePaperboxStore((state) => state.layerOrder);
   const selectedIds = usePaperboxStore((state) => state.selectedIds);
@@ -221,27 +220,24 @@ export function LayersPanel() {
     }
   };
 
-  // PERFORMANCE OPTIMIZATION: Memoize layer nodes to prevent recalculation on every render
-  // Only recalculates when dependencies actually change (not on x/y coordinate updates)
-  const layerNodes = useMemo(() => {
-    return [...layerOrder].reverse().map((objectId) => {
-      const objectType = objectTypes[objectId];
-      const layerMeta = layers[objectId];
+  // Create layer nodes from objects (reversed for top-to-bottom display)
+  const layerNodes = [...layerOrder].reverse().map((objectId) => {
+    const object = objects[objectId];
+    const layerMeta = layers[objectId];
 
-      if (!objectType) return null;
+    if (!object) return null;
 
-      const displayName = layerMeta?.name || `${objectType} ${objectId.slice(0, 6)}`;
+    const displayName = layerMeta?.name || `${object.type} ${objectId.slice(0, 6)}`;
 
-      return {
-        id: objectId,
-        name: displayName,
-        type: objectType,
-        visible: layerMeta?.visible ?? true,
-        locked: layerMeta?.locked ?? false,
-        isSelected: selectedIds.includes(objectId),
-      };
-    }).filter(Boolean);
-  }, [layerOrder, objectTypes, layers, selectedIds]);
+    return {
+      id: objectId,
+      name: displayName,
+      type: object.type,
+      visible: layerMeta?.visible ?? true,
+      locked: layerMeta?.locked ?? false,
+      isSelected: selectedIds.includes(objectId),
+    };
+  }).filter(Boolean);
 
   if (layerNodes.length === 0) {
     return (
