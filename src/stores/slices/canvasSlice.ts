@@ -386,23 +386,12 @@ export const createCanvasSlice: StateCreator<
 
     try {
       // Load objects for the new canvas
-      console.log(`[setActiveCanvas] 🔄 Loading canvas ${canvasId.slice(0, 8)}...`);
-      
       const { data, error } = await supabase
         .from('canvas_objects')
         .select('*')
         .eq('canvas_id', canvasId);  // W5.D2.3: Canvas scoping
 
       if (error) throw error;
-
-      console.log(`[setActiveCanvas] 📦 Loaded ${data?.length || 0} objects from database`);
-      if (data && data.length > 0) {
-        console.log(`[setActiveCanvas] 📍 Sample DB coords:`, data.slice(0, 2).map((obj: any) => ({
-          id: obj.id.slice(0, 8),
-          x: obj.x,
-          y: obj.y,
-        })));
-      }
 
       // Convert array to Record<id, CanvasObject>
       const objectsMap = (data || []).reduce(
@@ -763,11 +752,6 @@ export const createCanvasSlice: StateCreator<
       const rotation_values = updates.map(u => u.updates.rotation ?? get().objects[u.id]?.rotation ?? 0);
 
       // Call atomic RPC function
-      console.log(`[batchUpdateObjects] 🚀 RPC call with ${object_ids.length} objects:`, {
-        ids: object_ids.map(id => id.slice(0, 8)),
-        sample_coords: { x: x_values[0], y: y_values[0] },
-      });
-      
       const { data: rowsUpdated, error } = await supabase.rpc('batch_update_canvas_objects', {
         object_ids,
         x_values,
@@ -778,15 +762,11 @@ export const createCanvasSlice: StateCreator<
       });
 
       if (error) {
-        console.error(`[batchUpdateObjects] ❌ RPC ERROR:`, error);
         throw new Error(`Batch update RPC failed: ${error.message}`);
       }
       
-      console.log(`[batchUpdateObjects] ✅ RPC success: ${rowsUpdated}/${object_ids.length} rows updated`);
-      
       if (rowsUpdated !== object_ids.length) {
-        console.error(`[batchUpdateObjects] ⚠️ ROW MISMATCH! Expected ${object_ids.length}, got ${rowsUpdated}`);
-        console.error(`[batchUpdateObjects] Object IDs:`, object_ids);
+        console.warn(`[batchUpdateObjects] Row count mismatch: expected ${object_ids.length}, updated ${rowsUpdated}`);
       }
 
       // console.log(`[canvasSlice] ✅ Batch update successful: ${updates.length} objects (single query, single broadcast)`);

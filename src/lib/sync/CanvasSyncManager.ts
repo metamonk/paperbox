@@ -249,11 +249,8 @@ export class CanvasSyncManager {
           .map((obj: FabricObject) => (obj as any).data?.id)
           .filter(Boolean) as string[];
 
-        console.log(`[onObjectMoving] ${isGroup ? 'GROUP' : 'SINGLE'} moving with ${objects.length} object(s)`);
-
         this.activelyEditingIds = new Set(ids);
-        // DISABLED: Collaborative features temporarily disabled
-        // this.store.getState().broadcastActivelyEditing(ids);
+        this.store.getState().broadcastActivelyEditing(ids);
 
         // Capture initial state on first movement for undo/redo
         objects.forEach((obj: FabricObject) => {
@@ -288,17 +285,14 @@ export class CanvasSyncManager {
               const centerPoint = obj.getCenterPoint();
               absoluteLeft = centerPoint.x;
               absoluteTop = centerPoint.y;
-              console.log(`[onObjectMoving] 📍 ${id.slice(0, 8)} GROUP: center(${absoluteLeft.toFixed(1)}, ${absoluteTop.toFixed(1)})`);
             } else {
               // Single object: left/top are already absolute
               absoluteLeft = obj.left!;
               absoluteTop = obj.top!;
-              console.log(`[onObjectMoving] 📍 ${id.slice(0, 8)} SINGLE: fabric(${absoluteLeft.toFixed(1)}, ${absoluteTop.toFixed(1)})`);
             }
 
             // Convert Fabric coordinates to center-origin before storing
             const centerCoords = fabricToCenter(absoluteLeft, absoluteTop);
-            console.log(`[onObjectMoving]   → center(${centerCoords.x.toFixed(1)}, ${centerCoords.y.toFixed(1)})`);
             
             this.movementBatchQueue.set(id, {
               x: centerCoords.x,
@@ -322,24 +316,19 @@ export class CanvasSyncManager {
       onObjectModified: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
 
-        console.log('[CanvasSyncManager] 🎯 onObjectModified triggered');
-
         // PERFORMANCE OPTIMIZATION #5: Flush any pending batched updates immediately
         // This ensures all movement updates are applied before final modified state
         if (this.movementBatchTimeout) {
-          console.log('[CanvasSyncManager] 🔄 Flushing pending movement batch...');
           clearTimeout(this.movementBatchTimeout);
           this.movementBatchTimeout = null;
           this.flushMovementBatch();
         }
 
         // DON'T clear transformStartState yet - we need it to build batch updates!
-        console.log(`[CanvasSyncManager] 📊 Transform state has ${this.transformStartState.size} items`);
         
         // Clear actively editing
         this.activelyEditingIds.clear();
-        // DISABLED: Collaborative features temporarily disabled
-        // this.store.getState().broadcastActivelyEditing([]);
+        this.store.getState().broadcastActivelyEditing([]);
 
         this._isSyncingFromCanvas = true;
         try {
@@ -347,8 +336,6 @@ export class CanvasSyncManager {
           // Constructor names get minified in production
           const objects = (target as any)._objects || [];
           const isGroupSelection = objects.length > 0;
-          
-          console.log(`[CanvasSyncManager] 📊 Selection: ${isGroupSelection ? 'GROUP' : 'SINGLE'} (${isGroupSelection ? objects.length : 1} objects)`);
           
           const objectsToProcess = isGroupSelection ? objects : [target];
 
@@ -384,8 +371,6 @@ export class CanvasSyncManager {
                   Math.abs(beforeState.height - afterState.height) > 0.01 ||
                   Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
 
-                console.log(`[CanvasSyncManager] 📏 ${id.slice(0, 8)}: before(${beforeState.x}, ${beforeState.y}) → after(${afterState.x}, ${afterState.y}) ${hasChanged ? '✅' : '⏭️'}`);
-
                 if (hasChanged) {
                   beforeStates.push({ id, beforeState, afterState });
                   batchUpdates.push({
@@ -407,22 +392,16 @@ export class CanvasSyncManager {
 
             // Apply batch update if there are changes
             if (batchUpdates.length > 0) {
-              console.log(`[CanvasSyncManager] 📦 Queueing batch update for ${batchUpdates.length} objects`);
               this.updateQueue.enqueue(async () => {
                 // Create batch transform command for undo/redo
-                console.log(`[CanvasSyncManager] ⚡ Creating BatchTransformCommand with ${beforeStates.length} transforms`);
                 const { BatchTransformCommand } = await import('../commands/BatchTransformCommand');
                 const command = new BatchTransformCommand(beforeStates);
                 
                 // Execute command (which calls batchUpdateObjects internally)
-                console.log(`[CanvasSyncManager] 🚀 Executing BatchTransformCommand...`);
                 await this.store.getState().executeCommand(command);
-                console.log(`[CanvasSyncManager] ✅ BatchTransformCommand completed`);
               }).catch((error) => {
-                console.error('[CanvasSyncManager] ❌ Batch transform failed:', error);
+                console.error('[CanvasSyncManager] Batch transform failed:', error);
               });
-            } else {
-              console.warn('[CanvasSyncManager] ⚠️ No batch updates to apply (all objects unchanged?)');
             }
           } else {
             // Single object selection: use existing individual command logic
@@ -496,7 +475,7 @@ export class CanvasSyncManager {
         // Try to acquire locks for all selected objects
         const state = this.store.getState();
         const userId = state.currentUserId;
-        // const userName = state.presence[userId ?? '']?.userName || 'Unknown'; // DISABLED with locking
+        const userName = state.presence[userId ?? '']?.userName || 'Unknown';
         
         // Check if any objects are locked by others
         const lockedByOthers: string[] = [];
@@ -521,23 +500,20 @@ export class CanvasSyncManager {
           return;
         }
 
-        // TEMPORARILY DISABLED: Locking causing sync issues
-        // TODO: Re-enable after fixing core synchronization
         // Acquire locks for all selected objects
-        // for (const id of ids) {
-        //   const success = state.acquireLock(id, userId!, userName);
-        //   if (!success) {
-        //     console.error('[CanvasSyncManager] Failed to acquire lock:', id);
-        //     this.fabricManager.getCanvas()?.discardActiveObject();
-        //     this.fabricManager.getCanvas()?.requestRenderAll();
-        //     return;
-        //   }
-        // }
+        for (const id of ids) {
+          const success = state.acquireLock(id, userId!, userName);
+          if (!success) {
+            console.error('[CanvasSyncManager] Failed to acquire lock:', id);
+            this.fabricManager.getCanvas()?.discardActiveObject();
+            this.fabricManager.getCanvas()?.requestRenderAll();
+            return;
+          }
+        }
 
-        // Update selection state
+        // Update selection state and broadcast
         state.selectObjects(ids);
-        // DISABLED: Collaborative features temporarily disabled
-        // state.broadcastSelection(ids);
+        state.broadcastSelection(ids);
       },
 
       onSelectionUpdated: async (targets: FabricObject[]) => {
@@ -547,63 +523,59 @@ export class CanvasSyncManager {
 
         // Release old locks, acquire new locks
         const state = this.store.getState();
-        // const userId = state.currentUserId; // DISABLED with locking
-        // const userName = state.presence[userId ?? '']?.userName || 'Unknown'; // DISABLED with locking
-        // const previouslySelectedIds = state.selectedIds; // DISABLED with locking
-
-        // TEMPORARILY DISABLED: Locking causing sync issues
-        // TODO: Re-enable after fixing core synchronization
+        const userId = state.currentUserId;
+        const userName = state.presence[userId ?? '']?.userName || 'Unknown';
+        const previouslySelectedIds = state.selectedIds;
         
-        // // Release locks for objects no longer selected
-        // for (const oldId of previouslySelectedIds) {
-        //   if (!ids.includes(oldId)) {
-        //     const lock = state.locks[oldId];
-        //     if (lock && lock.userId === userId) {
-        //       state.releaseLock(oldId);
-        //     }
-        //   }
-        // }
+        // Release locks for objects no longer selected
+        for (const oldId of previouslySelectedIds) {
+          if (!ids.includes(oldId)) {
+            const lock = state.locks[oldId];
+            if (lock && lock.userId === userId) {
+              state.releaseLock(oldId);
+            }
+          }
+        }
 
-        // // Check if any NEW objects are locked by others
-        // const lockedByOthers: string[] = [];
-        // for (const id of ids) {
-        //   if (!previouslySelectedIds.includes(id)) {
-        //     const existingLock = state.locks[id];
-        //     if (existingLock && existingLock.userId !== userId) {
-        //       lockedByOthers.push(existingLock.userName);
-        //     }
-        //   }
-        // }
+        // Check if any NEW objects are locked by others
+        const lockedByOthers: string[] = [];
+        for (const id of ids) {
+          if (!previouslySelectedIds.includes(id)) {
+            const existingLock = state.locks[id];
+            if (existingLock && existingLock.userId !== userId) {
+              lockedByOthers.push(existingLock.userName);
+            }
+          }
+        }
 
-        // // If any new objects are locked, prevent selection
-        // if (lockedByOthers.length > 0) {
-        //   this.fabricManager.getCanvas()?.discardActiveObject();
-        //   this.fabricManager.getCanvas()?.requestRenderAll();
+        // If any new objects are locked, prevent selection
+        if (lockedByOthers.length > 0) {
+          this.fabricManager.getCanvas()?.discardActiveObject();
+          this.fabricManager.getCanvas()?.requestRenderAll();
           
-        //   const lockerName = lockedByOthers[0];
-        //   const message = `This object is being edited by ${lockerName}`;
+          const lockerName = lockedByOthers[0];
+          const message = `This object is being edited by ${lockerName}`;
           
-        //   toast.error('Cannot Select Object', { description: message, duration: 3000 });
-        //   return;
-        // }
+          toast.error('Cannot Select Object', { description: message, duration: 3000 });
+          return;
+        }
 
-        // // Acquire locks for newly selected objects
-        // for (const id of ids) {
-        //   if (!previouslySelectedIds.includes(id)) {
-        //     const success = state.acquireLock(id, userId!, userName);
-        //     if (!success) {
-        //       console.error('[CanvasSyncManager] Failed to acquire lock:', id);
-        //       this.fabricManager.getCanvas()?.discardActiveObject();
-        //       this.fabricManager.getCanvas()?.requestRenderAll();
-        //       return;
-        //     }
-        //   }
-        // }
+        // Acquire locks for newly selected objects
+        for (const id of ids) {
+          if (!previouslySelectedIds.includes(id)) {
+            const success = state.acquireLock(id, userId!, userName);
+            if (!success) {
+              console.error('[CanvasSyncManager] Failed to acquire lock:', id);
+              this.fabricManager.getCanvas()?.discardActiveObject();
+              this.fabricManager.getCanvas()?.requestRenderAll();
+              return;
+            }
+          }
+        }
 
-        // Update selection state
+        // Update selection state and broadcast
         state.selectObjects(ids);
-        // DISABLED: Collaborative features temporarily disabled
-        // state.broadcastSelection(ids);
+        state.broadcastSelection(ids);
       },
 
       onSelectionCleared: () => {
@@ -611,26 +583,22 @@ export class CanvasSyncManager {
 
         // Release locks for previously selected objects
         const state = this.store.getState();
-        // const userId = state.currentUserId; // DISABLED with locking
-        // const previouslySelectedIds = state.selectedIds; // DISABLED with locking
-
-        // TEMPORARILY DISABLED: Locking causing sync issues
-        // TODO: Re-enable after fixing core synchronization
+        const userId = state.currentUserId;
+        const previouslySelectedIds = state.selectedIds;
         
-        // for (const id of previouslySelectedIds) {
-        //   const lock = state.locks[id];
-        //   if (lock && lock.userId === userId) {
-        //     state.releaseLock(id);
-        //   }
-        // }
+        for (const id of previouslySelectedIds) {
+          const lock = state.locks[id];
+          if (lock && lock.userId === userId) {
+            state.releaseLock(id);
+          }
+        }
 
         // Clear any captured transform states
         this.transformStartState.clear();
 
-        // Update selection state
+        // Update selection state and broadcast
         state.deselectAll();
-        // DISABLED: Collaborative features temporarily disabled
-        // state.broadcastSelection([]);
+        state.broadcastSelection([]);
       },
     };
     
