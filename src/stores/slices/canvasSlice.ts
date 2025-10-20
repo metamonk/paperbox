@@ -752,6 +752,12 @@ export const createCanvasSlice: StateCreator<
       const rotation_values = updates.map(u => u.updates.rotation ?? get().objects[u.id]?.rotation ?? 0);
 
       // Call atomic RPC function
+      console.log(`[canvasSlice] 🔥 Calling batch_update_canvas_objects RPC for ${object_ids.length} objects`, {
+        object_ids,
+        sample_x: x_values[0],
+        sample_y: y_values[0],
+      });
+      
       const { error } = await supabase.rpc('batch_update_canvas_objects', {
         object_ids,
         x_values,
@@ -762,8 +768,11 @@ export const createCanvasSlice: StateCreator<
       });
 
       if (error) {
+        console.error(`[canvasSlice] ❌ RPC ERROR:`, error);
         throw new Error(`Batch update RPC failed: ${error.message}`);
       }
+      
+      console.log(`[canvasSlice] ✅ RPC succeeded for ${object_ids.length} objects`);
 
       // console.log(`[canvasSlice] ✅ Batch update successful: ${updates.length} objects (single query, single broadcast)`);
     } catch (error) {

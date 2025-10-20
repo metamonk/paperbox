@@ -69,8 +69,10 @@ export class BatchTransformCommand extends BaseCommand {
       } as Partial<CanvasObject>,
     }));
 
+    console.log(`[BatchTransformCommand] 🚀 Calling batchUpdateObjects for ${batchUpdates.length} objects`);
     // Apply batch update (single RPC call + single realtime broadcast)
     await store.batchUpdateObjects(batchUpdates);
+    console.log(`[BatchTransformCommand] ✅ batchUpdateObjects completed`);
     this.executed = true;
   }
 

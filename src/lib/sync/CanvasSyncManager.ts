@@ -317,6 +317,7 @@ export class CanvasSyncManager {
           // CRITICAL FIX: For group selections, batch all updates together
           // This ensures single RPC call + single realtime broadcast for group movements
           if (isGroupSelection && objectsToProcess.length > 1) {
+            console.log(`[CanvasSyncManager] 🎯 GROUP DETECTED: ${objectsToProcess.length} objects`);
             const batchUpdates: Array<{ id: string; updates: Partial<CanvasObject> }> = [];
             const beforeStates: Array<{ id: string; beforeState: any; afterState: any }> = [];
 
@@ -366,17 +367,22 @@ export class CanvasSyncManager {
             });
 
             // Apply batch update if there are changes
+            console.log(`[CanvasSyncManager] 📦 Batch updates queued: ${batchUpdates.length}`);
             if (batchUpdates.length > 0) {
               this.updateQueue.enqueue(async () => {
                 // Create batch transform command for undo/redo
+                console.log(`[CanvasSyncManager] ⚡ Executing BatchTransformCommand for ${batchUpdates.length} objects`);
                 const { BatchTransformCommand } = await import('../commands/BatchTransformCommand');
                 const command = new BatchTransformCommand(beforeStates);
                 
                 // Execute command (which calls batchUpdateObjects internally)
                 await this.store.getState().executeCommand(command);
+                console.log(`[CanvasSyncManager] ✅ BatchTransformCommand executed successfully`);
               }).catch((error) => {
-                console.error('[CanvasSyncManager] Batch transform failed:', error);
+                console.error('[CanvasSyncManager] ❌ Batch transform failed:', error);
               });
+            } else {
+              console.warn('[CanvasSyncManager] ⚠️ No batch updates to apply (no beforeStates found?)');
             }
           } else {
             // Single object selection: use existing individual command logic
