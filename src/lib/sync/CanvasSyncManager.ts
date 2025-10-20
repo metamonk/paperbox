@@ -450,7 +450,7 @@ export class CanvasSyncManager {
         // Try to acquire locks for all selected objects
         const state = this.store.getState();
         const userId = state.currentUserId;
-        const userName = state.presence[userId ?? '']?.userName || 'Unknown';
+        // const userName = state.presence[userId ?? '']?.userName || 'Unknown'; // DISABLED with locking
         
         // Check if any objects are locked by others
         const lockedByOthers: string[] = [];
@@ -475,16 +475,18 @@ export class CanvasSyncManager {
           return;
         }
 
+        // TEMPORARILY DISABLED: Locking causing sync issues
+        // TODO: Re-enable after fixing core synchronization
         // Acquire locks for all selected objects
-        for (const id of ids) {
-          const success = state.acquireLock(id, userId!, userName);
-          if (!success) {
-            console.error('[CanvasSyncManager] Failed to acquire lock:', id);
-            this.fabricManager.getCanvas()?.discardActiveObject();
-            this.fabricManager.getCanvas()?.requestRenderAll();
-            return;
-          }
-        }
+        // for (const id of ids) {
+        //   const success = state.acquireLock(id, userId!, userName);
+        //   if (!success) {
+        //     console.error('[CanvasSyncManager] Failed to acquire lock:', id);
+        //     this.fabricManager.getCanvas()?.discardActiveObject();
+        //     this.fabricManager.getCanvas()?.requestRenderAll();
+        //     return;
+        //   }
+        // }
 
         // Update selection state and broadcast
         state.selectObjects(ids);
@@ -498,55 +500,58 @@ export class CanvasSyncManager {
 
         // Release old locks, acquire new locks
         const state = this.store.getState();
-        const userId = state.currentUserId;
-        const userName = state.presence[userId ?? '']?.userName || 'Unknown';
-        const previouslySelectedIds = state.selectedIds;
+        // const userId = state.currentUserId; // DISABLED with locking
+        // const userName = state.presence[userId ?? '']?.userName || 'Unknown'; // DISABLED with locking
+        // const previouslySelectedIds = state.selectedIds; // DISABLED with locking
 
-        // Release locks for objects no longer selected
-        for (const oldId of previouslySelectedIds) {
-          if (!ids.includes(oldId)) {
-            const lock = state.locks[oldId];
-            if (lock && lock.userId === userId) {
-              state.releaseLock(oldId);
-            }
-          }
-        }
+        // TEMPORARILY DISABLED: Locking causing sync issues
+        // TODO: Re-enable after fixing core synchronization
+        
+        // // Release locks for objects no longer selected
+        // for (const oldId of previouslySelectedIds) {
+        //   if (!ids.includes(oldId)) {
+        //     const lock = state.locks[oldId];
+        //     if (lock && lock.userId === userId) {
+        //       state.releaseLock(oldId);
+        //     }
+        //   }
+        // }
 
-        // Check if any NEW objects are locked by others
-        const lockedByOthers: string[] = [];
-        for (const id of ids) {
-          if (!previouslySelectedIds.includes(id)) {
-            const existingLock = state.locks[id];
-            if (existingLock && existingLock.userId !== userId) {
-              lockedByOthers.push(existingLock.userName);
-            }
-          }
-        }
+        // // Check if any NEW objects are locked by others
+        // const lockedByOthers: string[] = [];
+        // for (const id of ids) {
+        //   if (!previouslySelectedIds.includes(id)) {
+        //     const existingLock = state.locks[id];
+        //     if (existingLock && existingLock.userId !== userId) {
+        //       lockedByOthers.push(existingLock.userName);
+        //     }
+        //   }
+        // }
 
-        // If any new objects are locked, prevent selection
-        if (lockedByOthers.length > 0) {
-          this.fabricManager.getCanvas()?.discardActiveObject();
-          this.fabricManager.getCanvas()?.requestRenderAll();
+        // // If any new objects are locked, prevent selection
+        // if (lockedByOthers.length > 0) {
+        //   this.fabricManager.getCanvas()?.discardActiveObject();
+        //   this.fabricManager.getCanvas()?.requestRenderAll();
           
-          const lockerName = lockedByOthers[0];
-          const message = `This object is being edited by ${lockerName}`;
+        //   const lockerName = lockedByOthers[0];
+        //   const message = `This object is being edited by ${lockerName}`;
           
-          toast.error('Cannot Select Object', { description: message, duration: 3000 });
-          return;
-        }
+        //   toast.error('Cannot Select Object', { description: message, duration: 3000 });
+        //   return;
+        // }
 
-        // Acquire locks for newly selected objects
-        for (const id of ids) {
-          if (!previouslySelectedIds.includes(id)) {
-            const success = state.acquireLock(id, userId!, userName);
-            if (!success) {
-              console.error('[CanvasSyncManager] Failed to acquire lock:', id);
-              this.fabricManager.getCanvas()?.discardActiveObject();
-              this.fabricManager.getCanvas()?.requestRenderAll();
-              return;
-            }
-          }
-        }
+        // // Acquire locks for newly selected objects
+        // for (const id of ids) {
+        //   if (!previouslySelectedIds.includes(id)) {
+        //     const success = state.acquireLock(id, userId!, userName);
+        //     if (!success) {
+        //       console.error('[CanvasSyncManager] Failed to acquire lock:', id);
+        //       this.fabricManager.getCanvas()?.discardActiveObject();
+        //       this.fabricManager.getCanvas()?.requestRenderAll();
+        //       return;
+        //     }
+        //   }
+        // }
 
         // Update selection state and broadcast
         state.selectObjects(ids);
@@ -558,15 +563,18 @@ export class CanvasSyncManager {
 
         // Release locks for previously selected objects
         const state = this.store.getState();
-        const userId = state.currentUserId;
-        const previouslySelectedIds = state.selectedIds;
+        // const userId = state.currentUserId; // DISABLED with locking
+        // const previouslySelectedIds = state.selectedIds; // DISABLED with locking
 
-        for (const id of previouslySelectedIds) {
-          const lock = state.locks[id];
-          if (lock && lock.userId === userId) {
-            state.releaseLock(id);
-          }
-        }
+        // TEMPORARILY DISABLED: Locking causing sync issues
+        // TODO: Re-enable after fixing core synchronization
+        
+        // for (const id of previouslySelectedIds) {
+        //   const lock = state.locks[id];
+        //   if (lock && lock.userId === userId) {
+        //     state.releaseLock(id);
+        //   }
+        // }
 
         // Clear any captured transform states
         this.transformStartState.clear();
