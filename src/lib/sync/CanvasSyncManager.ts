@@ -298,15 +298,19 @@ export class CanvasSyncManager {
       onObjectModified: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
 
+        console.log('[CanvasSyncManager] 🎯 onObjectModified triggered');
+
         // PERFORMANCE OPTIMIZATION #5: Flush any pending batched updates immediately
         // This ensures all movement updates are applied before final modified state
         if (this.movementBatchTimeout) {
+          console.log('[CanvasSyncManager] 🔄 Flushing pending movement batch...');
           clearTimeout(this.movementBatchTimeout);
           this.movementBatchTimeout = null;
           this.flushMovementBatch();
         }
 
         // Clear transform state and actively editing
+        console.log(`[CanvasSyncManager] 🧹 Clearing state (${this.transformStartState.size} items in transformStartState)`);
         this.transformStartState.clear();
         this.activelyEditingIds.clear();
         // DISABLED: Collaborative features temporarily disabled
@@ -318,6 +322,8 @@ export class CanvasSyncManager {
           // Constructor names get minified in production
           const objects = (target as any)._objects || [];
           const isGroupSelection = objects.length > 0;
+          
+          console.log(`[CanvasSyncManager] 📊 Selection: ${isGroupSelection ? 'GROUP' : 'SINGLE'} (${isGroupSelection ? objects.length : 1} objects)`);
           
           const objectsToProcess = isGroupSelection ? objects : [target];
 
@@ -353,6 +359,8 @@ export class CanvasSyncManager {
                   Math.abs(beforeState.height - afterState.height) > 0.01 ||
                   Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
 
+                console.log(`[CanvasSyncManager] 📏 ${id.slice(0, 8)}: before(${beforeState.x}, ${beforeState.y}) → after(${afterState.x}, ${afterState.y}) ${hasChanged ? '✅' : '⏭️'}`);
+
                 if (hasChanged) {
                   beforeStates.push({ id, beforeState, afterState });
                   batchUpdates.push({
@@ -374,16 +382,22 @@ export class CanvasSyncManager {
 
             // Apply batch update if there are changes
             if (batchUpdates.length > 0) {
+              console.log(`[CanvasSyncManager] 📦 Queueing batch update for ${batchUpdates.length} objects`);
               this.updateQueue.enqueue(async () => {
                 // Create batch transform command for undo/redo
+                console.log(`[CanvasSyncManager] ⚡ Creating BatchTransformCommand with ${beforeStates.length} transforms`);
                 const { BatchTransformCommand } = await import('../commands/BatchTransformCommand');
                 const command = new BatchTransformCommand(beforeStates);
                 
                 // Execute command (which calls batchUpdateObjects internally)
+                console.log(`[CanvasSyncManager] 🚀 Executing BatchTransformCommand...`);
                 await this.store.getState().executeCommand(command);
+                console.log(`[CanvasSyncManager] ✅ BatchTransformCommand completed`);
               }).catch((error) => {
-                console.error('[CanvasSyncManager] Batch transform failed:', error);
+                console.error('[CanvasSyncManager] ❌ Batch transform failed:', error);
               });
+            } else {
+              console.warn('[CanvasSyncManager] ⚠️ No batch updates to apply (all objects unchanged?)');
             }
           } else {
             // Single object selection: use existing individual command logic
