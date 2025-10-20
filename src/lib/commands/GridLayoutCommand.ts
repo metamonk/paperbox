@@ -43,8 +43,14 @@ export class GridLayoutCommand extends CompositeCommand {
     const defaultWidth = params.width ?? 80;
     const defaultHeight = params.height ?? 80;
     const defaultFill = params.fill ?? (shapeType === 'circle' ? '#3b82f6' : '#10b981');
-    const defaultStroke = params.stroke;
-    const defaultStrokeWidth = params.strokeWidth;
+    
+    // STROKE VALIDATION: Always pass stroke (will default to black in child commands)
+    // If AI provides stroke color, ensure strokeWidth is numeric (visible)
+    const defaultStroke = params.stroke; // Pass through (child commands will default to black)
+    const defaultStrokeWidth = params.stroke 
+      ? (params.strokeWidth ?? 2)  // If stroke color provided, default width to 2 (visible)
+      : params.strokeWidth;         // Pass through undefined (child will set to 0)
+    
     const defaultFontSize = params.fontSize ?? 20;
 
     const commands = [];

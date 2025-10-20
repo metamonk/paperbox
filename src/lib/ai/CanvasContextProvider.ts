@@ -6,6 +6,7 @@
 import { usePaperboxStore } from '../../stores';
 import type { CanvasContext } from '../../types/ai';
 import { fabricToCenter } from '../fabric/coordinateTranslation';
+import { getViewportBounds, getCanvasScreenDimensions } from '../fabric/viewportUtils';
 
 /**
  * Get current canvas context for AI
@@ -42,18 +43,45 @@ export function getCanvasContext(): CanvasContext | null {
   const canvasWidth = 8000;
   const canvasHeight = 8000;
 
-  // CRITICAL: viewport.panX and viewport.panY are in Fabric.js coordinates (0-8000, top-left origin)
-  // We need to convert them to center-origin coordinates (-4000 to +4000, center origin)
-  const panCenterOrigin = fabricToCenter(viewport.panX, viewport.panY);
+  // CRITICAL FIX: Properly calculate viewport bounds in Fabric coordinates
+  // viewport.panX and viewport.panY are viewport transform offsets (vpt[4] and vpt[5])
+  // NOT Fabric canvas coordinates! They are screen pixel offsets.
+  
+  // Get actual screen dimensions for accurate viewport calculation
+  const screenDims = getCanvasScreenDimensions();
+  
+  // DEBUG: Log viewport state
+  console.log('[CanvasContextProvider] DEBUG - Raw viewport state:', {
+    zoom: viewport.zoom,
+    panX: viewport.panX,
+    panY: viewport.panY,
+    screenDims,
+  });
+  
+  // Calculate viewport bounds in Fabric coordinates
+  // This tells us what part of the 8000×8000 canvas is currently visible
+  const viewportBounds = getViewportBounds(
+    [viewport.zoom, 0, 0, viewport.zoom, viewport.panX, viewport.panY],
+    viewport.zoom,
+    screenDims.width,
+    screenDims.height
+  );
+  
+  // DEBUG: Log viewport bounds
+  console.log('[CanvasContextProvider] DEBUG - Viewport bounds:', viewportBounds);
+  
+  // Convert viewport center from Fabric coordinates to center-origin coordinates
+  // This is where the user is actually looking on the canvas
+  const viewportCenterFabric = viewportBounds.center;
+  const viewportCenter = fabricToCenter(viewportCenterFabric.x, viewportCenterFabric.y);
+  const viewportCenterX = viewportCenter.x;
+  const viewportCenterY = viewportCenter.y;
 
-  // Calculate viewport center (where the user is currently looking)
-  // This is the center of the visible area based on pan position
-  // Note: panX and panY represent the top-left corner of the viewport
-  // We estimate viewport dimensions as ~1200x800 at 100% zoom (typical screen size)
-  const estimatedViewportWidth = 1200 / viewport.zoom;
-  const estimatedViewportHeight = 800 / viewport.zoom;
-  const viewportCenterX = panCenterOrigin.x + estimatedViewportWidth / 2;
-  const viewportCenterY = panCenterOrigin.y + estimatedViewportHeight / 2;
+  // DEBUG: Log final center coordinates
+  console.log('[CanvasContextProvider] DEBUG - Final viewport center (center-origin):', {
+    viewportCenterX,
+    viewportCenterY,
+  });
 
   // Get selected objects
   const selectedIds = store.selectedIds;
@@ -102,18 +130,28 @@ export function getCanvasContextForUser(
   const canvasWidth = 8000;
   const canvasHeight = 8000;
 
-  // CRITICAL: viewport.panX and viewport.panY are in Fabric.js coordinates (0-8000, top-left origin)
-  // We need to convert them to center-origin coordinates (-4000 to +4000, center origin)
-  const panCenterOrigin = fabricToCenter(viewport.panX, viewport.panY);
-
-  // Calculate viewport center (where the user is currently looking)
-  // This is the center of the visible area based on pan position
-  // Note: panX and panY represent the top-left corner of the viewport
-  // We estimate viewport dimensions as ~1200x800 at 100% zoom (typical screen size)
-  const estimatedViewportWidth = 1200 / viewport.zoom;
-  const estimatedViewportHeight = 800 / viewport.zoom;
-  const viewportCenterX = panCenterOrigin.x + estimatedViewportWidth / 2;
-  const viewportCenterY = panCenterOrigin.y + estimatedViewportHeight / 2;
+  // CRITICAL FIX: Properly calculate viewport bounds in Fabric coordinates
+  // viewport.panX and viewport.panY are viewport transform offsets (vpt[4] and vpt[5])
+  // NOT Fabric canvas coordinates! They are screen pixel offsets.
+  
+  // Get actual screen dimensions for accurate viewport calculation
+  const screenDims = getCanvasScreenDimensions();
+  
+  // Calculate viewport bounds in Fabric coordinates
+  // This tells us what part of the 8000×8000 canvas is currently visible
+  const viewportBounds = getViewportBounds(
+    [viewport.zoom, 0, 0, viewport.zoom, viewport.panX, viewport.panY],
+    viewport.zoom,
+    screenDims.width,
+    screenDims.height
+  );
+  
+  // Convert viewport center from Fabric coordinates to center-origin coordinates
+  // This is where the user is actually looking on the canvas
+  const viewportCenterFabric = viewportBounds.center;
+  const viewportCenter = fabricToCenter(viewportCenterFabric.x, viewportCenterFabric.y);
+  const viewportCenterX = viewportCenter.x;
+  const viewportCenterY = viewportCenter.y;
 
   // Get selected objects
   const selectedIds = storeState.selectedIds;

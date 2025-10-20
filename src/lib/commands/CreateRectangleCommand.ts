@@ -10,6 +10,7 @@
 import { BaseCommand, type CommandMetadata } from './Command';
 import { usePaperboxStore } from '../../stores';
 import type { RectangleObject } from '../../types/canvas';
+import { DEFAULT_SHAPE_PROPS, SHAPE_DEFAULTS } from '../../lib/constants';
 
 export interface CreateRectangleParams {
   x: number;  // Center-origin X coordinate (-4000 to +4000)
@@ -37,18 +38,29 @@ export class CreateRectangleCommand extends BaseCommand {
   async execute(): Promise<void> {
     const store = usePaperboxStore.getState();
 
-    // Create rectangle object
+    // STROKE VALIDATION: Use consistent defaults matching user-created shapes
+    // If AI provides stroke color, ensure strokeWidth is numeric (visible)
+    const finalStroke = this.params.stroke ?? DEFAULT_SHAPE_PROPS.stroke;
+    const finalStrokeWidth = this.params.stroke 
+      ? (this.params.stroke_width ?? DEFAULT_SHAPE_PROPS.stroke_width)
+      : DEFAULT_SHAPE_PROPS.stroke_width; // Always visible (2px) by default
+
+    // Create rectangle object with complete defaults
     const rectangleData: Partial<RectangleObject> = {
       type: 'rectangle',
       x: this.params.x,
       y: this.params.y,
       width: this.params.width,
       height: this.params.height,
-      fill: this.params.fill ?? '#10b981', // Default green
-      stroke: this.params.stroke ?? '#000000', // Default black stroke
-      stroke_width: this.params.stroke_width ?? 0, // Default no stroke
-      opacity: this.params.opacity ?? 1,
-      rotation: 0,
+      fill: this.params.fill ?? SHAPE_DEFAULTS.rectangle.fill, // Consistent blue default
+      stroke: finalStroke,
+      stroke_width: finalStrokeWidth,
+      opacity: this.params.opacity ?? DEFAULT_SHAPE_PROPS.opacity,
+      rotation: DEFAULT_SHAPE_PROPS.rotation,
+      group_id: DEFAULT_SHAPE_PROPS.group_id,
+      z_index: DEFAULT_SHAPE_PROPS.z_index,
+      style_properties: DEFAULT_SHAPE_PROPS.style_properties,
+      metadata: DEFAULT_SHAPE_PROPS.metadata,
       type_properties: {
         corner_radius: this.params.corner_radius ?? 0,
       },

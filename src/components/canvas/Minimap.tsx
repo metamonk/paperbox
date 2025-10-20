@@ -25,6 +25,7 @@ const SCALE = MINIMAP_SIZE / CANVAS_SIZE; // Scale factor
 export function Minimap({ fabricManager }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [vptTrigger, setVptTrigger] = useState(0);
   
   // Get canvas objects and viewport from store
   // Use a stable selector with shallow comparison of object IDs and update timestamps
@@ -34,6 +35,36 @@ export function Minimap({ fabricManager }: MinimapProps) {
   // Using updated_at timestamps ensures we re-render when properties change
   const objects = Object.values(objectsMap);
   const renderKey = objects.map(obj => `${obj.id}-${obj.updated_at}`).join(',');
+
+  /**
+   * Setup viewport change detection
+   * 
+   * Listens to Fabric's 'after:render' event to detect viewport changes (pan/zoom).
+   * Throttled to 30 FPS for performance - minimap doesn't need 60 FPS updates.
+   * This ensures the minimap viewport indicator updates immediately with zero lag.
+   */
+  useEffect(() => {
+    if (!fabricManager) return;
+    const canvas = fabricManager.getCanvas();
+    if (!canvas) return;
+
+    // Throttle to 30 FPS for performance (33ms interval)
+    let lastUpdate = 0;
+    const throttleMs = 33;
+
+    const handleRender = () => {
+      const now = Date.now();
+      if (now - lastUpdate >= throttleMs) {
+        lastUpdate = now;
+        setVptTrigger((prev) => prev + 1);
+      }
+    };
+
+    canvas.on('after:render', handleRender);
+    return () => {
+      canvas.off('after:render', handleRender);
+    };
+  }, [fabricManager]);
 
   /**
    * Render the minimap
@@ -80,6 +111,8 @@ export function Minimap({ fabricManager }: MinimapProps) {
     ctx.strokeRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
 
     // Draw objects (simplified view)
+    // IMPORTANT: Objects use center-origin in both database AND Fabric.js
+    // Fabric objects have originX='center', originY='center', so obj.x/obj.y are CENTER coordinates
     objects.forEach((obj) => {
       ctx.save();
 
@@ -87,41 +120,44 @@ export function Minimap({ fabricManager }: MinimapProps) {
       const fabricCoords = centerToFabric(obj.x, obj.y);
       
       // Scale Fabric coordinates to minimap
-      const x = fabricCoords.x * SCALE;
-      const y = fabricCoords.y * SCALE;
+      const centerX = fabricCoords.x * SCALE;
+      const centerY = fabricCoords.y * SCALE;
       const width = obj.width * SCALE;
       const height = obj.height * SCALE;
 
-      // Apply rotation transform (rotation is in degrees)
-      if (obj.rotation && obj.rotation !== 0) {
-        // Move to object center, rotate, then offset to top-left
-        const centerX = x + width / 2;
-        const centerY = y + height / 2;
-        ctx.translate(centerX, centerY);
-        ctx.rotate((obj.rotation * Math.PI) / 180);
-        ctx.translate(-width / 2, -height / 2);
-      } else {
-        // No rotation, just translate to position
-        ctx.translate(x, y);
-      }
-
-      // Draw based on type (now at 0,0 due to translation)
+      // Draw based on type
       if (obj.type === 'rectangle') {
+        // Move to center, apply rotation, then draw centered rectangle
+        ctx.translate(centerX, centerY);
+        if (obj.rotation && obj.rotation !== 0) {
+          ctx.rotate((obj.rotation * Math.PI) / 180);
+        }
+        
+        // Draw rectangle centered at origin
         ctx.fillStyle = obj.fill || '#3B82F6';
         ctx.globalAlpha = 0.6;
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(-width / 2, -height / 2, width, height);
         
         // Draw border
         ctx.globalAlpha = 1;
         ctx.strokeStyle = obj.stroke || '#60A5FA';
         ctx.lineWidth = 0.5;
-        ctx.strokeRect(0, 0, width, height);
+        ctx.strokeRect(-width / 2, -height / 2, width, height);
+        
       } else if (obj.type === 'circle') {
         const radius = (obj.type_properties.radius || 50) * SCALE;
+        
+        // Move to center, apply rotation (circles don't visually rotate but keep for consistency)
+        ctx.translate(centerX, centerY);
+        if (obj.rotation && obj.rotation !== 0) {
+          ctx.rotate((obj.rotation * Math.PI) / 180);
+        }
+        
+        // Draw circle centered at origin
         ctx.fillStyle = obj.fill || '#EF4444';
         ctx.globalAlpha = 0.6;
         ctx.beginPath();
-        ctx.arc(radius, radius, radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.fill();
         
         // Draw border
@@ -129,22 +165,30 @@ export function Minimap({ fabricManager }: MinimapProps) {
         ctx.strokeStyle = obj.stroke || '#F87171';
         ctx.lineWidth = 0.5;
         ctx.stroke();
+        
       } else if (obj.type === 'text') {
-        // Represent text as a small rectangle
+        // Move to center, apply rotation, then draw centered rectangle
+        ctx.translate(centerX, centerY);
+        if (obj.rotation && obj.rotation !== 0) {
+          ctx.rotate((obj.rotation * Math.PI) / 180);
+        }
+        
+        // Represent text as a small rectangle (centered)
         ctx.fillStyle = '#10B981';
         ctx.globalAlpha = 0.6;
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(-width / 2, -height / 2, width, height);
         
         ctx.globalAlpha = 1;
         ctx.strokeStyle = '#34D399';
         ctx.lineWidth = 0.5;
-        ctx.strokeRect(0, 0, width, height);
+        ctx.strokeRect(-width / 2, -height / 2, width, height);
       }
 
       ctx.restore();
     });
 
     // Draw viewport rectangle (current view indicator)
+    // This shows the user's current visible area on the minimap
     if (fabricManager) {
       const canvas = fabricManager.getCanvas();
       if (canvas) {
@@ -187,7 +231,7 @@ export function Minimap({ fabricManager }: MinimapProps) {
         ctx.fillRect(vpX, vpY, vpW, vpH);
       }
     }
-  }, [renderKey, fabricManager, objects]);
+  }, [renderKey, fabricManager, objects, vptTrigger]); // CRITICAL: vptTrigger ensures re-render on viewport changes
 
   /**
    * Handle click/drag to navigate

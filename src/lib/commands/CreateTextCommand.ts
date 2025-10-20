@@ -10,6 +10,7 @@
 import { BaseCommand, type CommandMetadata } from './Command';
 import { usePaperboxStore } from '../../stores';
 import type { TextObject } from '../../types/canvas';
+import { DEFAULT_SHAPE_PROPS, SHAPE_DEFAULTS, DEFAULT_FONT_FAMILY } from '../../lib/constants';
 
 export interface CreateTextParams {
   x: number;  // Center-origin X coordinate (-4000 to +4000)
@@ -39,7 +40,7 @@ export class CreateTextCommand extends BaseCommand {
 
     const fontSize = this.params.fontSize ?? 24;
     
-    // Create text object
+    // Create text object with complete defaults
     // Note: For text, width/height are calculated based on content
     // We'll use approximate values that will be adjusted by Fabric.js
     const textData: Partial<TextObject> = {
@@ -48,15 +49,19 @@ export class CreateTextCommand extends BaseCommand {
       y: this.params.y,
       width: this.params.text.length * fontSize * 0.6, // Approximate width
       height: fontSize * 1.2, // Approximate height
-      fill: this.params.fill ?? '#000000', // Default black
-      stroke: null,
-      stroke_width: null,
-      opacity: this.params.opacity ?? 1,
-      rotation: 0,
+      fill: this.params.fill ?? SHAPE_DEFAULTS.text.fill, // Consistent black default
+      stroke: DEFAULT_SHAPE_PROPS.stroke,
+      stroke_width: DEFAULT_SHAPE_PROPS.stroke_width, // Visible border (consistent with shapes)
+      opacity: this.params.opacity ?? DEFAULT_SHAPE_PROPS.opacity,
+      rotation: DEFAULT_SHAPE_PROPS.rotation,
+      group_id: DEFAULT_SHAPE_PROPS.group_id,
+      z_index: DEFAULT_SHAPE_PROPS.z_index,
+      style_properties: DEFAULT_SHAPE_PROPS.style_properties,
+      metadata: DEFAULT_SHAPE_PROPS.metadata,
       type_properties: {
         text_content: this.params.text,
         font_size: fontSize,
-        font_family: this.params.fontFamily ?? 'Inter',
+        font_family: this.params.fontFamily ?? DEFAULT_FONT_FAMILY,
         font_weight: this.params.fontWeight ?? 'normal',
         text_align: this.params.text_align ?? 'left',
       },

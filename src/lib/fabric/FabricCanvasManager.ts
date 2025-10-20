@@ -22,7 +22,7 @@ import { Canvas, Rect, Circle, Textbox, FabricObject, Point } from 'fabric';
 import type { CanvasObject, RectangleObject, CircleObject, TextObject, ShapeType } from '@/types/canvas';
 import type { UserPresence } from '@/stores/slices/collaborationSlice';
 import { CollaborativeOverlayManager } from './CollaborativeOverlayManager';
-import { GRID_SIZE, GRID_ENABLED } from '@/lib/constants';
+import { GRID_SIZE, GRID_ENABLED, DEFAULT_FONT_FAMILY } from '@/lib/constants';
 import { centerToFabric, fabricToCenter, getFabricCenterPoint } from './coordinateTranslation';
 
 /**
@@ -580,10 +580,14 @@ export class FabricCanvasManager {
           ...commonProps,
           width: canvasObject.width,
           fontSize: font_size,
-          fontFamily: font_family || 'Arial',
+          fontFamily: font_family || DEFAULT_FONT_FAMILY,
           fontWeight: font_weight || 'normal',
           fontStyle: font_style || 'normal',
           textAlign: text_align || 'left',
+          // FABRIC NATIVE: Lock vertical scaling so text only resizes horizontally
+          // This is Fabric's built-in way to handle text boxes - text reflows naturally
+          lockScalingY: true,
+          lockScalingFlip: true,
         });
         break;
       }
@@ -693,13 +697,20 @@ export class FabricCanvasManager {
 
       case 'text': {
         const textbox = fabricObject as any; // Cast to access text properties
+        // FABRIC NATIVE: With lockScalingY, scaleX changes width and scaleY stays 1
+        // Bake scaleX into width for storage
+        const scaleX = textbox.scaleX || 1;
+        const effectiveWidth = (textbox.width || 100) * scaleX;
+        
         return {
           ...baseProperties,
+          width: effectiveWidth,  // Text box width (with scale baked in)
+          height: textbox.height || 50,  // Height auto-calculated by Fabric based on text wrapping
           type: 'text',
           type_properties: {
             text_content: textbox.text || '',
             font_size: textbox.fontSize || 16,
-            font_family: textbox.fontFamily || 'Arial',
+            font_family: textbox.fontFamily || DEFAULT_FONT_FAMILY,
             font_weight: textbox.fontWeight || 'normal',
             font_style: textbox.fontStyle || 'normal',
             text_align: textbox.textAlign || 'left',

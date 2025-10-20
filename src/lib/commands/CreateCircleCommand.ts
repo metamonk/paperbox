@@ -10,6 +10,7 @@
 import { BaseCommand, type CommandMetadata } from './Command';
 import { usePaperboxStore } from '../../stores';
 import type { CircleObject } from '../../types/canvas';
+import { DEFAULT_SHAPE_PROPS, SHAPE_DEFAULTS } from '../../lib/constants';
 
 export interface CreateCircleParams {
   x: number;  // Center-origin X coordinate (-4000 to +4000)
@@ -35,7 +36,14 @@ export class CreateCircleCommand extends BaseCommand {
   async execute(): Promise<void> {
     const store = usePaperboxStore.getState();
 
-    // Create circle object
+    // STROKE VALIDATION: Use consistent defaults matching user-created shapes
+    // If AI provides stroke color, ensure strokeWidth is numeric (visible)
+    const finalStroke = this.params.stroke ?? DEFAULT_SHAPE_PROPS.stroke;
+    const finalStrokeWidth = this.params.stroke 
+      ? (this.params.stroke_width ?? DEFAULT_SHAPE_PROPS.stroke_width)
+      : DEFAULT_SHAPE_PROPS.stroke_width; // Always visible (2px) by default
+
+    // Create circle object with complete defaults
     const circleData: Partial<CircleObject> = {
       type: 'circle',
       x: this.params.x,
@@ -45,11 +53,15 @@ export class CreateCircleCommand extends BaseCommand {
       // Fabric.js Circle uses only the radius property from type_properties
       width: this.params.radius * 2,
       height: this.params.radius * 2,
-      fill: this.params.fill ?? '#3b82f6', // Default blue
-      stroke: this.params.stroke ?? '#000000', // Default black stroke
-      stroke_width: this.params.stroke_width ?? 0, // Default no stroke
-      opacity: this.params.opacity ?? 1,
-      rotation: 0,
+      fill: this.params.fill ?? SHAPE_DEFAULTS.circle.fill, // Consistent red default
+      stroke: finalStroke,
+      stroke_width: finalStrokeWidth,
+      opacity: this.params.opacity ?? DEFAULT_SHAPE_PROPS.opacity,
+      rotation: DEFAULT_SHAPE_PROPS.rotation,
+      group_id: DEFAULT_SHAPE_PROPS.group_id,
+      z_index: DEFAULT_SHAPE_PROPS.z_index,
+      style_properties: DEFAULT_SHAPE_PROPS.style_properties,
+      metadata: DEFAULT_SHAPE_PROPS.metadata,
       type_properties: {
         radius: this.params.radius, // Source of truth for circle size
       },

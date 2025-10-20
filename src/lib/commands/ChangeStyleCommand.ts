@@ -60,10 +60,23 @@ export class ChangeStyleCommand extends BaseCommand {
       updates.fill = this.params.fill;
     }
 
+    // STROKE VALIDATION: If stroke color is provided, ensure strokeWidth is also set
+    // This ensures Fabric.js will properly render the stroke
     if (this.params.stroke !== undefined) {
       oldStyle.oldStroke = object.stroke ?? undefined;
       oldStyle.newStroke = this.params.stroke;
       updates.stroke = this.params.stroke;
+      
+      // If stroke is being set and strokeWidth is not explicitly provided, default to 2
+      if (this.params.stroke !== null && this.params.stroke_width === undefined) {
+        // Use current strokeWidth if exists and is positive, otherwise default to 2
+        const currentStrokeWidth = object.stroke_width;
+        const defaultWidth = (currentStrokeWidth && currentStrokeWidth > 0) ? currentStrokeWidth : 2;
+        
+        oldStyle.oldStrokeWidth = currentStrokeWidth ?? undefined;
+        oldStyle.newStrokeWidth = defaultWidth;
+        updates.stroke_width = defaultWidth;
+      }
     }
 
     if (this.params.stroke_width !== undefined) {

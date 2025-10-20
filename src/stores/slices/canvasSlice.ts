@@ -32,10 +32,22 @@ type DbCanvasObject = Database['public']['Tables']['canvas_objects']['Row'];
 /**
  * Viewport state for infinite canvas
  * W2.D6.2: Hybrid approach - Fabric.js primary + Zustand snapshots
+ * 
+ * IMPORTANT: This is the ViewportTransform from Fabric.js
+ * - zoom: vpt[0] and vpt[3] (uniform scale)
+ * - panX: vpt[4] (screen pixel offset, NOT Fabric coordinates)
+ * - panY: vpt[5] (screen pixel offset, NOT Fabric coordinates)
+ * 
+ * @see src/types/coordinates.ts for detailed coordinate system documentation
  */
 export interface ViewportState {
+  /** Zoom level (1.0 = 100%, 2.0 = 200%, etc.) */
   zoom: number;
+  
+  /** Horizontal pan offset in screen pixels (vpt[4]) - NOT Fabric canvas coordinates! */
   panX: number;
+  
+  /** Vertical pan offset in screen pixels (vpt[5]) - NOT Fabric canvas coordinates! */
   panY: number;
 }
 
