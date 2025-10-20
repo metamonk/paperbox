@@ -24,7 +24,7 @@ import type { UserPresence } from '@/stores/slices/collaborationSlice';
 import { CollaborativeOverlayManager } from './CollaborativeOverlayManager';
 import { GRID_SIZE, GRID_ENABLED, DEFAULT_FONT_FAMILY } from '@/lib/constants';
 import { centerToFabric, fabricToCenter, getFabricCenterPoint } from './coordinateTranslation';
-import { QuadTree, type QuadTreeObject } from './QuadTree';
+// Note: QuadTree import temporarily removed during hotfix
 
 /**
  * Extended FabricObject type with custom data property
@@ -166,7 +166,7 @@ export class FabricCanvasManager {
 
   // PERFORMANCE: Object culling for large canvases
   private cullInterval: number | null = null;
-  private readonly CULL_MARGIN = 500; // pixels - show objects 500px outside viewport
+  // Note: CULL_MARGIN removed temporarily during hotfix
 
   // PERFORMANCE OPTIMIZATION #1: Throttle render during movement (60fps)
   private movementRenderThrottle: number | null = null;
@@ -187,10 +187,8 @@ export class FabricCanvasManager {
     shadow?: any;
   }> = new Map();
 
-  // PERFORMANCE OPTIMIZATION #6: Spatial indexing with QuadTree
-  private quadTree: QuadTree | null = null;
-  private quadTreeDirty: boolean = true; // Flag to track if QuadTree needs rebuild
-  private readonly CANVAS_BOUNDS = { x: 0, y: 0, width: 8000, height: 8000 }; // Match 8000x8000 canvas
+  // PERFORMANCE OPTIMIZATION #6: Spatial indexing with QuadTree (temporarily disabled in hotfix)
+  // Note: QuadTree variables removed temporarily - will re-add when re-enabling
 
   constructor(config: FabricCanvasConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -418,90 +416,42 @@ export class FabricCanvasManager {
     this.canvas.requestRenderAll();
   }
 
-  /**
-   * PERFORMANCE OPTIMIZATION #6: Build QuadTree spatial index
-   * 
-   * Constructs a QuadTree from all canvas objects for efficient spatial queries.
-   * Should be called after adding/removing objects or when objects move significantly.
-   */
-  private buildQuadTree(): void {
-    if (!this.canvas) return;
-
-    // Create new QuadTree
-    this.quadTree = new QuadTree({
-      bounds: this.CANVAS_BOUNDS,
-      maxObjects: 10, // Max objects per node before subdivision
-      maxLevels: 5,   // Max tree depth
-    });
-
-    // Insert all objects into QuadTree
-    this.canvas.getObjects().forEach((obj) => {
-      const objWithData = obj as FabricObjectWithData;
-      if (!objWithData.data?.id) return;
-
-      // Get object bounding rectangle
-      const bounds = obj.getBoundingRect();
-      
-      const quadTreeObj: QuadTreeObject = {
-        id: objWithData.data.id,
-        bounds: {
-          x: bounds.left,
-          y: bounds.top,
-          width: bounds.width,
-          height: bounds.height,
-        },
-      };
-
-      if (this.quadTree) {
-        this.quadTree.insert(quadTreeObj);
-      }
-    });
-
-    this.quadTreeDirty = false;
-  }
-
-  /**
-   * PERFORMANCE OPTIMIZATION #6: Query visible objects using QuadTree
-   * 
-   * Uses spatial indexing for O(log n) viewport queries instead of O(n) linear search.
-   * Significantly faster with 500+ objects.
-   */
-  private getViewportBounds(): { x: number; y: number; width: number; height: number } {
-    if (!this.canvas) {
-      return { x: 0, y: 0, width: 0, height: 0 };
-    }
-
-    const canvasElement = this.canvas.getElement();
-    const rect = canvasElement.getBoundingClientRect();
-    const viewportWidth = rect.width;
-    const viewportHeight = rect.height;
-    
-    const vpt = this.canvas.viewportTransform;
-    const zoom = this.canvas.getZoom();
-    
-    // Calculate visible canvas bounds
-    const viewportLeft = -vpt[4] / zoom;
-    const viewportTop = -vpt[5] / zoom;
-    const viewportRight = viewportLeft + (viewportWidth / zoom);
-    const viewportBottom = viewportTop + (viewportHeight / zoom);
-
-    return {
-      x: viewportLeft,
-      y: viewportTop,
-      width: viewportRight - viewportLeft,
-      height: viewportBottom - viewportTop,
-    };
-  }
+  // NOTE: buildQuadTree() and getViewportBounds() methods temporarily removed during hotfix
+  // Will be re-added when QuadTree culling is re-enabled after debugging coordinate system issues
 
   /**
    * PERFORMANCE OPTIMIZATION #6: Update culling using QuadTree
    * 
    * Uses QuadTree for efficient spatial queries - only checks objects in/near viewport.
    * Falls back to linear search if QuadTree not built yet.
+   * 
+   * SAFETY: Temporarily disabled QuadTree culling to debug rendering issues
+   * TODO: Re-enable after fixing coordinate system bugs
    */
   private updateObjectCullingWithQuadTree(): void {
     if (!this.canvas) return;
 
+    // HOTFIX: Disable QuadTree culling temporarily - just make all objects visible
+    // The QuadTree implementation needs debugging for coordinate system compatibility
+    const objects = this.canvas.getObjects();
+    let changedCount = 0;
+    
+    objects.forEach((obj) => {
+      const objWithData = obj as FabricObjectWithData;
+      if (!objWithData.data?.id) return;
+      
+      if (!obj.visible) {
+        obj.visible = true;
+        changedCount++;
+      }
+    });
+
+    if (changedCount > 0) {
+      console.log(`[FabricCanvasManager] HOTFIX: Made ${changedCount} objects visible (QuadTree culling disabled)`);
+      this.canvas.requestRenderAll();
+    }
+
+    /* ORIGINAL QuadTree CULLING CODE - DISABLED FOR NOW
     // Build QuadTree if dirty or not yet built
     if (this.quadTreeDirty || !this.quadTree) {
       this.buildQuadTree();
@@ -522,6 +472,19 @@ export class FabricCanvasManager {
     const visibleObjects = this.quadTree.query(viewportWithMargin);
     const visibleIds = new Set(visibleObjects.map(obj => obj.id));
 
+    // SAFETY CHECK: If QuadTree query returns NO visible objects but we have objects on canvas,
+    // something is wrong - don't hide everything
+    const totalObjects = this.canvas.getObjects().filter(obj => 
+      (obj as FabricObjectWithData).data?.id
+    ).length;
+    
+    if (totalObjects > 0 && visibleIds.size === 0) {
+      console.warn('[FabricCanvasManager] QuadTree query returned 0 visible objects - skipping culling to prevent hiding all objects');
+      console.log('Viewport:', viewportWithMargin);
+      console.log('Total objects:', totalObjects);
+      return;
+    }
+
     // Update visibility for all objects
     let culledCount = 0;
     this.canvas.getObjects().forEach((obj) => {
@@ -539,6 +502,7 @@ export class FabricCanvasManager {
     if (culledCount > 0) {
       this.canvas.requestRenderAll();
     }
+    */
   }
 
   /**
@@ -976,8 +940,8 @@ export class FabricCanvasManager {
     // renderAll() renders immediately (sync) - critical for initial object visibility
     this.canvas.renderAll();
 
-    // PERFORMANCE OPTIMIZATION #6: Mark QuadTree as dirty when objects added
-    this.quadTreeDirty = true;
+    // PERFORMANCE OPTIMIZATION #6: Mark QuadTree as dirty when objects added (disabled in hotfix)
+    // this._quadTreeDirty = true;
 
     return fabricObject;
   }
@@ -1005,8 +969,8 @@ export class FabricCanvasManager {
     // Remove from canvas
     this.canvas.remove(fabricObject);
 
-    // PERFORMANCE OPTIMIZATION #6: Mark QuadTree as dirty when objects removed
-    this.quadTreeDirty = true;
+    // PERFORMANCE OPTIMIZATION #6: Mark QuadTree as dirty when objects removed (disabled in hotfix)
+    // this._quadTreeDirty = true;
 
     return true;
   }

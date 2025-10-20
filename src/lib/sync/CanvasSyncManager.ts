@@ -18,6 +18,7 @@ import type { CanvasObject } from '../../types/canvas';
 import { UpdateQueue } from './UpdateQueue';
 import { toast } from 'sonner';
 import { TransformCommand } from '../commands/TransformCommand';
+import { fabricToCenter } from '../fabric/coordinateTranslation';
 
 interface FabricObjectWithData extends FabricObject {
   data?: { id: string; type: string };
@@ -264,10 +265,12 @@ export class CanvasSyncManager {
 
           // PERFORMANCE OPTIMIZATION #5: Queue position updates for batching
           // This prevents excessive state updates during rapid movement
-          if (id) {
+          // CRITICAL FIX: Convert Fabric coordinates to center-origin before storing
+          if (id && obj.left !== undefined && obj.top !== undefined) {
+            const centerCoords = fabricToCenter(obj.left, obj.top);
             this.movementBatchQueue.set(id, {
-              x: obj.left,
-              y: obj.top,
+              x: centerCoords.x,
+              y: centerCoords.y,
             });
           }
         });
