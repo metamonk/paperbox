@@ -251,7 +251,7 @@ export function LayersPanel() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col overflow-hidden">
       {/* Fixed Header - Always visible */}
       <div className="flex-shrink-0 px-3 py-3 pb-2 border-b border-border">
         <h3 className="font-semibold text-sm">Layers</h3>
