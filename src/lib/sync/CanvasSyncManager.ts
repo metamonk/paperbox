@@ -309,9 +309,10 @@ export class CanvasSyncManager {
           this.flushMovementBatch();
         }
 
-        // Clear transform state and actively editing
-        console.log(`[CanvasSyncManager] 🧹 Clearing state (${this.transformStartState.size} items in transformStartState)`);
-        this.transformStartState.clear();
+        // DON'T clear transformStartState yet - we need it to build batch updates!
+        console.log(`[CanvasSyncManager] 📊 Transform state has ${this.transformStartState.size} items`);
+        
+        // Clear actively editing
         this.activelyEditingIds.clear();
         // DISABLED: Collaborative features temporarily disabled
         // this.store.getState().broadcastActivelyEditing([]);

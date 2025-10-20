@@ -386,12 +386,23 @@ export const createCanvasSlice: StateCreator<
 
     try {
       // Load objects for the new canvas
+      console.log(`[setActiveCanvas] 🔄 Loading canvas ${canvasId.slice(0, 8)}...`);
+      
       const { data, error } = await supabase
         .from('canvas_objects')
         .select('*')
         .eq('canvas_id', canvasId);  // W5.D2.3: Canvas scoping
 
       if (error) throw error;
+
+      console.log(`[setActiveCanvas] 📦 Loaded ${data?.length || 0} objects from database`);
+      if (data && data.length > 0) {
+        console.log(`[setActiveCanvas] 📍 Sample DB coords:`, data.slice(0, 2).map((obj: any) => ({
+          id: obj.id.slice(0, 8),
+          x: obj.x,
+          y: obj.y,
+        })));
+      }
 
       // Convert array to Record<id, CanvasObject>
       const objectsMap = (data || []).reduce(
