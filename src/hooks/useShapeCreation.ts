@@ -11,7 +11,7 @@ import { useCallback } from 'react';
 import type { FabricCanvasManager } from '../lib/fabric/FabricCanvasManager';
 import type { User } from '@supabase/supabase-js';
 import { usePaperboxStore } from '../stores';
-import { GRID_SIZE, GRID_ENABLED } from '../lib/constants';
+import { GRID_SIZE, GRID_ENABLED, DEFAULT_SHAPE_PROPS, SHAPE_DEFAULTS } from '../lib/constants';
 
 export interface UseShapeCreationOptions {
   fabricManager: FabricCanvasManager | null;
@@ -110,7 +110,7 @@ export function useShapeCreation({ fabricManager, user }: UseShapeCreationOption
         typeProperties = { corner_radius: 0 };
       }
 
-      // Build canvas object at clicked position
+      // Build canvas object at clicked position with consistent defaults
       const baseObject = {
         id: `${type}-${Date.now()}-${Math.random()}`,
         type,
@@ -118,15 +118,17 @@ export function useShapeCreation({ fabricManager, user }: UseShapeCreationOption
         y,
         width,
         height,
-        rotation: 0,
-        opacity: 1,
-        fill: type === 'rectangle' ? '#3B82F6' : type === 'circle' ? '#10B981' : '#EF4444',
-        stroke: '#000000', // W4.D1 FIX: Add black stroke for visibility
-        stroke_width: 2, // W4.D1 FIX: Add stroke width for visibility
-        group_id: null,
-        z_index: 1,
-        style_properties: {},
-        metadata: {},
+        rotation: DEFAULT_SHAPE_PROPS.rotation,
+        opacity: DEFAULT_SHAPE_PROPS.opacity,
+        fill: type === 'rectangle' ? SHAPE_DEFAULTS.rectangle.fill 
+            : type === 'circle' ? SHAPE_DEFAULTS.circle.fill 
+            : SHAPE_DEFAULTS.text.fill,
+        stroke: DEFAULT_SHAPE_PROPS.stroke,
+        stroke_width: DEFAULT_SHAPE_PROPS.stroke_width,
+        group_id: DEFAULT_SHAPE_PROPS.group_id,
+        z_index: 1, // User-placed shapes start at z_index 1
+        style_properties: DEFAULT_SHAPE_PROPS.style_properties,
+        metadata: DEFAULT_SHAPE_PROPS.metadata,
         locked_by: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

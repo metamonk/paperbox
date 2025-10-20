@@ -5,12 +5,12 @@
  * Supports:
  * - Rectangles: width & height
  * - Circles: radius (width/height calculated automatically)
- * - Text: width & height (for text box bounds)
+ * - Text: fontSize (text doesn't scale like images, it changes font size)
  */
 
 import { BaseCommand, type CommandMetadata } from './Command';
 import { usePaperboxStore } from '../../stores';
-import type { CanvasObject, CircleObject } from '../../types/canvas';
+import type { CanvasObject, CircleObject, TextObject } from '../../types/canvas';
 
 export interface ResizeCommandParams {
   objectId: string;     // ID of object to resize
@@ -27,9 +27,11 @@ interface ObjectSize {
   oldWidth?: number;
   oldHeight?: number;
   oldRadius?: number;
+  oldFontSize?: number;
   newWidth?: number;
   newHeight?: number;
   newRadius?: number;
+  newFontSize?: number;
 }
 
 export class ResizeCommand extends BaseCommand {
@@ -86,8 +88,53 @@ export class ResizeCommand extends BaseCommand {
       updates.width = newRadius * 2;
       updates.height = newRadius * 2;
 
+    } else if (object.type === 'text') {
+      // Handle text resizing
+      // FABRIC NATIVE: Text uses lockScalingY, so we handle width and fontSize changes
+      const textObject = object as TextObject;
+      const oldWidth = object.width;
+      const oldFontSize = textObject.type_properties.font_size;
+
+      let newWidth = oldWidth;
+      let newFontSize = oldFontSize;
+      let fontSizeChanged = false;
+      
+      if (this.params.scaleX !== undefined || this.params.scaleY !== undefined) {
+        // AI command: "make bigger/smaller" → Change fontSize
+        const scaleFactor = ((this.params.scaleX ?? 1) + (this.params.scaleY ?? 1)) / 2;
+        newFontSize = Math.round(oldFontSize * scaleFactor);
+        newFontSize = Math.max(6, Math.min(200, newFontSize)); // Clamp
+        fontSizeChanged = true;
+      } else if (this.params.width !== undefined) {
+        // Change text box width (text will reflow)
+        newWidth = this.params.width;
+      } else {
+        throw new Error('ResizeCommand for text requires scaleX, scaleY, or width');
+      }
+
+      // Store old size for undo
+      this.size = {
+        id: this.params.objectId,
+        type: 'text',
+        oldWidth,
+        oldFontSize,
+        newWidth,
+        newFontSize,
+      };
+
+      // Update text object
+      if (fontSizeChanged) {
+        updates.type_properties = {
+          ...textObject.type_properties,
+          font_size: newFontSize,
+        };
+      }
+      if (newWidth !== oldWidth) {
+        updates.width = newWidth;
+      }
+      
     } else {
-      // Handle rectangle/text resizing (via width/height)
+      // Handle rectangle resizing (via width/height)
       const oldWidth = object.width;
       const oldHeight = object.height;
 
@@ -148,6 +195,7 @@ export class ResizeCommand extends BaseCommand {
     }
 
     const store = usePaperboxStore.getState();
+    const object = store.getObjectById(this.size.id);
     const updates: Partial<CanvasObject> = {};
 
     if (this.size.type === 'circle') {
@@ -156,6 +204,18 @@ export class ResizeCommand extends BaseCommand {
       };
       updates.width = this.size.oldRadius! * 2;
       updates.height = this.size.oldRadius! * 2;
+    } else if (this.size.type === 'text' && object) {
+      // Restore text size (width and/or fontSize)
+      const textObject = object as TextObject;
+      if (this.size.oldFontSize !== this.size.newFontSize) {
+        updates.type_properties = {
+          ...textObject.type_properties,
+          font_size: this.size.oldFontSize!,
+        };
+      }
+      if (this.size.oldWidth !== this.size.newWidth) {
+        updates.width = this.size.oldWidth!;
+      }
     } else {
       updates.width = this.size.oldWidth!;
       updates.height = this.size.oldHeight!;
@@ -173,6 +233,12 @@ export class ResizeCommand extends BaseCommand {
   getDescription(): string {
     if (this.size?.type === 'circle') {
       return `Resize to radius ${Math.round(this.size.newRadius!)}px`;
+    } else if (this.size?.type === 'text') {
+      if (this.size.oldFontSize !== this.size.newFontSize) {
+        return `Resize text to ${Math.round(this.size.newFontSize ?? 0)}px font size`;
+      } else {
+        return `Resize text box to ${Math.round(this.size.newWidth ?? 0)}px width`;
+      }
     } else {
       return `Resize to ${Math.round(this.size?.newWidth ?? 0)}×${Math.round(this.size?.newHeight ?? 0)}px`;
     }

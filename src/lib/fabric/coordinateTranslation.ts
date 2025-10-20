@@ -2,8 +2,8 @@
  * Coordinate Translation Utilities
  * 
  * Paperbox Canvas Coordinate System:
- * - User-Facing: Center origin at (0, 0), range -4000 to +4000
- * - Fabric.js Internal: Top-left origin at (0, 0), range 0 to 8000
+ * - User-Facing (CenterCoords): Center origin at (0, 0), range -4000 to +4000
+ * - Fabric.js Internal (FabricCoords): Top-left origin at (0, 0), range 0 to 8000
  * 
  * This module provides translation functions between these two coordinate systems.
  * 
@@ -17,6 +17,9 @@
  * 2. Fabric.js always uses top-left origin internally
  * 3. Translation happens ONLY in FabricCanvasManager (single source of truth)
  * 4. All other components work with center-origin coordinates
+ * 
+ * @see src/types/coordinates.ts for complete coordinate system type definitions
+ * @see src/lib/fabric/viewportUtils.ts for viewport and screen coordinate transformations
  */
 
 export const CANVAS_SIZE = 8000;

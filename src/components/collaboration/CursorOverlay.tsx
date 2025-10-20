@@ -11,17 +11,22 @@ interface CursorOverlayProps {
 /**
  * Renders remote user cursors on top of the canvas
  * 
- * Coordinate System Flow:
- * 1. Receives cursor positions in center-origin coordinates (-4000 to +4000)
- * 2. Translates to Fabric coordinates (0 to 8000)
- * 3. Applies viewer's viewport transform (zoom + pan) to get screen coordinates
+ * Coordinate System Flow (type-safe transformations):
+ * 1. Receives cursor positions in CenterCoords (-4000 to +4000)
+ * 2. Translates to FabricCoords (0 to 8000) using centerToFabric()
+ * 3. Applies viewer's viewport transform to get ScreenCoords
  * 
- * Formula:
- *   fabricCoord = centerCoord + 4000
- *   viewportCoord = (fabricCoord * zoom) + pan
+ * Formula (Fabric → Screen):
+ *   screenX = fabricX * zoom + vpt[4]
+ *   screenY = fabricY * zoom + vpt[5]
+ * 
+ * Where vpt[4] and vpt[5] are screen pixel offsets (ViewportTransform.panX/panY)
  *
  * Performance: Memoized to avoid re-renders when parent updates
  * but cursor positions haven't changed
+ * 
+ * @see src/types/coordinates.ts for coordinate system definitions
+ * @see src/lib/fabric/viewportUtils.ts for fabricToScreen() utility
  */
 function CursorOverlayComponent({ cursors, fabricManager }: CursorOverlayProps) {
   const canvas = fabricManager?.getCanvas();

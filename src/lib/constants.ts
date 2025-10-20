@@ -18,20 +18,37 @@ export const GRID_SIZE = 1; // pixels - objects snap to 1px grid (pixel-perfect)
 export const GRID_ENABLED = true; // enable/disable snap-to-grid
 export const SHOW_GRID = false; // show visual grid overlay (future feature)
 
-// Shape defaults
+// Typography defaults
+export const DEFAULT_FONT_FAMILY = 'Arial'; // Universal system font (Windows, Mac, Linux)
+export const DEFAULT_FONT_SIZE = 16;
+export const DEFAULT_FONT_WEIGHT = 'normal';
+
+// Common shape properties (applied to all shapes)
+export const DEFAULT_SHAPE_PROPS = {
+  rotation: 0,
+  opacity: 1,
+  stroke: '#000000',      // Black stroke
+  stroke_width: 2,        // VISIBLE border (consistent with user-created shapes)
+  group_id: null,
+  z_index: 0,             // Will be set by store
+  style_properties: {},
+  metadata: {},
+};
+
+// Shape-specific defaults
 export const SHAPE_DEFAULTS: ShapeDefaults = {
   rectangle: {
     width: 100,
     height: 100,
-    fill: '#3B82F6', // Blue
+    fill: '#3B82F6', // Blue - consistent across AI and user creation
   },
   circle: {
     radius: 50,
-    fill: '#EF4444', // Red
+    fill: '#EF4444', // Red - consistent across AI and user creation
   },
   text: {
     textContent: 'Text',
-    fontSize: 16,
+    fontSize: DEFAULT_FONT_SIZE,
     fill: '#000000', // Black
   },
 };
