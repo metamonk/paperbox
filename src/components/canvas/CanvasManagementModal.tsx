@@ -30,16 +30,20 @@ import { Label } from '@/components/ui/label';
 // import { CanvasShareSection } from './CanvasShareSection'; // TODO: Re-enable when sharing is implemented
 
 interface CanvasManagementModalProps {
-  canvas: Canvas | null;
+  canvasId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function CanvasManagementModal({
-  canvas,
+  canvasId,
   open,
   onOpenChange,
 }: CanvasManagementModalProps) {
+  // Read canvas reactively from store so UI updates when sharing settings change
+  const canvas = usePaperboxStore((state) => 
+    state.canvases.find((c) => c.id === canvasId)
+  );
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);

@@ -28,7 +28,7 @@ export function CanvasSelectorPage() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
-  const [selectedCanvas, setSelectedCanvas] = useState<Canvas | null>(null);
+  const [selectedCanvasId, setSelectedCanvasId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const canvases = usePaperboxStore((state) => state.canvases);
@@ -59,7 +59,7 @@ export function CanvasSelectorPage() {
   // Handle canvas settings click
   const handleSettingsClick = (e: React.MouseEvent, canvas: Canvas) => {
     e.stopPropagation(); // Prevent canvas click navigation
-    setSelectedCanvas(canvas);
+    setSelectedCanvasId(canvas.id);
     setSettingsOpen(true);
   };
 
@@ -215,7 +215,7 @@ export function CanvasSelectorPage() {
 
       {/* Canvas Management Modal */}
       <CanvasManagementModal
-        canvas={selectedCanvas}
+        canvasId={selectedCanvasId}
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />

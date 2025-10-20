@@ -17,7 +17,7 @@ export function PagesPanel() {
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const canvases = usePaperboxStore((state) => state.canvases);
   const [isExpanded, setIsExpanded] = useState(true);
-  const [settingsCanvas, setSettingsCanvas] = useState<Canvas | null>(null);
+  const [settingsCanvasId, setSettingsCanvasId] = useState<string | null>(null);
 
   const handleCanvasClick = (canvasId: string) => {
     navigate(`/canvas/${canvasId}`);
@@ -29,7 +29,7 @@ export function PagesPanel() {
 
   const handleSettingsClick = (e: React.MouseEvent, canvas: Canvas) => {
     e.stopPropagation();
-    setSettingsCanvas(canvas);
+    setSettingsCanvasId(canvas.id);
   };
 
   return (
@@ -116,9 +116,9 @@ export function PagesPanel() {
 
       {/* Canvas Management Modal */}
       <CanvasManagementModal
-        canvas={settingsCanvas}
-        open={!!settingsCanvas}
-        onOpenChange={(open) => !open && setSettingsCanvas(null)}
+        canvasId={settingsCanvasId}
+        open={!!settingsCanvasId}
+        onOpenChange={(open) => !open && setSettingsCanvasId(null)}
       />
     </div>
   );
