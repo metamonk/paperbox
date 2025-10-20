@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
 import { useState, useRef, useEffect } from 'react';
 
 export function LayersPanel() {
-  // Split selectors to avoid creating new objects on every render
+  // Subscribe to full objects state
   const objects = usePaperboxStore((state) => state.objects);
   const layers = usePaperboxStore((state) => state.layers);
   const layerOrder = usePaperboxStore((state) => state.layerOrder);
@@ -181,7 +181,9 @@ export function LayersPanel() {
 
   // Context menu handlers
   const handleDuplicate = (objectId: string) => {
-    const object = objects[objectId];
+    // PERFORMANCE OPTIMIZATION: Get full object from store directly (not subscription)
+    // This avoids subscribing to all object updates when we only need it once
+    const object = usePaperboxStore.getState().objects[objectId];
     if (!object) return;
 
     // Create duplicated object with slight offset

@@ -10,9 +10,11 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useCanvasSync } from '../../hooks/useCanvasSync';
-import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
-import { usePresence } from '../../hooks/usePresence';
-import { useCollaborativeOverlays } from '../../hooks/useCollaborativeOverlays';
+// TEMPORARILY DISABLED: Collaborative features causing sync issues
+// import { useBroadcastCursors } from '../../hooks/useBroadcastCursors';
+// import { usePresence } from '../../hooks/usePresence';
+// import { useCollaborativeOverlays } from '../../hooks/useCollaborativeOverlays';
+import type { PresenceUser } from '../../hooks/usePresence';
 import { useAuth } from '../../hooks/useAuth';
 import { useShapeCreation } from '../../hooks/useShapeCreation';
 import { ShapeCreationShortcuts, UIShortcuts } from '../../features/shortcuts';
@@ -61,14 +63,24 @@ export function Canvas() {
   // Get active canvas ID for scoped realtime channels
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
 
-  // Multiplayer cursors (canvas-scoped)
-  const { cursors, sendCursorUpdate } = useBroadcastCursors(activeCanvasId);
+  // TEMPORARILY DISABLED: Collaborative features causing sync issues
+  // TODO: Re-enable after fixing core synchronization
+  
+  // // Multiplayer cursors (canvas-scoped)
+  // const { cursors, sendCursorUpdate } = useBroadcastCursors(activeCanvasId);
 
-  // Presence tracking (canvas-scoped)
-  const { onlineUsers, updateActivity, currentUserId } = usePresence(activeCanvasId);
+  // // Presence tracking (canvas-scoped)
+  // const { onlineUsers, updateActivity, currentUserId } = usePresence(activeCanvasId);
 
-  // Collaborative overlays (lock/selection indicators)
-  useCollaborativeOverlays(fabricManager);
+  // // Collaborative overlays (lock/selection indicators)
+  // useCollaborativeOverlays(fabricManager);
+
+  // Stub values for temporarily disabled features
+  const cursors = new Map();
+  const sendCursorUpdate = (_x: number, _y: number) => { void _x; void _y; };
+  const onlineUsers: PresenceUser[] = [];
+  const updateActivity = () => {};
+  const currentUserId = '';
 
   // Auth
   const { signOut, user } = useAuth();

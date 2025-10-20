@@ -174,7 +174,8 @@ export const createSelectionSlice: StateCreator<
   selectAll: () =>
     set(
       (state) => {
-        const allObjectIds = Object.keys(get().objects);
+        // Use state.objects, not get().objects to avoid stale state
+        const allObjectIds = Object.keys(state.objects);
         state.selectedIds = allObjectIds;
         state.activeObjectId = allObjectIds[0] || null;
       },

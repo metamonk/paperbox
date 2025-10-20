@@ -50,6 +50,10 @@ export class CollaborativeOverlayManager {
    * Call this whenever presence data changes
    */
   updateOverlays(presence: Record<string, UserPresence>, currentUserId: string): void {
+    // DISABLED: Collaborative overlays temporarily disabled
+    this.clearAll();
+    return;
+    
     // Track which overlays should exist
     const activeOverlays = new Set<string>();
 
@@ -342,6 +346,9 @@ export class CollaborativeOverlayManager {
    * Call this during object:modified events
    */
   updateOverlaysForMovement(): void {
+    // DISABLED: Collaborative overlays temporarily disabled
+    return;
+    
     // Update all overlays to match their target objects
     this.overlays.forEach((overlay, key) => {
       const targetObjectId = (overlay as any).targetObjectId;

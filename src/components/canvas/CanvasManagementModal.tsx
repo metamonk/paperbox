@@ -40,10 +40,25 @@ export function CanvasManagementModal({
   open,
   onOpenChange,
 }: CanvasManagementModalProps) {
-  // Read canvas reactively from store so UI updates when sharing settings change
-  const canvas = usePaperboxStore((state) => 
-    state.canvases.find((c) => c.id === canvasId)
-  );
+  // Subscribe to canvases array
+  const canvases = usePaperboxStore((state) => state.canvases);
+  
+  // Memoize canvas data extraction to prevent infinite loops
+  // Only recomputes when canvasId or canvases array reference changes
+  const canvasData = React.useMemo(() => {
+    const canvas = canvases.find((c) => c.id === canvasId);
+    if (!canvas) return null;
+    return {
+      id: canvas.id,
+      name: canvas.name,
+      description: canvas.description,
+      is_public: canvas.is_public,
+      owner_id: canvas.owner_id,
+      created_at: canvas.created_at,
+      updated_at: canvas.updated_at,
+    };
+  }, [canvasId, canvases]);
+  
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
@@ -55,7 +70,6 @@ export function CanvasManagementModal({
   const updateCanvas = usePaperboxStore((state) => state.updateCanvas);
   const deleteCanvas = usePaperboxStore((state) => state.deleteCanvas);
   const toggleCanvasPublic = usePaperboxStore((state) => state.toggleCanvasPublic);
-  const canvases = usePaperboxStore((state) => state.canvases);
   const activeCanvasId = usePaperboxStore((state) => state.activeCanvasId);
   const setActiveCanvas = usePaperboxStore((state) => state.setActiveCanvas);
 
@@ -70,12 +84,12 @@ export function CanvasManagementModal({
 
   // Initialize form when canvas changes
   React.useEffect(() => {
-    if (canvas) {
-      setName(canvas.name);
-      setDescription(canvas.description || '');
+    if (canvasData) {
+      setName(canvasData.name);
+      setDescription(canvasData.description || '');
       setShowDeleteConfirm(false);
     }
-  }, [canvas]);
+  }, [canvasData?.id, canvasData?.name, canvasData?.description]);
 
   // Reset form on close
   React.useEffect(() => {
@@ -88,11 +102,11 @@ export function CanvasManagementModal({
 
   // Handle save (update canvas)
   const handleSave = async () => {
-    if (!canvas || !name.trim()) return;
+    if (!canvasData || !name.trim()) return;
 
     setIsSaving(true);
     try {
-      await updateCanvas(canvas.id, {
+      await updateCanvas(canvasData.id, {
         name: name.trim(),
         description: description.trim() || undefined,
       });
@@ -106,19 +120,19 @@ export function CanvasManagementModal({
 
   // Handle delete
   const handleDelete = async () => {
-    if (!canvas) return;
+    if (!canvasData) return;
 
     setIsDeleting(true);
     try {
       // If deleting active canvas, switch to another canvas first
-      if (canvas.id === activeCanvasId) {
-        const otherCanvas = canvases.find((c: Canvas) => c.id !== canvas.id);
+      if (canvasData.id === activeCanvasId) {
+        const otherCanvas = canvases.find((c: Canvas) => c.id !== canvasData.id);
         if (otherCanvas) {
           await setActiveCanvas(otherCanvas.id);
         }
       }
 
-      await deleteCanvas(canvas.id);
+      await deleteCanvas(canvasData.id);
       onOpenChange(false);
     } catch (error) {
       console.error('[CanvasManagementModal] Failed to delete canvas:', error);
@@ -135,9 +149,9 @@ export function CanvasManagementModal({
 
   // Handle toggle public
   const handleTogglePublic = async (pressed: boolean) => {
-    if (!canvas) return;
+    if (!canvasData) return;
     try {
-      await toggleCanvasPublic(canvas.id, pressed);
+      await toggleCanvasPublic(canvasData.id, pressed);
     } catch (error) {
       console.error('[CanvasManagementModal] Failed to toggle public:', error);
     }
@@ -145,18 +159,18 @@ export function CanvasManagementModal({
 
   // Handle copy link
   const handleCopyLink = () => {
-    if (!canvas) return;
-    const url = `${window.location.origin}/canvas/${canvas.id}`;
+    if (!canvasData) return;
+    const url = `${window.location.origin}/canvas/${canvasData.id}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
   // Check if current user is owner
-  const isOwner = userId && canvas?.owner_id === userId;
-  const isPublic = canvas?.is_public || false;
+  const isOwner = userId && canvasData?.owner_id === userId;
+  const isPublic = canvasData?.is_public || false;
 
-  if (!canvas) return null;
+  if (!canvasData) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,7 +190,7 @@ export function CanvasManagementModal({
                 <Crown className="h-3 w-3" />
                 <span>Owner</span>
               </div>
-            ) : canvas.is_public ? (
+            ) : canvasData.is_public ? (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full text-xs font-medium">
                 <Globe className="h-3 w-3" />
                 <span>Public Canvas</span>
@@ -219,7 +233,7 @@ export function CanvasManagementModal({
             {/* Canvas Metadata */}
             <div className="grid gap-1 text-sm text-muted-foreground">
               <p>
-                Created: {new Date(canvas.created_at).toLocaleDateString('en-US', {
+                Created: {new Date(canvasData.created_at).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric',
@@ -228,7 +242,7 @@ export function CanvasManagementModal({
                 })}
               </p>
               <p>
-                Last updated: {new Date(canvas.updated_at).toLocaleDateString('en-US', {
+                Last updated: {new Date(canvasData.updated_at).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric',
@@ -247,7 +261,7 @@ export function CanvasManagementModal({
                 </h3>
 
                 <div className="space-y-3">
-                  {canvas.is_public ? (
+                  {canvasData.is_public ? (
                     <>
                       <div className="flex items-center gap-2">
                         <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -319,7 +333,7 @@ export function CanvasManagementModal({
                   <div className="flex gap-2 pt-3">
                     <Input
                       readOnly
-                      value={`${window.location.origin}/canvas/${canvas.id}`}
+                      value={`${window.location.origin}/canvas/${canvasData.id}`}
                       className="flex-1 font-mono text-sm"
                     />
                     <Button variant="outline" onClick={handleCopyLink}>
@@ -342,7 +356,7 @@ export function CanvasManagementModal({
                 {/* {!isPublic && (
                   <div className="border-t pt-4">
                     <CanvasShareSection
-                      canvasId={canvas.id}
+                      canvasId={canvasData.id}
                       isOwner={isOwner}
                       disabled={isSaving || isDeleting}
                     />

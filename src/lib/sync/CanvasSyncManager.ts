@@ -18,6 +18,7 @@ import type { CanvasObject } from '../../types/canvas';
 import { UpdateQueue } from './UpdateQueue';
 import { toast } from 'sonner';
 import { TransformCommand } from '../commands/TransformCommand';
+import { fabricToCenter } from '../fabric/coordinateTranslation';
 
 interface FabricObjectWithData extends FabricObject {
   data?: { id: string; type: string };
@@ -60,6 +61,18 @@ export class CanvasSyncManager {
     rotation: number;
     type_properties?: any;
   }> = new Map();
+
+  // PERFORMANCE OPTIMIZATION #5: Batch movement updates during drag
+  private movementBatchQueue: Map<string, Partial<CanvasObject>> = new Map();
+  private movementBatchTimeout: number | null = null;
+  private readonly MOVEMENT_BATCH_DELAY_MS = 50; // Flush after 50ms of inactivity
+
+  // CRITICAL FIX: State→Canvas sync batching to prevent selection issues
+  // When multiple realtime UPDATE events arrive rapidly (from batch_update_canvas_objects),
+  // we need to process them together to avoid removing/re-adding objects individually
+  private stateToCanvasBatchQueue: Set<string> = new Set();
+  private stateToCanvasBatchTimeout: number | null = null;
+  private readonly STATE_TO_CANVAS_BATCH_DELAY_MS = 16; // ~1 frame (60fps)
 
   constructor(fabricManager: FabricCanvasManager, store: any) {
     this.fabricManager = fabricManager;
@@ -195,14 +208,42 @@ export class CanvasSyncManager {
   }
 
   /**
+   * PERFORMANCE OPTIMIZATION #5: Flush batched movement updates
+   * Applies accumulated position updates as a single batch operation
+   */
+  private flushMovementBatch(): void {
+    if (this.movementBatchQueue.size === 0) return;
+
+    // Convert Map to array of updates
+    const updates = Array.from(this.movementBatchQueue.entries()).map(([id, updates]) => ({
+      id,
+      updates,
+    }));
+
+    // Clear the queue first to allow new batches during async operation
+    this.movementBatchQueue.clear();
+
+    // Apply batch update to store (optimistic)
+    // This uses the existing batchUpdateObjects which handles database sync
+    this.updateQueue.enqueue(async () => {
+      await this.store.getState().batchUpdateObjects(updates);
+    }).catch((error) => {
+      console.error('[CanvasSyncManager] Batch movement flush failed:', error);
+    });
+  }
+
+  /**
    * Canvas → State: Wire Fabric.js events to Zustand actions
    */
   private setupCanvasToStateSync(): void {
     const handlers = {
+      // PERFORMANCE OPTIMIZATION #5: Batch movement updates during drag
       // Track active editing during drag and capture initial state
       onObjectMoving: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
 
+        // Check if this is a group selection
+        const isGroup = !!(target as any)._objects;
         const objects = (target as any)._objects || [target];
         const ids = objects
           .map((obj: FabricObject) => (obj as any).data?.id)
@@ -230,11 +271,64 @@ export class CanvasSyncManager {
               });
             }
           }
+
+          // PERFORMANCE OPTIMIZATION #5: Queue position updates for batching
+          // This prevents excessive state updates during rapid movement
+          // CRITICAL FIX: For groups, must get absolute position, not relative
+          if (id) {
+            let absoluteLeft: number;
+            let absoluteTop: number;
+
+            if (isGroup) {
+              // CRITICAL FIX: In a group, obj.left/top are relative to group
+              // Use getCenterPoint() to get absolute canvas position
+              const centerPoint = obj.getCenterPoint();
+              absoluteLeft = centerPoint.x;
+              absoluteTop = centerPoint.y;
+            } else {
+              // Single object: left/top are already absolute
+              absoluteLeft = obj.left!;
+              absoluteTop = obj.top!;
+            }
+
+            // Convert Fabric coordinates to center-origin before storing
+            const centerCoords = fabricToCenter(absoluteLeft, absoluteTop);
+            
+            this.movementBatchQueue.set(id, {
+              x: centerCoords.x,
+              y: centerCoords.y,
+            });
+          }
         });
+
+        // PERFORMANCE OPTIMIZATION #5: Debounce batch flush
+        // Flush after 50ms of inactivity to group rapid movements
+        if (this.movementBatchTimeout) {
+          clearTimeout(this.movementBatchTimeout);
+        }
+
+        this.movementBatchTimeout = window.setTimeout(() => {
+          this.flushMovementBatch();
+          this.movementBatchTimeout = null;
+        }, this.MOVEMENT_BATCH_DELAY_MS);
       },
 
       onObjectModified: (target: FabricObject) => {
         if (this._isSyncingFromStore) return;
+
+        // PERFORMANCE OPTIMIZATION #5: Flush any pending batched updates immediately
+        // This ensures all movement updates are applied before final modified state
+        if (this.movementBatchTimeout) {
+          clearTimeout(this.movementBatchTimeout);
+          this.movementBatchTimeout = null;
+          this.flushMovementBatch();
+        }
+
+        // DON'T clear transformStartState yet - we need it to build batch updates!
+        
+        // Clear actively editing
+        this.activelyEditingIds.clear();
+        this.store.getState().broadcastActivelyEditing([]);
 
         this._isSyncingFromCanvas = true;
         try {
@@ -245,56 +339,122 @@ export class CanvasSyncManager {
           
           const objectsToProcess = isGroupSelection ? objects : [target];
 
-          // Create transform commands for undo/redo
-          objectsToProcess.forEach((obj: FabricObject) => {
-            const canvasObject = this.fabricManager.toCanvasObject(obj);
-            if (!canvasObject) return;
+          // CRITICAL FIX: For group selections, batch all updates together
+          // This ensures single RPC call + single realtime broadcast for group movements
+          if (isGroupSelection && objectsToProcess.length > 1) {
+            const batchUpdates: Array<{ id: string; updates: Partial<CanvasObject> }> = [];
+            const beforeStates: Array<{ id: string; beforeState: any; afterState: any }> = [];
 
-            const id = canvasObject.id;
-            const beforeState = this.transformStartState.get(id);
+            objectsToProcess.forEach((obj: FabricObject) => {
+              const canvasObject = this.fabricManager.toCanvasObject(obj);
+              if (!canvasObject) return;
 
-            if (beforeState) {
-              // We have before state, create undo-able command
-              const afterState = {
-                id: id,
-                x: canvasObject.x,
-                y: canvasObject.y,
-                width: canvasObject.width,
-                height: canvasObject.height,
-                rotation: canvasObject.rotation,
-                type_properties: canvasObject.type_properties,
-              };
+              const id = canvasObject.id;
+              const beforeState = this.transformStartState.get(id);
 
-              // Check if there's a meaningful change
-              const hasChanged = 
-                Math.abs(beforeState.x - afterState.x) > 0.01 ||
-                Math.abs(beforeState.y - afterState.y) > 0.01 ||
-                Math.abs(beforeState.width - afterState.width) > 0.01 ||
-                Math.abs(beforeState.height - afterState.height) > 0.01 ||
-                Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+              if (beforeState) {
+                const afterState = {
+                  id: id,
+                  x: canvasObject.x,
+                  y: canvasObject.y,
+                  width: canvasObject.width,
+                  height: canvasObject.height,
+                  rotation: canvasObject.rotation,
+                  type_properties: canvasObject.type_properties,
+                };
 
-              if (hasChanged) {
-                // Create and execute transform command
-                const command = new TransformCommand(id, beforeState, afterState);
-                this.updateQueue.enqueue(async () => {
-                  await this.store.getState().executeCommand(command);
-                }).catch((error) => {
-                  console.error('[CanvasSyncManager] Transform command failed:', error);
-                });
+                // Check if there's a meaningful change
+                const hasChanged = 
+                  Math.abs(beforeState.x - afterState.x) > 0.01 ||
+                  Math.abs(beforeState.y - afterState.y) > 0.01 ||
+                  Math.abs(beforeState.width - afterState.width) > 0.01 ||
+                  Math.abs(beforeState.height - afterState.height) > 0.01 ||
+                  Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+
+                if (hasChanged) {
+                  beforeStates.push({ id, beforeState, afterState });
+                  batchUpdates.push({
+                    id,
+                    updates: {
+                      x: canvasObject.x,
+                      y: canvasObject.y,
+                      width: canvasObject.width,
+                      height: canvasObject.height,
+                      rotation: canvasObject.rotation,
+                      type_properties: canvasObject.type_properties as any,
+                    },
+                  });
+                }
+
+                this.transformStartState.delete(id);
               }
+            });
 
-              // Clear the captured state
-              this.transformStartState.delete(id);
-            } else {
-              // No before state captured (shouldn't happen in normal use)
-              // Fall back to direct update without undo
+            // Apply batch update if there are changes
+            if (batchUpdates.length > 0) {
               this.updateQueue.enqueue(async () => {
-                await this.store.getState().updateObject(id, canvasObject);
+                // Create batch transform command for undo/redo
+                const { BatchTransformCommand } = await import('../commands/BatchTransformCommand');
+                const command = new BatchTransformCommand(beforeStates);
+                
+                // Execute command (which calls batchUpdateObjects internally)
+                await this.store.getState().executeCommand(command);
               }).catch((error) => {
-                console.error('[CanvasSyncManager] Update failed:', error);
+                console.error('[CanvasSyncManager] Batch transform failed:', error);
               });
             }
-          });
+          } else {
+            // Single object selection: use existing individual command logic
+            objectsToProcess.forEach((obj: FabricObject) => {
+              const canvasObject = this.fabricManager.toCanvasObject(obj);
+              if (!canvasObject) return;
+
+              const id = canvasObject.id;
+              const beforeState = this.transformStartState.get(id);
+
+              if (beforeState) {
+                // We have before state, create undo-able command
+                const afterState = {
+                  id: id,
+                  x: canvasObject.x,
+                  y: canvasObject.y,
+                  width: canvasObject.width,
+                  height: canvasObject.height,
+                  rotation: canvasObject.rotation,
+                  type_properties: canvasObject.type_properties,
+                };
+
+                // Check if there's a meaningful change
+                const hasChanged = 
+                  Math.abs(beforeState.x - afterState.x) > 0.01 ||
+                  Math.abs(beforeState.y - afterState.y) > 0.01 ||
+                  Math.abs(beforeState.width - afterState.width) > 0.01 ||
+                  Math.abs(beforeState.height - afterState.height) > 0.01 ||
+                  Math.abs(beforeState.rotation - afterState.rotation) > 0.01;
+
+                if (hasChanged) {
+                  // Create and execute transform command
+                  const command = new TransformCommand(id, beforeState, afterState);
+                  this.updateQueue.enqueue(async () => {
+                    await this.store.getState().executeCommand(command);
+                  }).catch((error) => {
+                    console.error('[CanvasSyncManager] Transform command failed:', error);
+                  });
+                }
+
+                // Clear the captured state
+                this.transformStartState.delete(id);
+              } else {
+                // No before state captured (shouldn't happen in normal use)
+                // Fall back to direct update without undo
+                this.updateQueue.enqueue(async () => {
+                  await this.store.getState().updateObject(id, canvasObject);
+                }).catch((error) => {
+                  console.error('[CanvasSyncManager] Update failed:', error);
+                });
+              }
+            });
+          }
 
           // Clear active editing state after drag ends
           this.activelyEditingIds.clear();
@@ -303,8 +463,8 @@ export class CanvasSyncManager {
           this._isSyncingFromCanvas = false;
         }
 
-        // Update collaborative overlays after modification
-        this.fabricManager.updateOverlayPositions();
+        // DISABLED: Collaborative overlays temporarily disabled
+        // this.fabricManager.updateOverlayPositions();
       },
 
       onSelectionCreated: async (targets: FabricObject[]) => {
@@ -366,7 +526,7 @@ export class CanvasSyncManager {
         const userId = state.currentUserId;
         const userName = state.presence[userId ?? '']?.userName || 'Unknown';
         const previouslySelectedIds = state.selectedIds;
-
+        
         // Release locks for objects no longer selected
         for (const oldId of previouslySelectedIds) {
           if (!ids.includes(oldId)) {
@@ -425,7 +585,7 @@ export class CanvasSyncManager {
         const state = this.store.getState();
         const userId = state.currentUserId;
         const previouslySelectedIds = state.selectedIds;
-
+        
         for (const id of previouslySelectedIds) {
           const lock = state.locks[id];
           if (lock && lock.userId === userId) {
@@ -479,18 +639,30 @@ export class CanvasSyncManager {
           });
 
           // Handle updates
+          // CRITICAL FIX: Queue updates and process in batch to prevent selection issues
+          // This allows multiple rapid realtime UPDATE events to be processed together
           currentIds.forEach((id) => {
             if (prevIds.has(id)) {
               const current = objects[id];
               const prev = prevObjects[id];
 
               if (this.hasObjectChanged(current, prev)) {
-                // Remove and re-add to ensure all properties are in sync
-                this.fabricManager.removeObject(id);
-                this.fabricManager.addObject(current);
+                this.stateToCanvasBatchQueue.add(id);
               }
             }
           });
+
+          // Debounce batch processing
+          if (this.stateToCanvasBatchQueue.size > 0) {
+            if (this.stateToCanvasBatchTimeout) {
+              clearTimeout(this.stateToCanvasBatchTimeout);
+            }
+
+            this.stateToCanvasBatchTimeout = window.setTimeout(() => {
+              this.flushStateToCanvasBatch();
+              this.stateToCanvasBatchTimeout = null;
+            }, this.STATE_TO_CANVAS_BATCH_DELAY_MS);
+          }
 
           // Restore ActiveSelection after updates
           // When objects are removed and re-added, Fabric loses the selection
@@ -522,6 +694,62 @@ export class CanvasSyncManager {
         }
       }
     );
+  }
+
+  /**
+   * CRITICAL FIX: Flush batched State→Canvas updates
+   * Process all queued object updates together to prevent selection issues
+   */
+  private flushStateToCanvasBatch(): void {
+    if (this.stateToCanvasBatchQueue.size === 0) return;
+
+    const objectsToUpdate = Array.from(this.stateToCanvasBatchQueue);
+    this.stateToCanvasBatchQueue.clear();
+
+    const objects = this.store.getState().objects;
+    const canvas = this.fabricManager.getCanvas();
+    const selectedIds = this.store.getState().selectedIds;
+
+    // Process all updates at once
+    this._isSyncingFromStore = true;
+    try {
+      objectsToUpdate.forEach((id) => {
+        const current = objects[id];
+        if (current) {
+          // Remove and re-add to ensure all properties are in sync
+          this.fabricManager.removeObject(id);
+          this.fabricManager.addObject(current);
+        }
+      });
+
+      // Restore ActiveSelection after batch update
+      // When objects are removed and re-added, Fabric loses the selection
+      if (canvas && selectedIds.length > 0) {
+        const objectsToSelect = selectedIds
+          .map(id => {
+            const fabricObj = canvas.getObjects().find(obj => 
+              (obj as FabricObjectWithData).data?.id === id
+            );
+            return fabricObj;
+          })
+          .filter(Boolean) as FabricObject[];
+
+        if (objectsToSelect.length > 0) {
+          if (objectsToSelect.length === 1) {
+            canvas.setActiveObject(objectsToSelect[0]);
+          } else {
+            const fabric = (window as any).fabric;
+            if (fabric && fabric.ActiveSelection) {
+              const activeSelection = new fabric.ActiveSelection(objectsToSelect, { canvas });
+              canvas.setActiveObject(activeSelection);
+            }
+          }
+          canvas.renderAll();
+        }
+      }
+    } finally {
+      this._isSyncingFromStore = false;
+    }
   }
 
   /**
@@ -596,6 +824,20 @@ export class CanvasSyncManager {
    * Cleanup subscriptions and resources
    */
   dispose(): void {
+    // PERFORMANCE OPTIMIZATION #5: Clear batch timeout and flush pending updates
+    if (this.movementBatchTimeout) {
+      clearTimeout(this.movementBatchTimeout);
+      this.movementBatchTimeout = null;
+    }
+    this.movementBatchQueue.clear();
+
+    // CRITICAL FIX: Clear State→Canvas batch timeout
+    if (this.stateToCanvasBatchTimeout) {
+      clearTimeout(this.stateToCanvasBatchTimeout);
+      this.stateToCanvasBatchTimeout = null;
+    }
+    this.stateToCanvasBatchQueue.clear();
+
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
