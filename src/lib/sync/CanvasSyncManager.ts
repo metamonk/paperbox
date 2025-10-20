@@ -275,7 +275,9 @@ export class CanvasSyncManager {
           // This prevents excessive state updates during rapid movement
           // CRITICAL FIX: Convert Fabric coordinates to center-origin before storing
           if (id && obj.left !== undefined && obj.top !== undefined) {
+            const fabricCoords = { left: obj.left, top: obj.top };
             const centerCoords = fabricToCenter(obj.left, obj.top);
+            console.log(`[onObjectMoving] 📍 ${id.slice(0, 8)}: fabric(${fabricCoords.left.toFixed(1)}, ${fabricCoords.top.toFixed(1)}) → center(${centerCoords.x.toFixed(1)}, ${centerCoords.y.toFixed(1)})`);
             this.movementBatchQueue.set(id, {
               x: centerCoords.x,
               y: centerCoords.y,
